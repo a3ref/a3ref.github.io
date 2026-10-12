@@ -128,7 +128,7 @@ def load_cache(path: Path) -> dict[int, dict]:
 def save_cache(path: Path, pages: dict[int, dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(dict(sorted(pages.items())), ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.write_text(json.dumps(dict(sorted(pages.items())), ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
     tmp.replace(path)
 
 

@@ -16,6 +16,7 @@ def main(argv=None) -> None:
         sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(prog="biwiki", description=__doc__)
     ap.add_argument("--raw", type=Path, default=ROOT / "data" / "raw", help="raw wikitext cache directory")
+    ap.add_argument("--dataset", type=Path, help="also write parsed commands.json/functions.json/index.json here")
     ap.add_argument("--out", type=Path, default=ROOT / "out", help="generated mirror directory")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -44,7 +45,7 @@ def main(argv=None) -> None:
     if a.cmd in ("build", "update"):
         from .render import build
 
-        build(a.raw, a.out, kinds)
+        build(a.raw, a.out, kinds, dataset=a.dataset)
     if a.cmd == "serve":
         serve(a.out, a.host, a.port)
 

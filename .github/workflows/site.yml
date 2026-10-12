@@ -1,61 +1,38 @@
-# Daily: pull changed pages from the BI wiki, commit the raw cache, rebuild and deploy the site.
-# On push to main: rebuild and deploy only.
-name: Sync and deploy
+# Builds the site from the latest a3ref/data and deploys it to GitHub Pages.
+# Runs on every push here, and daily an hour after the data sync, deploying only if the data changed.
+name: Deploy site
 
 on:
   schedule:
-    - cron: "17 4 * * *"
+    - cron: "17 5 * * *"
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      full:
-        description: "Re-download every page instead of only the changed ones"
-        type: boolean
-        default: false
 
 concurrency:
   group: site
   cancel-in-progress: false
 
 jobs:
-  sync:
-    if: github.event_name != 'push'
+  check:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     outputs:
-      changed: ${{ steps.commit.outputs.changed }}
+      deploy: ${{ steps.compare.outputs.deploy }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-      - run: pip install -r requirements.txt
-      - run: sudo apt-get install -y xvfb
-      # The wiki is behind a Cloudflare challenge: run the real Chrome preinstalled on the runner in a virtual display.
-      - run: xvfb-run --auto-servernum python -m biwiki sync ${{ inputs.full && '--full' || '' }}
-      - id: commit
+      - id: compare
         run: |
-          git add data/raw
-          if git diff --cached --quiet; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+          latest=$(git ls-remote https://github.com/a3ref/data.git refs/heads/main | cut -f1)
+          live=$(curl -fsSL https://a3ref.github.io/data-version.txt || true)
+          echo "data: $latest, live site: ${live:-none}"
+          if [ "$GITHUB_EVENT_NAME" != "schedule" ] || [ "$latest" != "$live" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
           else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "Sync from BI wiki $(date -u +%F)"
-            git pull --rebase origin main
-            git push
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
           fi
 
   deploy:
-    needs: sync
-    # runs after a push, after a sync that changed data, or on manual runs; skipped sync counts as fine
-    if: >-
-      always() && needs.sync.result != 'failure' &&
-      (github.event_name != 'schedule' || needs.sync.outputs.changed == 'true')
+    needs: check
+    if: needs.check.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -65,14 +42,17 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
-          ref: main
+          repository: a3ref/data
+          path: data
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
       - run: python -m biwiki build
+      - run: git -C data rev-parse HEAD > out/data-version.txt
       - uses: actions/upload-pages-artifact@v5
         with:
           path: out

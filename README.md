@@ -21,18 +21,22 @@ and writes the mirror to `out/`.
 
 ## Deployment
 
-The repository holds only the code and the raw wikitext (`data/raw/*.json`, about 6 MB).
+Two repositories, no secrets:
+
+- **[a3ref/data](https://github.com/a3ref/data)** holds the data: raw wikitext (`raw/*.json`) and the parsed
+  `commands.json`, `functions.json`, `index.json`. Its workflow runs **daily at 04:17 UTC**: it checks out this
+  repository for the code, runs `sync` (real Chrome inside `xvfb`) and `build --dataset`, and commits only if
+  something changed.
+- **this repository** holds only the code. `.github/workflows/site.yml` builds the site from the latest
+  `a3ref/data` and deploys it to GitHub Pages:
+  - on every push to `main` (parser or design changes);
+  - **daily at 05:17 UTC**, but only if the data commit differs from `data-version.txt` on the live site;
+  - manually (Actions → Deploy site → Run workflow).
+
 Everything in `out/` is generated during deployment and never committed.
 
-The workflow in `.github/workflows/site.yml` runs:
-
-- **daily at 04:17 UTC**: `sync` (real Chrome inside `xvfb`), commit the changed `data/raw`, build and deploy to GitHub Pages.
-  If nothing changed on the wiki, the deploy is skipped.
-- **on push to `main`**: build and deploy only (for example after parser or design changes).
-- **manually** (Actions → Sync and deploy → Run workflow), with a `full` option to re-download everything.
-
-If Cloudflare blocks the GitHub runner, sync locally instead
-(`python -m biwiki sync`, then `git commit data/raw && git push`); the push triggers the deploy.
+If Cloudflare ever blocks the GitHub runner, sync locally inside the data clone
+(`python -m biwiki sync && python -m biwiki --dataset data build`, then commit and push in `data/`).
 
 ## Installation
 
@@ -40,6 +44,7 @@ Requires Python 3.10+ and Google Chrome.
 
 ```sh
 pip install -r requirements.txt
+git clone https://github.com/a3ref/data data   # the data lives in its own repository
 ```
 
 ## Usage
@@ -49,6 +54,7 @@ python -m biwiki update            # sync + build (opens a Chrome window for abo
 python -m biwiki update --hidden   # same, with the Chrome window moved off-screen
 python -m biwiki sync --full       # re-download everything, ignoring the cache
 python -m biwiki build             # regenerate out/ from the cache only (about 20 s)
+python -m biwiki --dataset data build  # also refresh the parsed JSON in the data repository
 python -m biwiki serve --port 8000 # serve out/ over HTTP
 ```
 

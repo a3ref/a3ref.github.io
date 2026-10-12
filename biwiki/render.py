@@ -164,7 +164,8 @@ def _link(title: str, resolve) -> str:
     return f"[{title}]({url})" if url else title
 
 
-def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None) -> None:
+def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset: Path | None = None) -> None:
+    """Generate the mirror in ``out_dir``; with ``dataset``, also write the parsed JSON bundles there."""
     kinds = kinds or list(CATEGORIES)
     raws = {k: load_cache(raw_dir / f"{k}.json") for k in kinds}
     # title (spaces) -> (kind, slug), so cross-links between mirrored pages stay local
@@ -193,6 +194,7 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None) -> None:
     slugs: dict[str, str] = {}
     summaries: dict[str, str] = {}
     search: list[list] = []
+    bundles: dict[str, dict] = {}
 
     unknown: Counter = Counter()
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -242,11 +244,7 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None) -> None:
                 "locality": rec["locality"],
             })
 
-        (out_dir / f"{kind}.json").write_text(
-            json.dumps({"source": wiki_url(CATEGORIES[kind]), "generated": now, "count": len(records), "items": records},
-                       ensure_ascii=False),
-            encoding="utf-8",
-        )
+        bundles[kind] = {"source": wiki_url(CATEGORIES[kind]), "count": len(records), "items": records}
         (target / "index.md").write_text(_kind_index(kind, records), encoding="utf-8")
         site.kind_index(kind, records, slugs, summaries)
         site_records[kind] = records
@@ -256,16 +254,29 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None) -> None:
         llms.append("")
         print(f"{kind}: {len(records)} pages written")
 
-    (out_dir / "index.json").write_text(
-        json.dumps({"generated": now, "count": len(index), "items": index}, ensure_ascii=False, separators=(",", ":")),
-        encoding="utf-8",
-    )
+    # Stamp the data with its newest wiki edit, not the build time, so unchanged data stays byte-identical.
+    updated = max((r["updated"] for recs in site_records.values() for r in recs if r["updated"]), default=None)
+    files = {f"{k}.json": {"updated": updated, **b} for k, b in bundles.items()}
+    files["index.json"] = {"updated": updated, "count": len(index), "items": index}
+    for name, payload in files.items():
+        (out_dir / name).write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        if dataset:
+            # one record per line keeps git diffs in the data repository readable
+            _write_lines(dataset / name, payload)
     (out_dir / "llms.txt").write_text("\n".join(llms), encoding="utf-8")
     (out_dir / "index.md").write_text(_root_index(kinds, index, now), encoding="utf-8")
     site.home(kinds, site_records, slugs, now)
     site.assets(search)
     if unknown:
         print("unhandled markup (rendered best-effort):", dict(unknown.most_common(15)))
+
+
+def _write_lines(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    head = {k: v for k, v in payload.items() if k != "items"}
+    lines = [json.dumps(item, ensure_ascii=False, separators=(",", ":")) for item in payload["items"]]
+    text = json.dumps(head, ensure_ascii=False)[:-1] + ', "items": [\n' + ",\n".join(lines) + "\n]}\n"
+    path.write_text(text, encoding="utf-8", newline="\n")
 
 
 def _kind_index(kind: str, records: list[dict]) -> str:
