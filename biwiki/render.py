@@ -427,7 +427,8 @@ def _syntax_index(records: dict[str, list[dict]], updated) -> dict:
     commands, functions = {}, {}
     for r in records.get("commands", []):
         forms = sorted({s["form"] for s in r["syntaxes"] if s["form"]})
-        entry = {"name": r["name"], "forms": forms, "status": r["status"]}
+        entry = {"name": r["name"], "forms": forms, "status": r["status"],
+                 "syntax": [s["syntax"] for s in r["syntaxes"] if s["syntax"]]}
         if r["replaced_by"]:
             entry["replaced_by"] = r["replaced_by"]
         if r["branch"]:

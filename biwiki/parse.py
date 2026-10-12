@@ -185,7 +185,8 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
     examples = []
     for n, x in _numbered(p, "x"):
         xcode = parse_wikitext(str(x))
-        snippets = [html.unescape(clean_code(str(t.contents))).strip("\n") for t in xcode.filter_tags() if str(t.tag).lower() in ("sqf", "sqs", "syntaxhighlight") and not t.has("inline") and t.contents]
+        snippets = [html.unescape(clean_code(str(t.contents))).strip("\n") for t in xcode.filter_tags()
+                    if _is_sqf(t) and not t.has("inline") and t.contents]
         text = r.md(x)
         if text.strip():  # placeholder pages have "|x1=" with only a comment
             examples.append({"text": text, "code": snippets})
@@ -250,6 +251,14 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
         record["docblock"] = header
         record["filled_from_docblock"] = filled
     return record
+
+
+def _is_sqf(tag) -> bool:
+    """<sqf>/<sqs> blocks, or <syntaxhighlight lang="sqf">; examples also contain C++ and config code."""
+    name = str(tag.tag).lower()
+    if name in ("sqf", "sqs"):
+        return True
+    return name == "syntaxhighlight" and tag.has("lang") and str(tag.get("lang").value).strip().lower() in ("sqf", "sqs")
 
 
 def _description(p: dict, kind: str, r: Renderer) -> tuple[str, Optional[dict]]:
