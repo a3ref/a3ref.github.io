@@ -31,6 +31,11 @@ def main(argv=None) -> None:
         p.add_argument("--hidden", action="store_true", help="move the Chrome window off-screen")
         p.add_argument("--profile", type=Path, default=ROOT / ".browser-profile", help="Chrome profile directory")
     kinds_arg(sub.add_parser("build", help="generate Markdown/JSON from the raw cache"))
+    p = sub.add_parser("report", help="compare the last build's report.json with known-problems.json")
+    p.add_argument("--known", type=Path, default=ROOT / "known-problems.json", help="accepted problems baseline")
+    p.add_argument("--accept", action="store_true", help="accept all current problems as the new baseline")
+    p.add_argument("--issue", action="store_true", help="open/update/close the GitHub issue (needs gh and GH_TOKEN)")
+    p.add_argument("--site", default="https://a3ref.github.io/", help="site URL used in links")
     p = sub.add_parser("serve", help="serve the generated mirror over HTTP")
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--host", default="127.0.0.1")
@@ -46,6 +51,10 @@ def main(argv=None) -> None:
         from .render import build
 
         build(a.raw, a.out, kinds, dataset=a.dataset)
+    if a.cmd == "report":
+        from .report import run
+
+        sys.exit(run(a.out, a.known, a.accept, a.issue, a.site))
     if a.cmd == "serve":
         serve(a.out, a.host, a.port)
 

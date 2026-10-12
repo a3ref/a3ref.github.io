@@ -35,8 +35,10 @@ jobs:
     if: needs.check.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
+      issues: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -51,10 +53,20 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: python -m biwiki build
+      - id: build
+        run: python -m biwiki build
       - run: git -C data rev-parse HEAD > out/data-version.txt
       - uses: actions/upload-pages-artifact@v5
         with:
           path: out
       - id: deployment
         uses: actions/deploy-pages@v5
+      # After deploying, so one broken page never blocks the rest of the site.
+      # New problems (not in known-problems.json) open/update the "parser-report" issue;
+      # a page the parser crashed on also fails this run, which sends an email.
+      - name: Parser report
+        if: always() && steps.build.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python -m biwiki report --issue

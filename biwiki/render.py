@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .fetch import CATEGORIES, load_cache
 from .parse import display_name, parse_page, wiki_url
+from .report import Report
 from .site import Site, _anchor
 from .wikitext import Renderer
 
@@ -196,8 +197,8 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     search: list[list] = []
     bundles: dict[str, dict] = {}
 
-    unknown: Counter = Counter()
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    report = Report()
+    now =datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     index: list[dict] = []
     llms = [
         "# Arma 3 Scripting Reference",
@@ -215,19 +216,25 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
         target.mkdir(parents=True)
         records = []
         for raw in sorted(raws[kind].values(), key=lambda v: v["title"].lower()):
-            md_r = Renderer(resolve_md)
-            rec_md = parse_page(raw, kind, md_r)
-            json_r = Renderer(None)
-            rec = parse_page(raw, kind, json_r)
-            unknown.update(md_r.unknown)
-            if rec is None:
+            # One broken page must not take the whole site down: record it and move on.
+            try:
+                md_r = Renderer(resolve_md)
+                rec_md = parse_page(raw, kind, md_r)
+                rec = parse_page(raw, kind, Renderer(None))
+                if rec is None:
+                    report.add("skipped", raw["title"], kind)
+                    continue
+                s = slug(raw["title"])
+                page_md = page_markdown(rec_md, resolve_md)
+                rec_html = parse_page(raw, kind, Renderer(resolve_html))
+                short = summary(rec["description"])
+                site.page(kind, s, rec_html, body_markdown(rec_html, resolve_html), short)
+            except Exception as e:  # noqa: BLE001 - reported, the build goes on
+                report.add("error", raw["title"], kind, note=f"{type(e).__name__}: {e}"[:300])
                 continue
-            s = slug(raw["title"])
-            (target / f"{s}.md").write_text(page_markdown(rec_md, resolve_md), encoding="utf-8")
+            report.check_page(raw["title"], kind, rec, page_md, md_r.unknown)
+            (target / f"{s}.md").write_text(page_md, encoding="utf-8")
             (target / f"{s}.json").write_text(json.dumps(rec, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-            rec_html = parse_page(raw, kind, Renderer(resolve_html))
-            short = summary(rec["description"])
-            site.page(kind, s, rec_html, body_markdown(rec_html, resolve_html), short)
             slugs[rec["title"]] = s
             summaries[rec["title"]] = short
             search.append([rec["name"], rec["type"][0], f"{kind}/{s}", summary(rec["description"], 110)])
@@ -267,8 +274,9 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     (out_dir / "index.md").write_text(_root_index(kinds, index, now), encoding="utf-8")
     site.home(kinds, site_records, slugs, now)
     site.assets(search)
-    if unknown:
-        print("unhandled markup (rendered best-effort):", dict(unknown.most_common(15)))
+    health = report.to_json(updated)
+    (out_dir / "report.json").write_text(json.dumps(health, ensure_ascii=False, indent=1), encoding="utf-8")
+    print("problems:", {k: n for k, n in health["counts"].items() if n} or "none")
 
 
 def _write_lines(path: Path, payload: dict) -> None:

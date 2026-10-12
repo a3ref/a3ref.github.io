@@ -38,6 +38,27 @@ Everything in `out/` is generated during deployment and never committed.
 If Cloudflare ever blocks the GitHub runner, sync locally inside the data clone
 (`python -m biwiki sync && python -m biwiki --dataset data build`, then commit and push in `data/`).
 
+## Parser problems
+
+Every build writes `report.json` (also published at https://a3ref.github.io/report.json) and never stops on a single
+broken page: the page is left out, reported, and the rest of the site is built.
+
+After each deploy, `python -m biwiki report --issue` compares the report with `known-problems.json`, the accepted baseline:
+
+- **new problems** open (or update, with a comment) the issue labelled `parser-report`, listing each page with links to
+  the site and the wiki; GitHub notifies watchers of the repository;
+- **a page the parser crashed on** additionally fails the workflow run, which sends the usual failure email;
+- when the new problems are gone, the issue is closed automatically;
+- the run page in Actions shows the same summary.
+
+After fixing the parser or deciding a problem is acceptable, refresh the baseline locally and commit it:
+
+```sh
+python -m biwiki build
+python -m biwiki report            # what is new compared to the baseline
+python -m biwiki report --accept   # accept the current state as the baseline
+```
+
 ## Installation
 
 Requires Python 3.10+ and Google Chrome.
@@ -75,6 +96,7 @@ Cloudflare rejects real headless Chrome; if a checkbox appears, run without `--h
 | `index.json` | lightweight index for agents: name, syntaxes, summary, groups, locality, file paths |
 | `llms.txt` | index in the [llms.txt](https://llmstxt.org/) format |
 | `assets/` | stylesheet, script and search index of the HTML version |
+| `report.json` | parser health report: crashes, skipped pages, unknown templates, leftover markup, untyped parameters |
 
 File names: spaces become `_`, other unsafe characters become `~XX` (hex), e.g. `a != b` → `a_~21~3D_b.md`.
 Functions are named as in scripts: `BIS_fnc_spawnGroup.md`. Exact paths are listed in `index.json`.
@@ -137,6 +159,7 @@ Fonts (Barlow, JetBrains Mono) load from Google Fonts; offline, system fonts are
 - `biwiki/wikitext.py`: wikitext → Markdown (links, lists, tables, `<sqf>`, `{{Feature}}`, `{{GVI}}`, `{{hl}}`, …)
 - `biwiki/parse.py`: `{{RV}}` template → record
 - `biwiki/render.py`: writes the mirror files and indexes
+- `biwiki/report.py`: parser health report, baseline comparison and the GitHub issue
 - `biwiki/site.py`, `biwiki/assets/`: HTML version (markdown-it-py, SQF highlighting, page templates)
 
 Content belongs to the authors of the BI Community Wiki; every generated page links to its source and revision.
