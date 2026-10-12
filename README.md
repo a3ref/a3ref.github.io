@@ -1,93 +1,94 @@
-# biwiki — дзеркало Arma 3 Scripting Reference
+# a3ref — Arma 3 scripting reference
 
-Завантажує всі сторінки з
-[Category:Arma 3: Scripting Commands](https://community.bistudio.com/wiki/Category:Arma_3:_Scripting_Commands) та
+A mirror of every page in
+[Category:Arma 3: Scripting Commands](https://community.bistudio.com/wiki/Category:Arma_3:_Scripting_Commands) and
 [Category:Arma 3: Functions](https://community.bistudio.com/wiki/Category:Arma_3:_Functions)
-з BI Community Wiki і конвертує їх у **Markdown** (для людей/LLM) та **JSON** (для агентів і інструментів).
+from the Bohemia Interactive Community Wiki, converted to **HTML** (for people), **Markdown** (for people and LLMs)
+and **JSON** (for tools and AI agents).
 
-## Як це працює
+Site: **https://a3ref.github.io/**
 
-Вікі стоїть за Cloudflare managed challenge, тому звичайні HTTP-клієнти отримують 403.
-`sync` запускає ваш встановлений Google Chrome через [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright),
-проходить перевірку і далі викликає MediaWiki API (`/wikidata/api.php`) через `fetch()` усередині сторінки —
-по 50 сторінок вікітексту за запит (~110 запитів на все). Сирий вікітекст кешується в `data/raw/*.json`;
-повторний `sync` докачує лише сторінки зі зміненим `revid`.
+## How it works
 
-Потім `build` розбирає шаблон `{{RV}}` кожної сторінки (`mwparserfromhell`) у структуровані поля
-та генерує дзеркало в `out/`.
+The wiki sits behind a Cloudflare managed challenge, so plain HTTP clients get a 403.
+`sync` starts the locally installed Google Chrome through [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright),
+lets it pass the check, then calls the MediaWiki API (`/wikidata/api.php`) with `fetch()` from inside the page:
+50 pages of wikitext per request, about 110 requests in total. Raw wikitext is cached in `data/raw/*.json`;
+later runs only download pages whose `revid` changed.
 
-Сайт: **https://a3ref.github.io/**
+`build` then parses each page's `{{RV}}` template with `mwparserfromhell` into structured fields
+and writes the mirror to `out/`.
 
-## Деплой
+## Deployment
 
-У репозиторії зберігаються лише код і сирий вікітекст (`data/raw/*.json`, ≈6 МБ).
-Усе в `out/` генерується під час деплою і не комітиться.
+The repository holds only the code and the raw wikitext (`data/raw/*.json`, about 6 MB).
+Everything in `out/` is generated during deployment and never committed.
 
-Workflow `.github/workflows/site.yml`:
+The workflow in `.github/workflows/site.yml` runs:
 
-- **щодня о 04:17 UTC** — `sync` (справжній Chrome у `xvfb`), коміт змінених `data/raw`, збірка й деплой на GitHub Pages;
-  якщо на вікі нічого не змінилось, деплой пропускається;
-- **push у `main`** — лише збірка й деплой (наприклад, після змін у парсері чи дизайні);
-- **ручний запуск** (Actions → Sync and deploy → Run workflow), з опцією `full` для повного перезавантаження.
+- **daily at 04:17 UTC**: `sync` (real Chrome inside `xvfb`), commit the changed `data/raw`, build and deploy to GitHub Pages.
+  If nothing changed on the wiki, the deploy is skipped.
+- **on push to `main`**: build and deploy only (for example after parser or design changes).
+- **manually** (Actions → Sync and deploy → Run workflow), with a `full` option to re-download everything.
 
-Якщо Cloudflare не пропускає раннер GitHub, синхронізацію можна запускати локально
-(`python -m biwiki sync`, потім `git commit data/raw && git push`) — push сам запустить деплой.
+If Cloudflare blocks the GitHub runner, sync locally instead
+(`python -m biwiki sync`, then `git commit data/raw && git push`); the push triggers the deploy.
 
-## Встановлення
+## Installation
 
-Потрібні Python 3.10+ і встановлений Google Chrome.
+Requires Python 3.10+ and Google Chrome.
 
 ```sh
 pip install -r requirements.txt
 ```
 
-## Використання
+## Usage
 
 ```sh
-python -m biwiki update            # sync + build (відкриє вікно Chrome на ~1 хв)
-python -m biwiki update --hidden   # те саме, вікно Chrome за межами екрана
-python -m biwiki sync --full       # перекачати все, ігноруючи кеш
-python -m biwiki build             # лише перегенерувати out/ з кешу (≈20 с)
-python -m biwiki serve --port 8000 # віддати out/ по HTTP (text/markdown, application/json)
+python -m biwiki update            # sync + build (opens a Chrome window for about a minute)
+python -m biwiki update --hidden   # same, with the Chrome window moved off-screen
+python -m biwiki sync --full       # re-download everything, ignoring the cache
+python -m biwiki build             # regenerate out/ from the cache only (about 20 s)
+python -m biwiki serve --port 8000 # serve out/ over HTTP
 ```
 
-`--only commands` / `--only functions` обмежує роботу однією категорією.
-Справжній headless-режим Cloudflare блокує; якщо з'явиться чекбокс — запустіть без `--hidden` і клацніть його.
+`--only commands` / `--only functions` limits the work to one category.
+Cloudflare rejects real headless Chrome; if a checkbox appears, run without `--hidden` and click it.
 
-## Що генерується (`out/`)
+## Output (`out/`)
 
-| Файл | Призначення |
+| File | Purpose |
 |---|---|
-| `index.html` | **сайт для людей**: головна з пошуком, групи, сторінки команд/функцій |
-| `index.md` | головна сторінка дзеркала в Markdown |
-| `commands/index.md`, `functions/index.md` | списки, згруповані за групами команд |
-| `commands/<name>.md`, `functions/<name>.md` | сторінка з YAML front-matter, описом, синтаксисами, параметрами, прикладами, нотатками спільноти; посилання між командами/функціями ведуть на локальні файли |
-| `commands/<name>.json`, `functions/<name>.json` | та сама сторінка структуровано |
-| `commands/<name>.html`, `functions/<name>.html` | та сама сторінка як HTML |
-| `assets/` | стилі, скрипт і пошуковий індекс HTML-версії |
-| `commands.json`, `functions.json` | усі записи однієї категорії одним файлом |
-| `index.json` | легкий індекс для агентів: ім'я, синтаксиси, короткий опис, групи, локальність, шляхи до файлів |
-| `llms.txt` | індекс у форматі [llms.txt](https://llmstxt.org/) |
+| `index.html` | **the site**: home page with search, groups, command and function pages |
+| `index.md` | mirror home page in Markdown |
+| `commands/index.md`, `functions/index.md` | lists grouped by command group |
+| `commands/<name>.md`, `functions/<name>.md` | page with YAML front matter, description, syntaxes, parameters, examples and community notes; links between commands and functions point to local files |
+| `commands/<name>.json`, `functions/<name>.json` | the same page as structured data |
+| `commands/<name>.html`, `functions/<name>.html` | the same page as HTML |
+| `commands.json`, `functions.json` | every record of one category in a single file |
+| `index.json` | lightweight index for agents: name, syntaxes, summary, groups, locality, file paths |
+| `llms.txt` | index in the [llms.txt](https://llmstxt.org/) format |
+| `assets/` | stylesheet, script and search index of the HTML version |
 
-Імена файлів: пробіли → `_`, інші небезпечні символи → `~XX` (hex), напр. `a != b` → `a_~21~3D_b.md`.
-Функції називаються як у скриптах: `BIS_fnc_spawnGroup.md`. Точні шляхи є в `index.json`.
+File names: spaces become `_`, other unsafe characters become `~XX` (hex), e.g. `a != b` → `a_~21~3D_b.md`.
+Functions are named as in scripts: `BIS_fnc_spawnGroup.md`. Exact paths are listed in `index.json`.
 
-### Схема JSON-запису
+### JSON record
 
 ```jsonc
 {
-  "name": "createVehicle",            // як пишеться в коді (BIS_fnc_... для функцій)
-  "title": "createVehicle",           // заголовок сторінки вікі
-  "type": "command",                  // або "function"
+  "name": "createVehicle",            // as written in code (BIS_fnc_... for functions)
+  "title": "createVehicle",           // wiki page title
+  "type": "command",                  // or "function"
   "url": "https://community.bistudio.com/wiki/createVehicle",
   "revid": 377509, "updated": "2026-01-02T06:50:13Z",
   "groups": ["Object Manipulation"],
   "games": [{"game": "ofp", "name": "Operation Flashpoint", "version": "1.34"}, ...],
-  "since": {...},                      // перша гра, де з'явилось
+  "since": {...},                      // first game it appeared in
   "arma3_since": "0.50",
-  "branch": null,                      // "dev" / "diag" для команд лише з dev/diag-збірок
+  "branch": null,                      // "dev" / "diag" for commands only in dev/diag builds
   "locality": {"argument": "global", "effect": "global", "server_exec": false},
-  "exec": null,                        // для функцій: "spawn" / "call"
+  "exec": null,                        // functions: "spawn" / "call"
   "description": "markdown",
   "syntaxes": [{
     "syntax": "type createVehicle position",
@@ -95,11 +96,11 @@ python -m biwiki serve --port 8000 # віддати out/ по HTTP (text/markdow
     "params": [{
       "name": "type", "type": "String", "optional": false, "default": null,
       "description": "vehicle/object className", "since": null,
-      "text": "повний текст параметра (markdown)"
+      "text": "full parameter text (markdown)"
     }],
     "returns": {"type": "Object", "description": null, "text": "markdown"}
   }],
-  "examples": [{"text": "markdown", "code": ["сирий SQF"]}],
+  "examples": [{"text": "markdown", "code": ["raw SQF"]}],
   "multiplayer": null, "problems": null,
   "aliases": [], "see_also": ["createVehicleLocal", ...],
   "notes": [{"user": "MrSanchez", "date": "2015-08-22T13:04:00Z", "text": "markdown"}],
@@ -107,29 +108,29 @@ python -m biwiki serve --port 8000 # віддати out/ по HTTP (text/markdow
 }
 ```
 
-`name`/`type`/`optional`/`default` у параметрах витягуються евристично з тексту вікі
-(`name: Type - (Optional, default x) опис`); поле `text` завжди містить оригінал без втрат.
-У JSON посилання подані простим текстом (економія токенів), у `.md` — повноцінними посиланнями.
+`name`, `type`, `optional` and `default` of parameters are extracted heuristically from the wiki text
+(`name: Type - (Optional, default x) description`); `text` always holds the original, losslessly.
+In JSON, links are plain text (fewer tokens); in `.md` and `.html` they are real links.
 
-## HTML-версія
+## HTML version
 
-Статичний сайт без збирача і без залежностей у JS: відкривається з `python -m biwiki serve`
-(http://127.0.0.1:8000/index.html) або просто подвійним кліком по `out/index.html`.
+A static site with no build tooling and no JS dependencies: serve it with `python -m biwiki serve`
+or open `out/index.html` directly from disk.
 
-- пошук по всіх командах і функціях (`/` — фокус, стрілки, Enter);
-- підсвітка SQF, де кожна команда/функція в коді — посилання на свою сторінку;
-- плашки Note/Important/Warning, бейджі локальності (заповнений — global, контурний — local), версії;
-- зміст сторінки, кнопка «Copy» на блоках коду, світла/темна тема за системними налаштуваннями, мобільна верстка;
-- шапка кожної сторінки — «топокарта», згенерована з назви команди.
+- search across every command and function (`/` to focus, arrow keys, Enter)
+- SQF highlighting where every command and function in code links to its page
+- Note / Important / Warning boxes, locality badges (filled = global, outlined = local), versions
+- table of contents, Copy button on code blocks, light/dark theme following the system, mobile layout
+- each page's header is a contour map generated from the command name
 
-Шрифти (Barlow, JetBrains Mono) підвантажуються з Google Fonts; офлайн використовуються системні.
+Fonts (Barlow, JetBrains Mono) load from Google Fonts; offline, system fonts are used.
 
-## Структура коду
+## Code layout
 
-- `biwiki/fetch.py` — браузерна сесія, MediaWiki API, інкрементальний кеш
-- `biwiki/wikitext.py` — вікітекст → Markdown (посилання, списки, таблиці, `<sqf>`, `{{Feature}}`, `{{GVI}}`, `{{hl}}`, …)
-- `biwiki/parse.py` — шаблон `{{RV}}` → запис
-- `biwiki/render.py` — запис файлів дзеркала та індексів
-- `biwiki/site.py`, `biwiki/assets/` — HTML-версія (markdown-it-py, підсвітка SQF, шаблони сторінок)
+- `biwiki/fetch.py`: browser session, MediaWiki API, incremental cache
+- `biwiki/wikitext.py`: wikitext → Markdown (links, lists, tables, `<sqf>`, `{{Feature}}`, `{{GVI}}`, `{{hl}}`, …)
+- `biwiki/parse.py`: `{{RV}}` template → record
+- `biwiki/render.py`: writes the mirror files and indexes
+- `biwiki/site.py`, `biwiki/assets/`: HTML version (markdown-it-py, SQF highlighting, page templates)
 
-Вміст належить авторам BI Community Wiki; кожна згенерована сторінка містить посилання на джерело та номер ревізії.
+Content belongs to the authors of the BI Community Wiki; every generated page links to its source and revision.
