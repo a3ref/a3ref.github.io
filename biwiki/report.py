@@ -160,28 +160,39 @@ def _gh(*args: str) -> str:
 
 
 def sync_issue(new: list[dict], md: str) -> None:
-    """Open, update or close the single "parser-report" issue; only changes notify subscribers."""
+    """Keep one permanent "parser-report" issue: reopen it with new problems, close it when they are gone.
+
+    Issue listings lag behind recent changes, so the listing is only used to find the issue's number;
+    its state and body are read from the issue itself, which is always current.
+    """
     digest = hashlib.sha1("\n".join(sorted(p["key"] for p in new)).encode()).hexdigest()[:12]
     marker = f"<!-- problems:{digest} -->"
     body = md + "\n\n" + marker
     if len(body) > 60000:
         body = body[:60000] + "\n\n…truncated, see report.json\n\n" + marker
     _gh("label", "create", ISSUE_LABEL, "--color", "B60205", "--description", "Automatic parser report", "--force")
-    issues = json.loads(_gh("issue", "list", "--label", ISSUE_LABEL, "--state", "open", "--json", "number,body"))
-    current = issues[0] if issues else None
+    listed = json.loads(_gh("api", f"repos/{{owner}}/{{repo}}/issues?labels={ISSUE_LABEL}&state=all&per_page=100"))
+    numbers = [i["number"] for i in listed if "pull_request" not in i]
+    issue = json.loads(_gh("api", f"repos/{{owner}}/{{repo}}/issues/{min(numbers)}")) if numbers else None
+    is_open = bool(issue) and issue["state"] == "open"
 
     if not new:
-        if current:
-            _gh("issue", "close", str(current["number"]), "--comment", "All new problems are gone.")
-            print(f"Closed issue #{current['number']}")
+        if is_open:
+            _gh("issue", "close", str(issue["number"]), "--comment", "All new problems are gone.")
+            print(f"Closed issue #{issue['number']}")
         return
-    if current is None:
+    if issue is None:
         url = _gh("issue", "create", "--title", ISSUE_TITLE, "--label", ISSUE_LABEL, "--body", body).strip()
         print(f"Opened {url}")
-    elif marker not in current["body"]:
-        _gh("issue", "edit", str(current["number"]), "--body", body)
-        _gh("issue", "comment", str(current["number"]), "--body",
+        return
+    if is_open and marker in (issue["body"] or ""):
+        print(f"Issue #{issue['number']} is already up to date")
+        return
+    _gh("issue", "edit", str(issue["number"]), "--body", body)
+    if is_open:
+        _gh("issue", "comment", str(issue["number"]), "--body",
             f"The set of new problems changed: now {len(new)}. The description above is up to date.")
-        print(f"Updated issue #{current['number']}")
+        print(f"Updated issue #{issue['number']}")
     else:
-        print(f"Issue #{current['number']} is already up to date")
+        _gh("issue", "reopen", str(issue["number"]), "--comment", f"{len(new)} new problems; see the description.")
+        print(f"Reopened issue #{issue['number']}")
