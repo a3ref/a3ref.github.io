@@ -1,0 +1,79 @@
+# Daily: pull changed pages from the BI wiki, commit the raw cache, rebuild and deploy the site.
+# On push to main: rebuild and deploy only.
+name: Sync and deploy
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "Re-download every page instead of only the changed ones"
+        type: boolean
+        default: false
+
+concurrency:
+  group: site
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: sudo apt-get install -y xvfb
+      # The wiki is behind a Cloudflare challenge: run the real Chrome preinstalled on the runner in a virtual display.
+      - run: xvfb-run --auto-servernum python -m biwiki sync ${{ inputs.full && '--full' || '' }}
+      - id: commit
+        run: |
+          git add data/raw
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Sync from BI wiki $(date -u +%F)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: sync
+    # runs after a push, after a sync that changed data, or on manual runs; skipped sync counts as fine
+    if: >-
+      always() && needs.sync.result != 'failure' &&
+      (github.event_name != 'schedule' || needs.sync.outputs.changed == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m biwiki build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+      - id: deployment
+        uses: actions/deploy-pages@v4
