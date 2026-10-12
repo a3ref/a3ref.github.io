@@ -156,7 +156,8 @@ def body_markdown(rec: dict, resolve) -> str:
             if many:
                 out += [f"### Syntax {i}", ""]
             notes = [x for x in (s["since"] and f"since {s['since']}", s["effect"] and f"effect: {s['effect']}",
-                                 s["exec"] and f"execution: {s['exec']}") if x]
+                                 s["exec"] and f"execution: {s['exec']}",
+                                 s.get("inferred") and "syntax inferred from the function header") if x]
             if notes:
                 out += ["*" + " · ".join(notes) + "*", ""]
             if s["syntax"]:
@@ -165,7 +166,9 @@ def body_markdown(rec: dict, resolve) -> str:
                 out += ["**Parameters:**", ""]
                 for p in s["params"]:
                     text = p["text"]
-                    if p["name"] and text.startswith(p["name"]):
+                    if p.get("source") == "docblock":
+                        text = f"`{p['name']}` — {text}" if p["name"] else text
+                    elif p["name"] and text.startswith(p["name"]):
                         text = f"`{p['name']}`" + text[len(p["name"]):]
                     if p["since"]:
                         text += f" *(since {p['since']})*"
@@ -178,6 +181,12 @@ def body_markdown(rec: dict, resolve) -> str:
         out += ["## Examples", ""]
         for i, x in enumerate(rec["examples"], 1):
             out += [f"### Example {i}", "", x["text"], ""]
+
+    if rec.get("docblock"):
+        out += ["## Function header", "",
+                "The comment at the top of the function's file in the game"
+                + (f"; this page's {', '.join(rec['filled_from_docblock'])} come from it." if rec["filled_from_docblock"] else "."),
+                "", "```sqf", "/*", rec["docblock"]["text"], "*/", "```", ""]
 
     if rec["multiplayer"]:
         out += ["## Multiplayer", "", rec["multiplayer"], ""]

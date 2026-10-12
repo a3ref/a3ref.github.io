@@ -9,6 +9,7 @@ from urllib.parse import quote
 import mwparserfromhell as mw
 from mwparserfromhell.nodes import Template
 
+from . import docblock
 from .wikitext import Renderer, clean_code, game_name, parse_note, parse_wikitext, preprocess
 
 WIKI_URL = "https://community.bistudio.com/wiki/"
@@ -185,7 +186,9 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
     for n, x in _numbered(p, "x"):
         xcode = parse_wikitext(str(x))
         snippets = [html.unescape(clean_code(str(t.contents))).strip("\n") for t in xcode.filter_tags() if str(t.tag).lower() in ("sqf", "sqs", "syntaxhighlight") and not t.has("inline") and t.contents]
-        examples.append({"text": r.md(x), "code": snippets})
+        text = r.md(x)
+        if text.strip():  # placeholder pages have "|x1=" with only a comment
+            examples.append({"text": text, "code": snippets})
 
     notes = []
     for t in code.filter_templates():
@@ -200,8 +203,16 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
     groups = [r.plain(v) for _, v in _numbered(p, "gr")]
     status, replaced_by = _status(p.get("descr"), groups)
 
+    description, header = _description(p, kind, r)
+    filled = _fill_from_docblock(header, name, syntaxes, examples) if header else []
+    if header and header["description"] and description:
+        prose = [b for b in description.split("\n\n") if b.strip() and not b.lstrip().startswith(">")]
+        if not prose:  # only notice boxes besides the header: the header still has the real description
+            description = header["description"] + "\n\n" + description
+            filled.append("description")
+
     operators = [s["operator"] for s in syntaxes if s.get("operator")]
-    return {
+    record = {
         "name": name,
         "operator": operators[0] if operators else None,
         "title": title,
@@ -223,7 +234,7 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
             "server_exec": server in ("server", "y", "yes", "1", "true"),
         },
         "exec": _text(p, "exec") or None,
-        "description": r.md(p["descr"]) if "descr" in p else "",
+        "description": description or ((header or {}).get("description") or ""),
         "syntaxes": syntaxes,
         "examples": examples,
         "multiplayer": r.md(p["mp"]) if _text(p, "mp") else None,
@@ -233,6 +244,88 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
         "notes": notes,
         "categories": raw.get("categories", []),
     }
+    if kind == "functions":
+        if header and not description and header["description"]:
+            filled.insert(0, "description")
+        record["docblock"] = header
+        record["filled_from_docblock"] = filled
+    return record
+
+
+def _description(p: dict, kind: str, r: Renderer) -> tuple[str, Optional[dict]]:
+    """The written description, and the function header comment if the page shows one instead.
+
+    Placeholder function pages put the header of the .sqf file in a <pre>/<sqf> block; it is parsed
+    separately (see docblock.py) and removed from the description so it is not shown twice.
+    """
+    descr = p.get("descr")
+    if descr is None:
+        return "", None
+    header = None
+    if kind == "functions":
+        code = parse_wikitext(str(descr))
+        for tag in code.filter_tags():
+            if str(tag.tag).lower() in ("pre", "sqf", "syntaxhighlight", "nowiki") and tag.contents:
+                body = docblock.find(html.unescape(str(tag.contents)))
+                if body is not None:
+                    header = docblock.parse(body)
+                    code.remove(tag)
+                    break
+        if header:
+            text = re.sub(r"<!--.*?-->", "", str(code), flags=re.S)
+            return r.md(text), header
+    return r.md(descr), None
+
+
+def _fill_from_docblock(header: dict, name: str, syntaxes: list[dict], examples: list[dict]) -> list[str]:
+    """Fill what the wiki page leaves empty from the function header; returns the names of filled fields."""
+    filled = []
+    if header["params"] and not any(s["params"] for s in syntaxes):
+        if not syntaxes:
+            syntaxes.append({"syntax": "", "since": None, "effect": None, "exec": None, "params": [], "returns": None})
+        syntaxes[0]["params"] = [_header_param(hp) for hp in header["params"]]
+        filled.append("params")
+        if not syntaxes[0]["syntax"]:
+            syntaxes[0]["syntax"] = header["syntax"] or _infer_syntax(name, header["params"])
+            syntaxes[0]["inferred"] = not header["syntax"]
+            filled.append("syntax")
+    if header["returns"]:
+        if not syntaxes:
+            syntaxes.append({"syntax": header["syntax"] or f"call {name}", "since": None, "effect": None, "exec": None,
+                             "params": [], "returns": None, "inferred": not header["syntax"]})
+            filled.append("syntax")
+        ret = syntaxes[0]["returns"]
+        if not ret or not ret["text"].strip():
+            types = header["returns"]["types"]
+            syntaxes[0]["returns"] = {"type": ", ".join(types) or None, "types": types, "description": None,
+                                      "text": header["returns"]["text"], "source": "docblock"}
+            filled.append("returns")
+    if header["examples"] and not examples:
+        examples.extend({"text": f"```sqf\n{x}\n```", "code": [x]} for x in header["examples"])
+        filled.append("examples")
+    return filled
+
+
+def _header_param(hp: dict) -> dict:
+    label = f"{hp['index']}: " if hp["index"] is not None else ""
+    return {
+        "name": hp["name"] or (f"param{hp['index']}" if hp["index"] is not None else "arg"),
+        "type": ", ".join(hp["types"]) or None,
+        "types": hp["types"],
+        "optional": hp["optional"],
+        "default": hp["default"],
+        "description": hp["description"],
+        "since": None,
+        "text": label + hp["text"],
+        "source": "docblock",
+    }
+
+
+def _infer_syntax(name: str, params: list[dict]) -> str:
+    names = [p["name"] or (f"param{p['index']}" if p["index"] is not None else "arg") for p in params]
+    if len(params) == 1 and params[0]["index"] is None:
+        return f"{names[0]} call {name}"
+    return f"[{', '.join(names)}] call {name}"
 
 
 def parse_topic(raw: dict, r: Renderer) -> dict:
