@@ -63,13 +63,15 @@ class Report:
             self.add(f"unknown-{what}", title, page_kind, ident)
         for pattern in leftover_markup(md):
             self.add("markup", title, page_kind, pattern)
+        if rec["type"] == "topic":  # free-form page: no syntax or parameters to check
+            return
         if not rec["syntaxes"]:
             self.add("no-syntax", title, page_kind)
         for i, s in enumerate(rec["syntaxes"], 1):
             for p in s["params"]:
                 if not p["name"]:
                     self.add("unnamed-param", title, page_kind, f"syntax {i}: {p['text'][:40]}")
-                elif not p["type"]:
+                elif not p["types"] and not p["type"]:
                     self.add("untyped-param", title, page_kind, f"syntax {i}: {p['name']}")
 
     def to_json(self, updated) -> dict:

@@ -157,6 +157,7 @@ a:hover { text-decoration-thickness: 2px; }
 /* global = filled, local = outlined: shape carries the difference, not only colour */
 .fact-global { background: var(--olive); color: var(--paper); }
 .fact-server { border-color: var(--opfor); color: var(--opfor); }
+.fact-status { background: var(--opfor); border-color: var(--opfor); color: var(--paper); }
 .fact-branch { border-style: dashed; }
 .fact-version { border-color: var(--ink); color: var(--ink); }
 .fact-muted { border-color: var(--rule); color: var(--muted); }
@@ -187,6 +188,7 @@ a:hover { text-decoration-thickness: 2px; }
   font: 600 1.65rem/1.2 var(--f-head); border-bottom: 1px solid var(--rule);
 }
 .content h3 { margin: 1.9rem 0 .6rem; font: 600 1.25rem/1.25 var(--f-head); color: var(--olive); }
+.content :where(h4, h5, h6) { margin: 1.7rem 0 .5rem; font: 600 1.12rem/1.3 var(--f-head); }
 .content :where(p, ul, ol) { margin: .75rem 0; }
 .content :where(ul, ol) { padding-left: 1.4rem; }
 .content :where(li) { margin: .3rem 0; }

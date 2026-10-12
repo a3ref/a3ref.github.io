@@ -71,11 +71,12 @@ FEATURE_DEFAULT_TEXT = {
 }
 
 # Maintenance/navigation templates that carry no reference content.
-DROP_TEMPLATES = {"wiki", "tabview/gametitle", "template:tabview/gametitle", "clear", "toc", "displaytitle"}
+DROP_TEMPLATES = {"wiki", "tabview/gametitle", "template:tabview/gametitle", "clear", "toc", "displaytitle",
+                  "table/rvscripting"}
 
 CODE_TAGS = {"sqf", "sqs", "syntaxhighlight", "source", "pre", "cpp", "hpp", "ext", "enforce"}
 INLINE_CODE_TAGS = {"code", "tt", "var", "t", "kbd", "samp"}
-DROP_TAGS = {"img", "gallery", "references", "imagemap"}
+DROP_TAGS = {"img", "gallery", "references", "imagemap", "wbr"}
 
 _SLOT = re.compile("(\\d+)")
 STAR = ""  # emphasis marker, hidden from the wiki-list pass and swapped for "*" at the very end
@@ -214,8 +215,7 @@ class Renderer:
                 return url if node.brackets is False else f"<{url}>"
             return f"[{self._nodes(node.title.nodes, slots).strip()}]({url})"
         if isinstance(node, Heading):
-            title = self._nodes(node.title.nodes, slots).strip()
-            return f"\n\n{'#' * min(node.level + 1, 6)} {title}\n\n"
+            return self._heading(node.level, self._block(node.title, slots), slots)
         if isinstance(node, Template):
             return self._template(node, slots)
         if isinstance(node, Tag):
@@ -247,6 +247,10 @@ class Renderer:
             return src
         return Renderer(None, self.page_title).md(src).replace("`", "")
 
+    def _heading(self, level: int, title: str, slots: list[str]) -> str:
+        # In a slot, so the wiki-list pass does not read the leading "#" as a numbered list.
+        return self._slot(slots, f"\n\n{'#' * min(level + 1, 6)} {title.strip()}\n\n")
+
     def _link_to(self, target: str, text: Optional[str]) -> str:
         if re.match(r"^(https?:)?//", target):
             return f"[{text}]({target})" if text else f"<{target}>"
@@ -254,7 +258,7 @@ class Renderer:
         if target.lower().startswith("category:") and not text:
             text = target.split(":", 1)[1]
         page, _, anchor = target.partition("#")
-        url = self.resolve(page.replace("_", " ").strip(), anchor)
+        url = self.resolve((page or self.page_title).replace("_", " ").strip(), anchor)  # "#Section" = this page
         text = text or target
         return f"[{text}]({url})" if url else text
 
@@ -319,8 +323,20 @@ class Renderer:
             return self._slot(slots, "\n\n" + self.note_md(parse_note(t, self)) + "\n\n")
         if key == "messagebox":
             return self._slot(slots, "\n\n" + _quote(self._block(pos[0].value, slots)) + "\n\n") if pos else ""
-        if key == "spoiler":
+        if key in ("spoiler", "sticky"):
             return arg(0)
+        if key == "argtitle":  # {{ArgTitle|3|AnimChanged|{{GVI|arma3|1.00}}}}: one entry of an event handler list
+            level = int(raw(0)) if raw(0).isdigit() else 3
+            extra = arg(2)
+            return self._heading(level, arg(1) + (f" ({extra})" if extra else ""), slots)
+        if key == "codecomment":
+            return self._slot(slots, _inline_code(html.unescape(self._plain_inner(pos[0].value) if pos else "")))
+        if key == "colorball":
+            return "●"
+        if key == "hatnote":
+            return STAR + arg(0) + STAR
+        if name.startswith(":"):  # transcluded page, e.g. {{:Order of Precedence}}
+            return "See " + self._link_to(name[1:], None) + "."
         self.unknown["template:" + name] += 1
         # Best effort: keep the first positional argument's content.
         return arg(0)
@@ -521,7 +537,9 @@ def _styles(line: str) -> str:
 
     line = re.sub(r"'{5}(.+?)'{5}", wrap(STAR * 3), line)
     line = re.sub(r"'{3}(.+?)'{3}", wrap(STAR * 2), line)
-    return re.sub(r"(?<!')''(?!')(.+?)''", wrap(STAR), line)
+    line = re.sub(r"(?<!')''(?!')(.+?)''", wrap(STAR), line)
+    # an unclosed ''/''' at the end of a line styles nothing in MediaWiki (a common typo); drop it
+    return re.sub(r"(?<!')'{2,5}\s*$", "", line)
 
 
 def _quote(body: str, alert: Optional[str] = None, label: Optional[str] = None) -> str:

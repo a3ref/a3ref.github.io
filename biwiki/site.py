@@ -125,7 +125,7 @@ class Site:
         def sub(m):
             level, inner = int(m.group(1)), m.group(2)
             text = re.sub(r"<[^>]+>", "", inner)
-            base = re.sub(r"[^\w]+", "-", html.unescape(text).lower()).strip("-") or "section"
+            base = heading_id(html.unescape(text)) or "section"
             ident, n = base, 2
             while ident in seen:
                 ident, n = f"{base}-{n}", n + 1
@@ -133,7 +133,7 @@ class Site:
             toc.append((level, ident, text))
             return f'<h{level} id="{ident}">{inner}</h{level}>'
 
-        return re.sub(r"<h([23])>(.*?)</h\1>", sub, body), toc
+        return re.sub(r"<h([2-6])>(.*?)</h\1>", sub, body), toc
 
     # ---- page shell ---------------------------------------------------------------------------
 
@@ -157,6 +157,7 @@ class Site:
   <nav class="topnav" aria-label="Sections">
     <a href="{root}commands/index.html">Commands</a>
     <a href="{root}functions/index.html">Functions</a>
+    <a href="{root}topics/index.html">Topics</a>
   </nav>
   <div class="search" role="search">
     <input type="search" placeholder="Search commands and functions" aria-label="Search commands and functions" autocomplete="off" spellcheck="false">
@@ -179,8 +180,8 @@ class Site:
 
     # ---- pages --------------------------------------------------------------------------------
 
-    def page(self, kind: str, s: str, rec: dict, body_md: str, summary: str) -> None:
-        body, heads = self._ids(self.html(body_md))
+    def page(self, kind: str, s: str, rec: dict, body_md: str, summary: str, status_note: str = "") -> str:
+        body, heads = self._ids(self.html((status_note + "\n\n" if status_note else "") + body_md))
         notes = ""
         if rec["notes"]:
             items = []
@@ -202,6 +203,8 @@ class Site:
             f'<a href="index.html#{_anchor(g)}">{html.escape(g)}</a>' for g in rec["groups"]
         )
         facts = []
+        if rec["status"] != "ok":
+            facts.append(f'<li class="fact fact-status" title="See the warning below.">{rec["status"].capitalize()}</li>')
         loc = rec["locality"]
         for axis in ("argument", "effect"):
             if loc[axis]:
@@ -232,12 +235,60 @@ class Site:
         updated = (rec["updated"] or "")[:10]
         footer = (f'Content from the <a href="{rec["url"]}">Bohemia Interactive Community Wiki</a>, '
                   f'revision {rec["revid"]}{", edited " + updated if updated else ""}.')
-        alternates = (f'<link rel="alternate" type="text/markdown" href="{s}.md">'
-                      f'<link rel="alternate" type="application/json" href="{s}.json">\n')
+        alternates = _alternates(s, rec, summary)
         doc = self.shell(root="../", title=f"{rec['name']} – Arma 3 {label.lower()}", description=summary,
                          masthead=masthead, main=body + notes, toc=toc, alternates=alternates, footer=footer,
                          page_class=f"page-{rec['type']}")
-        (self.out / kind / f"{s}.html").write_text(doc, encoding="utf-8")
+        return doc
+
+    def topic(self, s: str, rec: dict, summary: str) -> str:
+        body, heads = self._ids(self.html(rec["markdown"]))
+        toc = "<ol>" + "".join(f'<li class="toc-{lvl}"><a href="#{i}">{t}</a></li>' for lvl, i, t in heads if lvl <= 3) + "</ol>"
+        facts = ""
+        if rec["aliases"]:
+            facts = ('<ul class="facts"><li class="fact fact-muted">Also known as '
+                     + ", ".join(html.escape(a) for a in rec["aliases"][:8]) + "</li></ul>")
+        group = rec["groups"][0]
+        masthead = f"""<p class="kind"><a href="index.html">Topic</a> in <a href="index.html#{_anchor(group)}">{html.escape(group)}</a></p>
+<h1 class="name{' name-long' if len(rec['name']) > 26 else ''}">{html.escape(rec['name'])}</h1>
+{facts}
+<p class="formats">Also available as <a href="{s}.md">Markdown</a> and <a href="{s}.json">JSON</a>, or read the <a href="{rec['url']}">original wiki page</a>.</p>"""
+        updated = (rec["updated"] or "")[:10]
+        footer = (f'Content from the <a href="{rec["url"]}">Bohemia Interactive Community Wiki</a>, '
+                  f'revision {rec["revid"]}{", edited " + updated if updated else ""}.')
+        doc = self.shell(root="../", title=f"{rec['name']} – Arma 3 scripting", description=summary, masthead=masthead,
+                         main=body, toc=toc if len(heads) > 1 else "", alternates=_alternates(s, rec, summary),
+                         footer=footer, page_class="page-topic")
+        return doc
+
+    def not_found(self, base_url: str) -> None:
+        """GitHub Pages serves 404.html for any missing path. People are redirected to the page they most likely
+        meant (case-insensitive match); agents, which do not run scripts, get instructions in plain text."""
+        main = rf"""<p>There is no page at this address. Names are case-sensitive and follow the wiki spelling;
+lower-case paths such as <code>commands/setpos.md</code> also work.</p>
+<p>To find the right path, use <a href="{base_url}names.txt">names.txt</a> (every name) or
+<a href="{base_url}index.json">index.json</a> (names with summaries and paths), or read
+<a href="{base_url}llms.txt">llms.txt</a>.</p>
+<script>
+(function () {{
+  var m = location.pathname.match(/\/(commands|functions|topics)\/([^\/]+?)(\.(md|json|html))?$/i);
+  if (!m) return;
+  var s = document.createElement("script");
+  s.src = "/assets/search-index.js";
+  s.onload = function () {{
+    var want = decodeURIComponent(m[2]).toLowerCase(), kind = m[1].toLowerCase(), ext = (m[4] || "html").toLowerCase();
+    var hit = (window.BIWIKI_INDEX || []).find(function (e) {{
+      return e[2].toLowerCase() === kind + "/" + want || e[0].toLowerCase() === want;
+    }});
+    if (hit) location.replace("/" + hit[2] + "." + ext);
+  }};
+  document.head.appendChild(s);
+}})();
+</script>"""
+        masthead = '<h1 class="name">Page not found</h1>'
+        doc = self.shell(root="/", title="Page not found – Arma 3 scripting reference", description="Page not found.",
+                         masthead=masthead, main=main, footer=_site_footer(), page_class="page-index")
+        (self.out / "404.html").write_text(doc, encoding="utf-8")
 
     def kind_index(self, kind: str, records: list[dict], slugs: dict[str, str], summaries: dict[str, str]) -> None:
         groups: dict[str, list[dict]] = defaultdict(list)
@@ -269,13 +320,13 @@ class Site:
         counts = {k: len(v) for k, v in all_records.items()}
         parts = [f"{counts[k]} {self.kind_labels[k].lower()}" for k in kinds]
         masthead = f"""<h1 class="name home-title">Arma 3 scripting reference</h1>
-<p class="lede">{' and '.join(parts)} from the Bohemia Interactive Community Wiki, readable offline and available as Markdown and JSON.</p>
+<p class="lede">{', '.join(parts[:-1]) + ' and ' + parts[-1] if len(parts) > 1 else parts[0]} from the Bohemia Interactive Community Wiki, readable offline and available as Markdown and JSON.</p>
 <div class="search search-hero" role="search">
   <input type="search" placeholder="Find a command or function, e.g. createVehicle" aria-label="Find a command or function" autocomplete="off" spellcheck="false">
   <ul class="results" role="listbox" hidden></ul>
 </div>"""
         columns = []
-        for k in kinds:
+        for k in [k for k in kinds if k != "topics"]:
             groups: dict[str, int] = defaultdict(int)
             for r in all_records[k]:
                 for g in r["groups"] or ["Uncategorised"]:
@@ -288,7 +339,7 @@ class Site:
 
         recent = sorted((r for k in kinds for r in all_records[k] if r["updated"]), key=lambda r: r["updated"], reverse=True)[:12]
         recent_items = "".join(
-            f'<li><a href="{"commands" if r["type"] == "command" else "functions"}/{slugs[r["title"]]}.html">{html.escape(r["name"])}</a>'
+            f'<li><a href="{r["type"]}s/{slugs[r["title"]]}.html">{html.escape(r["name"])}</a>'
             f'<time datetime="{r["updated"]}">{r["updated"][:10]}</time></li>'
             for r in recent
         )
@@ -297,13 +348,20 @@ class Site:
             for href, name, desc in [
                 ("index.json", "index.json", "lists every entry with its syntax, summary, groups and file paths."),
                 *[(f"{k}.json", f"{k}.json", f"holds every {k[:-1]} with full details.") for k in kinds],
-                ("llms.txt", "llms.txt", "explains all of this to a language model and lists every page."),
+                ("llms.txt", "llms.txt", "explains all of this to a language model."),
+                ("names.txt", "names.txt", "lists every name, one per line."),
+                ("syntax.json", "syntax.json", "gives the forms and status of every name, for linters."),
                 ("schema.json", "schema.json", "is the JSON Schema of a record."),
                 ("https://github.com/a3ref/data", "a3ref/data", "has the same data as a git repository, with daily history."),
             ]
         )
+        topics = "".join(
+            f'<li><a href="topics/{slugs[r["title"]]}.html">{html.escape(r["name"])}</a></li>'
+            for r in sorted(all_records.get("topics", []), key=lambda r: (r["groups"][0] == "Data Types", r["name"].lower()))
+        )
         main = f"""<div class="home-grid">{''.join(columns)}
 <aside class="home-side">
+<section><h2><a href="topics/index.html">Topics</a></h2><ul class="group-list">{topics}</ul></section>
 <section><h2>Recently edited on the wiki</h2><ul class="recent">{recent_items}</ul></section>
 <section><h2>For AI agents and tools</h2><p>This mirror is built to be read by programs. Every page also exists as <code>.md</code> and <code>.json</code> next to its <code>.html</code>, with no API key, no rate limit and CORS open.</p><ul class="data-list">{data_items}</ul></section>
 </aside></div>"""
@@ -321,6 +379,31 @@ class Site:
             "window.BIWIKI_INDEX=" + json.dumps(search_entries, ensure_ascii=False, separators=(",", ":")) + ";",
             encoding="utf-8",
         )
+
+
+def heading_id(text: str) -> str:
+    """Id of a heading in the HTML pages, also used for #anchors in links between mirrored pages."""
+    return re.sub(r"[^\w]+", "-", text.lower()).strip("-")
+
+
+def _alternates(s: str, rec: dict, summary: str) -> str:
+    ld = {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": rec["name"],
+        "description": summary,
+        "dateModified": rec["updated"],
+        "isBasedOn": rec["url"],
+        "about": "Arma 3 scripting (SQF)",
+        "encoding": [
+            {"@type": "MediaObject", "contentUrl": f"{s}.md", "encodingFormat": "text/markdown"},
+            {"@type": "MediaObject", "contentUrl": f"{s}.json", "encodingFormat": "application/json"},
+        ],
+    }
+    script = json.dumps(ld, ensure_ascii=False).replace("</", "<\\/")
+    return (f'<link rel="alternate" type="text/markdown" href="{s}.md">'
+            f'<link rel="alternate" type="application/json" href="{s}.json">\n'
+            f'<script type="application/ld+json">{script}</script>\n')
 
 
 def _anchor(heading: str) -> str:

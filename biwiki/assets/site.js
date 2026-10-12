@@ -71,7 +71,7 @@
     s.onload = function () {
       index = (window.BIWIKI_INDEX || []).map(function (e) {
         var n = e[0].toLowerCase();
-        return { name: e[0], kind: e[1], path: e[2], sum: e[3], n: n, short: n.replace(/^[a-z0-9]+_fnc_/, ""), s: e[3].toLowerCase() };
+        return { name: e[0], kind: e[1], path: e[2], sum: e[3], op: e[4] || "", n: n, short: n.replace(/^[a-z0-9]+_fnc_/, ""), s: e[3].toLowerCase() };
       });
       loading.splice(0).forEach(function (f) { f(); });
     };
@@ -82,7 +82,7 @@
     var words = q.split(/\s+/).filter(Boolean), out = [];
     for (var i = 0; i < index.length; i++) {
       var e = index[i], sc = -1, at;
-      if (e.n === q || e.short === q) sc = 0;
+      if (e.n === q || e.short === q || e.op === q) sc = 0;
       else if (e.n.indexOf(q) === 0) sc = 1 + e.n.length / 1000;
       else if (e.short.indexOf(q) === 0) sc = 1.5 + e.n.length / 1000;
       else if ((at = e.n.indexOf(q)) > -1) sc = 2 + at / 100;
@@ -106,7 +106,7 @@
       list.innerHTML = items.length ? items.map(function (e, i) {
         return '<li role="option" id="r' + i + '"' + (i === 0 ? ' aria-selected="true"' : "") + ' class="' + (e.kind === "f" ? "r-fn" : "r-cmd") + '">' +
           '<a href="' + root + e.path + '.html"><span class="r-name">' + esc(e.name) + '</span>' +
-          '<span class="r-kind">' + (e.kind === "f" ? "function" : "command") + "</span>" +
+          '<span class="r-kind">' + ({ f: "function", t: "topic" }[e.kind] || "command") + "</span>" +
           (e.sum ? '<span class="r-sum">' + esc(e.sum) + "</span>" : "") + "</a></li>";
       }).join("") : '<li class="r-empty">Nothing matches “' + esc(input.value.trim()) + '”. Try part of the name, e.g. “vehicle”.</li>';
       list.hidden = false;

@@ -26,6 +26,20 @@ def display_name(title: str, kind: str) -> str:
     return title.replace(" ", "_") if kind == "functions" else title
 
 
+def script_name(title: str, kind: str, wikitext: str) -> str:
+    """The name as written in scripts. MediaWiki shows "_" in titles as spaces, so the command
+    diag_fps is titled "diag fps"; operator pages such as "a != b" keep their spaces."""
+    if kind == "functions":
+        return title.replace(" ", "_")
+    underscored = title.replace(" ", "_")
+    visible = re.sub(r"\[\[[^|\]]*\|", "[[", wikitext)  # "[[a_hash_b|#]]" shows "#", not the target
+    if " " in title and re.fullmatch(r"\w+", underscored) and re.search(
+        rf"^\|\s*s\d+\s*=.*(?<!\w){re.escape(underscored)}(?!\w)", visible, flags=re.M
+    ):
+        return underscored
+    return title
+
+
 def _name(t: Template) -> str:
     return str(t.name).strip().replace("_", " ")
 
@@ -131,6 +145,7 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
     if rv is None:
         return None
     p = _params(rv)
+    name = script_name(title, kind, raw["wikitext"])
 
     games = [
         {"game": str(v).strip(), "name": game_name(str(v)), "version": _text(p, f"version{n}") or None}
@@ -147,19 +162,24 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
             if (n - 1) * PARAMS_PER_SYNTAX < pn <= n * PARAMS_PER_SYNTAX:
                 md = r.md(pv)
                 item = split_param(r.plain_lines(pv))
+                item["types"] = type_links(pv, has_name=True)
                 item["description"] = _md_desc(md, item)
                 item["since"] = _text(p, f"p{pn}since") or None
                 item["text"] = md
                 params.append(item)
         ret = p.get(f"r{n}")
-        syntaxes.append({
-            "syntax": r.plain(s),
+        syntax = r.plain(s)
+        entry = {
+            "syntax": syntax,
             "since": _text(p, f"s{n}since") or None,
             "effect": _text(p, f"s{n}effect") or None,
             "exec": _text(p, f"s{n}exec") or None,
             "params": params,
             "returns": _returns(ret, r) if ret is not None else None,
-        })
+        }
+        if kind == "commands":
+            entry.update(syntax_form(name, syntax, params))
+        syntaxes.append(entry)
 
     examples = []
     for n, x in _numbered(p, "x"):
@@ -177,15 +197,22 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
     server = _text(p, "serverExec").lower()
     a3 = next((g["version"] for g in games if g["game"] == "arma3"), None)
     alias = [l.replace("_", " ") for l in _links(p.get("alias", ""))]
+    groups = [r.plain(v) for _, v in _numbered(p, "gr")]
+    status, replaced_by = _status(p.get("descr"), groups)
 
+    operators = [s["operator"] for s in syntaxes if s.get("operator")]
     return {
-        "name": display_name(title, kind),
+        "name": name,
+        "operator": operators[0] if operators else None,
         "title": title,
         "type": "command" if kind == "commands" else "function",
         "url": wiki_url(title),
         "revid": raw.get("revid"),
         "updated": raw.get("timestamp"),
-        "groups": [r.plain(v) for _, v in _numbered(p, "gr")],
+        "groups": groups,
+        "status": status,
+        # candidate page titles; render.py keeps those that exist and turns them into names
+        "replaced_by": replaced_by,
         "games": games,
         "since": games[0] if games else None,
         "arma3_since": a3,
@@ -206,6 +233,46 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
         "notes": notes,
         "categories": raw.get("categories", []),
     }
+
+
+def parse_topic(raw: dict, r: Renderer) -> dict:
+    """A free-form concept page (data type, event handler list, ...): Markdown plus its sections."""
+    title = raw["title"]
+    r.page_title = title
+    md = r.md(parse_wikitext(preprocess(raw["wikitext"])))
+    return {
+        "name": title,
+        "title": title,
+        "type": "topic",
+        "url": wiki_url(title),
+        "revid": raw.get("revid"),
+        "updated": raw.get("timestamp"),
+        "aliases": raw.get("redirects", []),
+        "markdown": md,
+        "sections": split_sections(md),
+        "categories": raw.get("categories", []),
+    }
+
+
+def split_sections(md: str) -> list[dict]:
+    """Split Markdown at headings (outside code fences); text before the first heading is the intro."""
+    sections = [{"heading": None, "level": 1, "markdown": []}]
+    fence = None
+    for line in md.split("\n"):
+        m = re.match(r"^(`{3,})", line)
+        if m:
+            fence = None if fence and m.group(1).startswith(fence) else (fence or m.group(1))
+        h = None if fence else re.match(r"^(#{2,6}) (.+)$", line)
+        if h:
+            sections.append({"heading": h.group(2).strip(), "level": len(h.group(1)), "markdown": []})
+        else:
+            sections[-1]["markdown"].append(line)
+    out = []
+    for s in sections:
+        text = "\n".join(s["markdown"]).strip()
+        if s["heading"] or text:
+            out.append({"heading": s["heading"], "level": s["level"], "markdown": text})
+    return out
 
 
 def _md_desc(md: str, item: dict) -> Optional[str]:
@@ -233,4 +300,89 @@ def _returns(code, r: Renderer) -> dict:
     md = r.md(code)
     plain = r.plain(code)
     type_, sep, desc = plain.partition(" - ")
-    return {"type": type_.strip() if sep or len(plain) < 60 else None, "description": desc.strip() or None, "text": md}
+    return {
+        "type": type_.strip() if sep or len(plain) < 60 else None,
+        "types": type_links(code, has_name=False),
+        "description": desc.strip() or None,
+        "text": md,
+    }
+
+
+def type_links(code, has_name: bool) -> list[str]:
+    """Data types linked in the type part of ``name: [[Array]] of [[String]]s - description``.
+
+    A link with an anchor is named by its text (``[[Position#PositionAGL|PositionAGL]]`` -> PositionAGL).
+    """
+    first = str(code).strip().split("\n", 1)[0]
+    if has_name:
+        first = first.split(":", 1)[1] if ":" in first.split("[[", 1)[0] else first
+    head = re.split(r" - |\((?:O|o)ptional", first, maxsplit=1)[0]
+    out = []
+    for link in parse_wikitext(head).filter_wikilinks():
+        target = str(link.title).strip().lstrip(":").replace("_", " ")
+        if target.lower().startswith(("category:", "file:", "image:")):
+            continue
+        name = str(link.text).strip() if link.text is not None and "#" in target else target.split("#")[0]
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
+def syntax_form(title: str, syntax: str, params: list[dict]) -> dict:
+    """Shape of a command syntax: nullary ``time``, unary ``alive unit``, binary ``unit setPos pos``.
+
+    Operator pages are titled like "a != b"; the operator itself is what sits between the operands.
+    """
+    op = title
+    m = re.fullmatch(r"(?:a )?(.+?)(?: [ab])?", title)  # "a != b", "! a"
+    if m and not re.fullmatch(r"\w+", title):
+        op = m.group(1)
+    rx = rf"(?<![\w]){re.escape(op)}(?![\w])" if re.fullmatch(r"\w+", op) else re.escape(op)
+    hit = re.search(rx, syntax)
+    parts = syntax.split()
+    if hit:
+        left, right = syntax[: hit.start()].strip(), syntax[hit.end() :].strip()
+        symbol = op
+    elif not re.fullmatch(r"\w+", title) and len(parts) in (2, 3):
+        # operators titled in words: "a greater b" is "a > b", "config greater greater name" is "config >> name"
+        left, symbol, right = (parts if len(parts) == 3 else ["", *parts])
+    else:
+        return {"form": None, "operator": None, "left": None, "right": None}
+    form = "binary" if left and right else "unary" if right else "nullary" if not left else None
+    by_name = {p["name"]: p for p in params if p["name"]}
+
+    def operand(text: str):
+        if not text:
+            return None
+        if text.startswith("["):
+            return {"text": text, "types": ["Array"]}
+        p = by_name.get(text)
+        return {"text": text, "types": p["types"] if p else []}
+
+    operator = None if re.fullmatch(r"\w+", title) else symbol
+    return {"form": form, "operator": operator, "left": operand(left), "right": operand(right)}
+
+
+_DEPRECATION = re.compile(r"\b(deprecated|obsolete)\b", re.I)
+
+
+def _status(descr, groups: list[str]) -> tuple[str, list[str]]:
+    """"broken" (the wiki's Broken Commands/Functions group), "deprecated" (an obsolete/deprecation box), or "ok".
+
+    Free text such as "does not work on vehicles" is deliberately not used: it is about limits, not deprecation.
+    Pages linked from the deprecation box are returned as candidate replacements.
+    """
+    replaced: list[str] = []
+    deprecated = False
+    if descr is not None:
+        for t in parse_wikitext(str(descr)).filter_templates():
+            if _name(t) != "Feature" or not t.params:
+                continue
+            ftype = str(t.params[0].value).strip().lower()
+            body = " ".join(str(x.value) for x in t.params[1:])
+            if ftype == "obsolete" or _DEPRECATION.search(body):
+                deprecated = True
+                replaced += [l for l in _links(body) if l not in replaced]
+    if any(g.lower().startswith("broken") for g in groups):
+        return "broken", replaced
+    return ("deprecated" if deprecated else "ok"), replaced

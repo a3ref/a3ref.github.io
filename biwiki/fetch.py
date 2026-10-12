@@ -17,7 +17,21 @@ API = "/wikidata/api.php"
 CATEGORIES = {
     "commands": "Category:Arma 3: Scripting Commands",
     "functions": "Category:Arma 3: Functions",
+    "topics": "Category:Data Types",
 }
+
+# Topics: the concept pages that command pages link to most (data types, locality, event handlers, ...).
+# Agents cannot follow links to the wiki itself, so these are mirrored too.
+TOPIC_CATEGORIES = ["Category:Data Types", "Category:Magic Types", "Category:Syntactical Helper Types"]
+TOPIC_TITLES = [
+    "SQF Syntax", "Variables", "Operators", "Order of Precedence", "Control Structures", "Magic Variables", "Identifier", "Expression",
+    "Position", "Color", "Vector3D", "Arma 3: Tree View Path",
+    "Multiplayer Scripting", "Arma 3: Remote Execution", "Scheduler", "Initialisation Order", "Event Scripts",
+    "Arma 3: Event Handlers", "Arma 3: Mission Event Handlers", "User Interface Event Handlers",
+    "Arma 3: Scripted Event Handlers", "Arma 3: Functions Library", "Arma 3: Writing a Function",
+    "PreProcessor Commands", "Description.ext", "Arma 3: Actions", "Arma 3: Curator",
+    "Code Best Practices", "Code Optimisation",
+]
 
 _FETCH_JS = """async (params) => {
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -90,6 +104,30 @@ class WikiSession:
                 pages[p["pageid"]] = {"title": p["title"], "revid": p["lastrevid"], "touched": p["touched"]}
         return pages
 
+    async def list_titles(self, titles: list[str]) -> dict[int, dict]:
+        """Like list_category, for explicit titles (redirects followed); missing titles are reported."""
+        pages: dict[int, dict] = {}
+        for i in range(0, len(titles), 50):
+            async for q in self.query_all(titles="|".join(titles[i : i + 50]), redirects=1, prop="info"):
+                for p in q.get("pages", []):
+                    if p.get("missing"):
+                        print(f"  missing on the wiki: {p['title']}")
+                    elif p.get("ns") == 0:
+                        pages[p["pageid"]] = {"title": p["title"], "revid": p["lastrevid"], "touched": p["touched"]}
+        return pages
+
+    async def fetch_redirects(self, pageids: list[int]) -> dict[int, list[str]]:
+        """Titles that redirect to each page, so links to old names can stay local."""
+        out: dict[int, list[str]] = {pid: [] for pid in pageids}
+        for i in range(0, len(pageids), 50):
+            async for q in self.query_all(
+                pageids="|".join(map(str, pageids[i : i + 50])), prop="redirects", rdprop="title", rdlimit="max",
+                rdnamespace=0,
+            ):
+                for p in q.get("pages", []):
+                    out.setdefault(p["pageid"], []).extend(r["title"] for r in p.get("redirects", []))
+        return {pid: sorted(set(v)) for pid, v in out.items()}
+
     async def fetch_content(self, pageids: list[int]) -> dict[int, dict]:
         """Fetch latest wikitext for the given pages, 50 per request (API limit for non-bots)."""
         out: dict[int, dict] = {}
@@ -139,7 +177,12 @@ async def sync(raw_dir: Path, profile_dir: Path, kinds: list[str], hidden: bool 
             path = raw_dir / f"{kind}.json"
             cache = {} if full else load_cache(path)
             t0 = time.time()
-            members = await wiki.list_category(CATEGORIES[kind])
+            if kind == "topics":
+                members = await wiki.list_titles(TOPIC_TITLES)
+                for category in TOPIC_CATEGORIES:
+                    members.update(await wiki.list_category(category))
+            else:
+                members = await wiki.list_category(CATEGORIES[kind])
             stale = [pid for pid, m in members.items() if cache.get(pid, {}).get("revid") != m["revid"]]
             removed = set(cache) - set(members)
             print(f"{kind}: {len(members)} pages, {len(stale)} to fetch, {len(removed)} removed")
@@ -147,5 +190,10 @@ async def sync(raw_dir: Path, profile_dir: Path, kinds: list[str], hidden: bool 
                 del cache[pid]
             if stale:
                 cache.update(await wiki.fetch_content(stale))
+            if kind == "topics":
+                # a new redirect does not change the target's revision, so refresh them every time
+                for pid, titles in (await wiki.fetch_redirects(sorted(cache))).items():
+                    if pid in cache:
+                        cache[pid]["redirects"] = titles
             save_cache(path, cache)
             print(f"{kind}: done in {time.time() - t0:.0f}s")
