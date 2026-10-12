@@ -353,6 +353,7 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
                 ("syntax.json", "syntax.json", "gives the forms and status of every name, for linters."),
                 ("feed.xml", "feed.xml", "is an Atom feed of wiki edits (also changes.json)."),
                 ("schema.json", "schema.json", "is the JSON Schema of a record."),
+                ("https://github.com/a3ref/mcp", "a3ref/mcp", "is an MCP server and Claude Code plugin: search, pages and an SQF linter."),
                 ("https://github.com/a3ref/data", "a3ref/data", "has the same data as a git repository, with daily history."),
             ]
         )

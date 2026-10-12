@@ -3,31 +3,56 @@
 **Every Arma 3 scripting command and function, built first for AI agents, bots and programs.**
 
 A daily-updated mirror of every page in
-[Category:Arma 3: Scripting Commands](https://community.bistudio.com/wiki/Category:Arma_3:_Scripting_Commands) and
+[Category:Arma 3: Scripting Commands](https://community.bistudio.com/wiki/Category:Arma_3:_Scripting_Commands),
 [Category:Arma 3: Functions](https://community.bistudio.com/wiki/Category:Arma_3:_Functions)
-from the Bohemia Interactive Community Wiki. The original wiki sits behind a bot challenge that blocks
-scripts and agents; this mirror serves the same content as **Markdown** and **JSON** at stable, predictable URLs,
-with no API key, no rate limit and open CORS. A readable **HTML** version is there for people too.
+and the concept pages they rely on (data types, `Position`, locality, scheduler, event handlers, `Description.ext`, ...)
+from the Bohemia Interactive Community Wiki. The original wiki sits behind a bot challenge that blocks scripts and
+agents; this mirror serves the same content as **Markdown** and **JSON** at stable, predictable URLs, with no API key,
+no rate limit and open CORS. A readable **HTML** version is there for people too.
 
-Site: **https://a3ref.github.io/** · Data: **[a3ref/data](https://github.com/a3ref/data)** · Agent index: **https://a3ref.github.io/llms.txt**
+Site: **https://a3ref.github.io/** · Data: **[a3ref/data](https://github.com/a3ref/data)** ·
+MCP server: **[a3ref/mcp](https://github.com/a3ref/mcp)** · Agent guide: **https://a3ref.github.io/llms.txt**
 
 ## For AI agents and programs
 
+The easiest way for an agent is the **[MCP server](https://github.com/a3ref/mcp)**: search, read pages and lint SQF
+(catches made-up commands, missing operands, unknown `BIS_fnc_*` functions, deprecated commands). In Claude Code:
+`/plugin marketplace add a3ref/mcp`, then `/plugin install a3ref@a3ref`.
+
+Without MCP, everything is a plain GET:
+
 | You need | Fetch |
 |---|---|
+| where to start | [`llms.txt`](https://a3ref.github.io/llms.txt): how to use the mirror, topics, groups (a few thousand tokens) |
 | one command | `https://a3ref.github.io/commands/<name>.md` or `.json`, e.g. [`commands/setPos.md`](https://a3ref.github.io/commands/setPos.md) |
 | one function | `https://a3ref.github.io/functions/<name>.md` or `.json`, e.g. [`functions/BIS_fnc_spawnGroup.json`](https://a3ref.github.io/functions/BIS_fnc_spawnGroup.json) |
-| to find the right name | [`index.json`](https://a3ref.github.io/index.json): every entry with syntax, one-line summary, groups, locality and page paths |
-| everything | [`commands.json`](https://a3ref.github.io/commands.json), [`functions.json`](https://a3ref.github.io/functions.json) |
+| a concept | `https://a3ref.github.io/topics/<name>.md`, e.g. [`topics/Multiplayer_Scripting.md`](https://a3ref.github.io/topics/Multiplayer_Scripting.md), [`topics/Event_Handlers.md`](https://a3ref.github.io/topics/Event_Handlers.md) |
+| every name | [`names.txt`](https://a3ref.github.io/names.txt), one per line |
+| one group | `groups/commands/<group>.md`, `groups/functions/<group>.md`, listed in `llms.txt` |
+| to search | [`index.json`](https://a3ref.github.io/index.json): every entry with syntax, summary, groups, locality, status, operator symbol, paths |
+| everything | [`commands.json`](https://a3ref.github.io/commands.json), [`functions.json`](https://a3ref.github.io/functions.json), [`topics.json`](https://a3ref.github.io/topics.json) |
+| a linter's data | [`syntax.json`](https://a3ref.github.io/syntax.json): forms (nullary/unary/binary), status, replacements and syntax of every name |
 | the record format | [`schema.json`](https://a3ref.github.io/schema.json) (JSON Schema 2020-12) |
-| an LLM-oriented overview | [`llms.txt`](https://a3ref.github.io/llms.txt) ([llms.txt](https://llmstxt.org/) format) |
+| what changed | [`changes.md`](https://a3ref.github.io/changes.md), [`changes.json`](https://a3ref.github.io/changes.json), Atom [`feed.xml`](https://a3ref.github.io/feed.xml) |
 | version history | the [a3ref/data](https://github.com/a3ref/data) repository, one commit per day with changes |
 
-URLs are case-sensitive and use the wiki spelling (`setPos`, not `setpos`). Spaces become `_`, and characters
-outside `A-Za-z0-9.-` become `~XX` per UTF-8 byte (`a != b` → `a_~21~3D_b`). When unsure, look the path up in `index.json`.
+Paths use the name as written in scripts (`setPos`, `diag_fps`, `BIS_fnc_spawnGroup`), and **lower-case paths work
+too** (`commands/setpos.md`). Spaces become `_`; other characters outside `A-Za-z0-9.-` become `~XX` per UTF-8 byte
+(the operator page `a != b` is `commands/a_~21~3D_b.md`; `index.json` also lists operators by symbol). A missing page
+returns a 404 that explains how to find the right path.
+
+What the records add on top of the wiki text:
+
+- `status` (`ok`, `deprecated`, `broken`) and `replaced_by`, so agents avoid outdated commands;
+- `types` lists for every parameter and return value (`["Array", "String"]`), linked to the data type topics;
+- for commands, the syntax `form` (`nullary`, `unary`, `binary`) with typed `left`/`right` operands, and the
+  `operator` symbol of operator pages;
+- for the ~400 placeholder function pages, the description, parameters, return value and examples parsed from the
+  function's header comment in the game files (`docblock`, `filled_from_docblock`).
 
 Markdown pages are the best fit for a model's context: description, every syntax with typed parameters and return
-value, locality, examples and community notes in one file. JSON pages hold the same as structured fields.
+value, locality, examples and community notes in one file. Links in Markdown point only to other mirrored pages
+(agents cannot open the wiki); HTML pages also link to the wiki.
 
 ### Add it to your agent
 
@@ -39,9 +64,10 @@ When writing or reviewing SQF for Arma 3, check commands and BIS_fnc_* functions
 https://a3ref.github.io/ instead of relying on memory:
 - https://a3ref.github.io/commands/<command>.md (e.g. commands/setPos.md)
 - https://a3ref.github.io/functions/<BIS_fnc_name>.md (e.g. functions/BIS_fnc_spawnGroup.md)
-- https://a3ref.github.io/index.json lists every name with its syntax and a one-line summary
-Names are case-sensitive and use the wiki spelling. Check syntax, parameter types, return value,
-locality (local/global argument and effect) and the Arma 3 version that introduced the command.
+- https://a3ref.github.io/topics/<topic>.md (e.g. topics/Multiplayer_Scripting.md)
+- https://a3ref.github.io/names.txt lists every name; https://a3ref.github.io/llms.txt explains the rest
+Check syntax, parameter types, return value, locality (local/global argument and effect),
+status (deprecated commands name a replacement) and the Arma 3 version that introduced the command.
 ```
 
 ### From code
@@ -82,10 +108,10 @@ and writes the mirror to `out/`.
 
 ## Deployment
 
-Two repositories, no secrets:
+Three repositories, no secrets:
 
 - **[a3ref/data](https://github.com/a3ref/data)** holds the data: raw wikitext (`raw/*.json`) and the parsed
-  `commands.json`, `functions.json`, `index.json`. Its workflow runs **daily at 04:17 UTC**: it checks out this
+  `commands.json`, `functions.json`, `topics.json`, `index.json`, `syntax.json`. Its workflow runs **daily at 04:17 UTC**: it checks out this
   repository for the code, runs `sync` (real Chrome inside `xvfb`) and `build --dataset`, and commits only if
   something changed.
 - **this repository** holds only the code. `.github/workflows/site.yml` builds the site from the latest
@@ -93,6 +119,7 @@ Two repositories, no secrets:
   - on every push to `main` (parser or design changes);
   - **daily at 05:17 UTC**, but only if the data commit differs from `data-version.txt` on the live site;
   - manually (Actions → Deploy site → Run workflow).
+- **[a3ref/mcp](https://github.com/a3ref/mcp)** is the MCP server and Claude Code plugin; it reads the live site.
 
 Everything in `out/` is generated during deployment and never committed.
 
@@ -147,21 +174,19 @@ Cloudflare rejects real headless Chrome; if a checkbox appears, run without `--h
 
 | File | Purpose |
 |---|---|
-| `index.html` | **the site**: home page with search, groups, command and function pages |
-| `index.md` | mirror home page in Markdown |
-| `commands/index.md`, `functions/index.md` | lists grouped by command group |
-| `commands/<name>.md`, `functions/<name>.md` | page with YAML front matter, description, syntaxes, parameters, examples and community notes; links between commands and functions point to local files |
-| `commands/<name>.json`, `functions/<name>.json` | the same page as structured data |
-| `commands/<name>.html`, `functions/<name>.html` | the same page as HTML |
-| `commands.json`, `functions.json` | every record of one category in a single file |
-| `index.json` | lightweight index for agents: name, syntaxes, summary, groups, locality, file paths |
-| `assets/` | stylesheet, script and search index of the HTML version |
-| `llms.txt`, `robots.txt`, `sitemap.xml` | discovery for language models, crawlers and search engines |
-| `schema.json` | JSON Schema of a record, of `commands.json`/`functions.json` and of `index.json` |
+| `index.html` | **the site**: home page with search, groups, topics, recent edits |
+| `commands/`, `functions/`, `topics/` | one page per entry as `<name>.md` (YAML front matter + Markdown), `.json` and `.html`, plus lower-case aliases and an `index.md`/`index.html` by group |
+| `commands.json`, `functions.json`, `topics.json` | every record of one kind in a single file |
+| `index.json` | lightweight index: name, type, syntaxes, summary, groups, locality, status, operator, aliases, paths |
+| `names.txt` | every name, one per line, with paths where they do not follow the simple rule |
+| `groups/<kind>/<group>.md` | per-group lists with summaries |
+| `syntax.json` | forms, status, replacements and syntax lines of every name, for linters (used by the MCP server) |
+| `llms.txt`, `llms-full.txt` | short guide for language models, and the full list of every page |
+| `changes.md`, `changes.json`, `feed.xml` | wiki edits, from the git history of a3ref/data (written by `python -m biwiki feed`) |
+| `robots.txt`, `sitemap.xml`, `404.html` | crawlers and search engines; the 404 page redirects people and explains paths to agents |
+| `schema.json` | JSON Schema of every file above |
 | `report.json` | parser health report: crashes, skipped pages, unknown templates, leftover markup, untyped parameters |
-
-File names: spaces become `_`, other unsafe characters become `~XX` (hex), e.g. `a != b` → `a_~21~3D_b.md`.
-Functions are named as in scripts: `BIS_fnc_spawnGroup.md`. Exact paths are listed in `index.json`.
+| `assets/` | stylesheet, script and search index of the HTML version |
 
 ### JSON record
 
@@ -219,9 +244,11 @@ Fonts (Barlow, JetBrains Mono) load from Google Fonts; offline, system fonts are
 
 - `biwiki/fetch.py`: browser session, MediaWiki API, incremental cache
 - `biwiki/wikitext.py`: wikitext → Markdown (links, lists, tables, `<sqf>`, `{{Feature}}`, `{{GVI}}`, `{{hl}}`, …)
-- `biwiki/parse.py`: `{{RV}}` template → record
+- `biwiki/parse.py`: `{{RV}}` template → record (status, types, syntax forms); concept pages → topic records
+- `biwiki/docblock.py`: function header comments on placeholder pages → description, parameters, returns, examples
 - `biwiki/render.py`: writes the mirror files and indexes
 - `biwiki/report.py`: parser health report, baseline comparison and the GitHub issue
+- `biwiki/feed.py`: change feed from the data repository's history
 - `biwiki/site.py`, `biwiki/assets/`: HTML version (markdown-it-py, SQF highlighting, page templates)
 
 Content belongs to the authors of the BI Community Wiki; every generated page links to its source and revision.

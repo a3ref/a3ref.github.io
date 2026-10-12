@@ -496,6 +496,7 @@ def _llms_txt(base: str, index: list[dict], groups, records) -> str:
         f"- Full list of every page with a summary (large): {base}llms-full.txt",
         f"- What changed on the wiki recently: {base}changes.md (also changes.json, Atom feed {base}feed.xml)",
         "- The same data with daily git history: https://github.com/a3ref/data",
+        "- MCP server and Claude Code plugin (search, read pages, lint SQF): https://github.com/a3ref/mcp",
         "",
         "## Topics",
         "",
