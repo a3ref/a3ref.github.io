@@ -1,12 +1,73 @@
-# a3ref — Arma 3 scripting reference
+# a3ref — Arma 3 scripting reference for AI agents
 
-A mirror of every page in
+**Every Arma 3 scripting command and function, built first for AI agents, bots and programs.**
+
+A daily-updated mirror of every page in
 [Category:Arma 3: Scripting Commands](https://community.bistudio.com/wiki/Category:Arma_3:_Scripting_Commands) and
 [Category:Arma 3: Functions](https://community.bistudio.com/wiki/Category:Arma_3:_Functions)
-from the Bohemia Interactive Community Wiki, converted to **HTML** (for people), **Markdown** (for people and LLMs)
-and **JSON** (for tools and AI agents).
+from the Bohemia Interactive Community Wiki. The original wiki sits behind a bot challenge that blocks
+scripts and agents; this mirror serves the same content as **Markdown** and **JSON** at stable, predictable URLs,
+with no API key, no rate limit and open CORS. A readable **HTML** version is there for people too.
 
-Site: **https://a3ref.github.io/**
+Site: **https://a3ref.github.io/** · Data: **[a3ref/data](https://github.com/a3ref/data)** · Agent index: **https://a3ref.github.io/llms.txt**
+
+## For AI agents and programs
+
+| You need | Fetch |
+|---|---|
+| one command | `https://a3ref.github.io/commands/<name>.md` or `.json`, e.g. [`commands/setPos.md`](https://a3ref.github.io/commands/setPos.md) |
+| one function | `https://a3ref.github.io/functions/<name>.md` or `.json`, e.g. [`functions/BIS_fnc_spawnGroup.json`](https://a3ref.github.io/functions/BIS_fnc_spawnGroup.json) |
+| to find the right name | [`index.json`](https://a3ref.github.io/index.json): every entry with syntax, one-line summary, groups, locality and page paths |
+| everything | [`commands.json`](https://a3ref.github.io/commands.json), [`functions.json`](https://a3ref.github.io/functions.json) |
+| the record format | [`schema.json`](https://a3ref.github.io/schema.json) (JSON Schema 2020-12) |
+| an LLM-oriented overview | [`llms.txt`](https://a3ref.github.io/llms.txt) ([llms.txt](https://llmstxt.org/) format) |
+| version history | the [a3ref/data](https://github.com/a3ref/data) repository, one commit per day with changes |
+
+URLs are case-sensitive and use the wiki spelling (`setPos`, not `setpos`). Spaces become `_`, and characters
+outside `A-Za-z0-9.-` become `~XX` per UTF-8 byte (`a != b` → `a_~21~3D_b`). When unsure, look the path up in `index.json`.
+
+Markdown pages are the best fit for a model's context: description, every syntax with typed parameters and return
+value, locality, examples and community notes in one file. JSON pages hold the same as structured fields.
+
+### Add it to your agent
+
+Paste this into `AGENTS.md`, `CLAUDE.md`, `.cursorrules` or your system prompt:
+
+```markdown
+## Arma 3 / SQF reference
+When writing or reviewing SQF for Arma 3, check commands and BIS_fnc_* functions against
+https://a3ref.github.io/ instead of relying on memory:
+- https://a3ref.github.io/commands/<command>.md (e.g. commands/setPos.md)
+- https://a3ref.github.io/functions/<BIS_fnc_name>.md (e.g. functions/BIS_fnc_spawnGroup.md)
+- https://a3ref.github.io/index.json lists every name with its syntax and a one-line summary
+Names are case-sensitive and use the wiki spelling. Check syntax, parameter types, return value,
+locality (local/global argument and effect) and the Arma 3 version that introduced the command.
+```
+
+### From code
+
+```sh
+curl -s https://a3ref.github.io/commands/setPos.md
+curl -s https://a3ref.github.io/index.json | jq -r '.items[] | select(.name | test("^setPos")) | .syntax[]'
+```
+
+```python
+import json, urllib.request
+
+index = json.load(urllib.request.urlopen("https://a3ref.github.io/index.json"))
+entry = next(e for e in index["items"] if e["name"].lower() == "createvehicle")
+page = json.load(urllib.request.urlopen("https://a3ref.github.io/" + entry["json"]))
+for s in page["syntaxes"]:
+    print(s["syntax"], "->", s["returns"]["type"] if s["returns"] else None)
+```
+
+```js
+const index = await (await fetch("https://a3ref.github.io/index.json")).json();
+const fns = index.items.filter((e) => e.type === "function" && e.groups.includes("Multiplayer"));
+```
+
+The same files are also served by `raw.githubusercontent.com/a3ref/data/main/…` and
+`cdn.jsdelivr.net/gh/a3ref/data@main/…`.
 
 ## How it works
 
@@ -94,8 +155,9 @@ Cloudflare rejects real headless Chrome; if a checkbox appears, run without `--h
 | `commands/<name>.html`, `functions/<name>.html` | the same page as HTML |
 | `commands.json`, `functions.json` | every record of one category in a single file |
 | `index.json` | lightweight index for agents: name, syntaxes, summary, groups, locality, file paths |
-| `llms.txt` | index in the [llms.txt](https://llmstxt.org/) format |
 | `assets/` | stylesheet, script and search index of the HTML version |
+| `llms.txt`, `robots.txt`, `sitemap.xml` | discovery for language models, crawlers and search engines |
+| `schema.json` | JSON Schema of a record, of `commands.json`/`functions.json` and of `index.json` |
 | `report.json` | parser health report: crashes, skipped pages, unknown templates, leftover markup, untyped parameters |
 
 File names: spaces become `_`, other unsafe characters become `~XX` (hex), e.g. `a != b` → `a_~21~3D_b.md`.

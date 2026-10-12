@@ -297,13 +297,15 @@ class Site:
             for href, name, desc in [
                 ("index.json", "index.json", "lists every entry with its syntax, summary, groups and file paths."),
                 *[(f"{k}.json", f"{k}.json", f"holds every {k[:-1]} with full details.") for k in kinds],
-                ("llms.txt", "llms.txt", "is an index for language models."),
+                ("llms.txt", "llms.txt", "explains all of this to a language model and lists every page."),
+                ("schema.json", "schema.json", "is the JSON Schema of a record."),
+                ("https://github.com/a3ref/data", "a3ref/data", "has the same data as a git repository, with daily history."),
             ]
         )
         main = f"""<div class="home-grid">{''.join(columns)}
 <aside class="home-side">
 <section><h2>Recently edited on the wiki</h2><ul class="recent">{recent_items}</ul></section>
-<section><h2>For tools and AI agents</h2><p>Every page also exists as <code>.md</code> and <code>.json</code> next to its <code>.html</code>.</p><ul class="data-list">{data_items}</ul></section>
+<section><h2>For AI agents and tools</h2><p>This mirror is built to be read by programs. Every page also exists as <code>.md</code> and <code>.json</code> next to its <code>.html</code>, with no API key, no rate limit and CORS open.</p><ul class="data-list">{data_items}</ul></section>
 </aside></div>"""
         doc = self.shell(root="", title="Arma 3 scripting reference", description="Arma 3 scripting commands and functions.",
                          masthead=masthead, main=main, footer=_site_footer(generated), page_class="page-home")

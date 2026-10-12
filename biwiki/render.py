@@ -14,6 +14,8 @@ from .report import Report
 from .site import Site, _anchor
 from .wikitext import Renderer
 
+SITE_URL = "https://a3ref.github.io/"
+SCHEMA = Path(__file__).parent / "schema.json"
 KIND_LABEL = {"commands": "Scripting Commands", "functions": "Functions"}
 _RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(10)), *(f"LPT{i}" for i in range(10))}
 
@@ -165,7 +167,8 @@ def _link(title: str, resolve) -> str:
     return f"[{title}]({url})" if url else title
 
 
-def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset: Path | None = None) -> None:
+def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset: Path | None = None,
+          base_url: str = SITE_URL) -> None:
     """Generate the mirror in ``out_dir``; with ``dataset``, also write the parsed JSON bundles there."""
     kinds = kinds or list(CATEGORIES)
     raws = {k: load_cache(raw_dir / f"{k}.json") for k in kinds}
@@ -198,16 +201,8 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     bundles: dict[str, dict] = {}
 
     report = Report()
-    now =datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     index: list[dict] = []
-    llms = [
-        "# Arma 3 Scripting Reference",
-        "",
-        "> Mirror of Arma 3 scripting commands and functions from the Bohemia Interactive Community Wiki "
-        "(https://community.bistudio.com/wiki), converted to Markdown and JSON. "
-        "Every page is available as `<name>.md` and `<name>.json`; `index.json` lists all entries.",
-        "",
-    ]
 
     for kind in kinds:
         target = out_dir / kind
@@ -256,9 +251,6 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
         site.kind_index(kind, records, slugs, summaries)
         site_records[kind] = records
 
-        llms += [f"## {KIND_LABEL[kind]}", ""]
-        llms += [f"- [{e['name']}]({e['md']}): {e['summary']}" for e in index if e["type"] == records[0]["type"]] if records else []
-        llms.append("")
         print(f"{kind}: {len(records)} pages written")
 
     # Stamp the data with its newest wiki edit, not the build time, so unchanged data stays byte-identical.
@@ -270,13 +262,60 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
         if dataset:
             # one record per line keeps git diffs in the data repository readable
             _write_lines(dataset / name, payload)
-    (out_dir / "llms.txt").write_text("\n".join(llms), encoding="utf-8")
+    (out_dir / "llms.txt").write_text(_llms_txt(base_url, kinds, index), encoding="utf-8")
+    (out_dir / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {base_url}sitemap.xml\n", encoding="utf-8")
+    (out_dir / "sitemap.xml").write_text(_sitemap(base_url, kinds, site_records, slugs), encoding="utf-8")
+    shutil.copyfile(SCHEMA, out_dir / "schema.json")
+    if dataset:
+        shutil.copyfile(SCHEMA, dataset / "schema.json")
     (out_dir / "index.md").write_text(_root_index(kinds, index, now), encoding="utf-8")
     site.home(kinds, site_records, slugs, now)
     site.assets(search)
     health = report.to_json(updated)
     (out_dir / "report.json").write_text(json.dumps(health, ensure_ascii=False, indent=1), encoding="utf-8")
     print("problems:", {k: n for k, n in health["counts"].items() if n} or "none")
+
+
+def _llms_txt(base: str, kinds: list[str], index: list[dict]) -> str:
+    """https://llmstxt.org/ index: how to use the mirror, then every entry with an absolute link."""
+    counts = Counter(e["type"] for e in index)
+    out = [
+        "# Arma 3 Scripting Reference (a3ref)",
+        "",
+        f"> Every Arma 3 scripting command ({counts['command']}) and function ({counts['function']}) from the "
+        "Bohemia Interactive Community Wiki, updated daily and published for AI agents, bots and tools "
+        "as Markdown and JSON at stable URLs.",
+        "",
+        "## How to use",
+        "",
+        f"- Find an entry: {base}index.json lists every command and function with its syntax, a one-line summary, "
+        "groups, locality and the paths of its `md` and `json` pages.",
+        f"- One page: `{base}commands/<name>.md` or `.json`, `{base}functions/<name>.md` or `.json` "
+        "(e.g. `commands/setPos.md`, `functions/BIS_fnc_spawnGroup.json`). Names are case-sensitive here and use "
+        "the wiki spelling; spaces become `_`, other characters outside `A-Za-z0-9.-` become `~XX` per UTF-8 byte "
+        "(`a != b` becomes `a_~21~3D_b`). When unsure, take the path from index.json.",
+        f"- Everything at once: {base}commands.json and {base}functions.json; record format: {base}schema.json.",
+        "- Same data as a git repository with daily history: https://github.com/a3ref/data",
+        "- Each record keeps `url` and `revid` of the wiki page it came from.",
+        "",
+    ]
+    for kind in kinds:
+        t = "command" if kind == "commands" else "function"
+        out += [f"## {KIND_LABEL[kind]}", ""]
+        out += [f"- [{e['name']}]({base}{e['md']}): {e['summary']}" for e in index if e["type"] == t]
+        out.append("")
+    return "\n".join(out)
+
+
+def _sitemap(base: str, kinds: list[str], records: dict[str, list[dict]], slugs: dict[str, str]) -> str:
+    urls = [f"<url><loc>{base}</loc></url>"]
+    for kind in kinds:
+        urls.append(f"<url><loc>{base}{kind}/index.html</loc></url>")
+        for r in records.get(kind, []):
+            lastmod = f"<lastmod>{r['updated'][:10]}</lastmod>" if r["updated"] else ""
+            urls.append(f"<url><loc>{base}{kind}/{slugs[r['title']]}.html</loc>{lastmod}</url>")
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+            + "\n".join(urls) + "\n</urlset>\n")
 
 
 def _write_lines(path: Path, payload: dict) -> None:

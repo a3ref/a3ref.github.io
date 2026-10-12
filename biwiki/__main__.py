@@ -17,6 +17,7 @@ def main(argv=None) -> None:
     ap = argparse.ArgumentParser(prog="biwiki", description=__doc__)
     ap.add_argument("--raw", type=Path, default=ROOT / "data" / "raw", help="raw wikitext cache directory")
     ap.add_argument("--dataset", type=Path, help="also write parsed commands.json/functions.json/index.json here")
+    ap.add_argument("--base-url", default="https://a3ref.github.io/", help="public site URL, for llms.txt and sitemap.xml")
     ap.add_argument("--out", type=Path, default=ROOT / "out", help="generated mirror directory")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -50,7 +51,7 @@ def main(argv=None) -> None:
     if a.cmd in ("build", "update"):
         from .render import build
 
-        build(a.raw, a.out, kinds, dataset=a.dataset)
+        build(a.raw, a.out, kinds, dataset=a.dataset, base_url=a.base_url.rstrip("/") + "/")
     if a.cmd == "report":
         from .report import run
 
