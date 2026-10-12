@@ -36,6 +36,7 @@ LEFTOVERS = {
     "''": re.compile(r"(?<![\"'])''(?![\"'])"),
     "{|": re.compile(r"^\{\|", re.M),
     "<nowiki": re.compile(r"<nowiki", re.I),
+    "![": re.compile(r"(?<!\\)!\["),  # Markdown image syntax: the converter never means to produce one
 }
 _FENCED = re.compile(r"^(`{3,}).*?^\1", re.S | re.M)
 _INLINE = re.compile(r"(`+)(?!`).+?(?<!`)\1")

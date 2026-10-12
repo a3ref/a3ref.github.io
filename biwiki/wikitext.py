@@ -181,6 +181,9 @@ class Renderer:
     def _finish(self, text: str, slots: list[str]) -> str:
         text = self._lists(text)
         text = "\n".join(_styles(line) for line in text.split("\n")).replace(STAR, "*")
+        # We never emit images, so "![" is always text such as SQF "!" before a link ("![[alive]]" -> "!alive").
+        # Code is still in slots here, so it is not affected.
+        text = text.replace("![", "\\![")
         text = re.sub(r"[ \t]+\n", "\n", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
         while _SLOT.search(text):
