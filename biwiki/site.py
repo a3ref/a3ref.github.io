@@ -351,6 +351,7 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
                 ("llms.txt", "llms.txt", "explains all of this to a language model."),
                 ("names.txt", "names.txt", "lists every name, one per line."),
                 ("syntax.json", "syntax.json", "gives the forms and status of every name, for linters."),
+                ("feed.xml", "feed.xml", "is an Atom feed of wiki edits (also changes.json)."),
                 ("schema.json", "schema.json", "is the JSON Schema of a record."),
                 ("https://github.com/a3ref/data", "a3ref/data", "has the same data as a git repository, with daily history."),
             ]
@@ -366,7 +367,8 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
 <section><h2>For AI agents and tools</h2><p>This mirror is built to be read by programs. Every page also exists as <code>.md</code> and <code>.json</code> next to its <code>.html</code>, with no API key, no rate limit and CORS open.</p><ul class="data-list">{data_items}</ul></section>
 </aside></div>"""
         doc = self.shell(root="", title="Arma 3 scripting reference", description="Arma 3 scripting commands and functions.",
-                         masthead=masthead, main=main, footer=_site_footer(generated), page_class="page-home")
+                         masthead=masthead, main=main, footer=_site_footer(generated), page_class="page-home",
+                         alternates='<link rel="alternate" type="application/atom+xml" title="Wiki edits" href="feed.xml">\n')
         (self.out / "index.html").write_text(doc, encoding="utf-8")
 
     def assets(self, search_entries: list[list]) -> None:

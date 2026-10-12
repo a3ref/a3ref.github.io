@@ -48,6 +48,7 @@ jobs:
         with:
           repository: a3ref/data
           path: data
+          fetch-depth: 0  # the history is the change feed
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -55,6 +56,7 @@ jobs:
       - run: pip install -r requirements.txt
       - id: build
         run: python -m biwiki build
+      - run: python -m biwiki feed
       - run: git -C data rev-parse HEAD > out/data-version.txt
       - uses: actions/upload-pages-artifact@v5
         with:

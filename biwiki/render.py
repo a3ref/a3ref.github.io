@@ -484,6 +484,7 @@ def _llms_txt(base: str, index: list[dict], groups, records) -> str:
         f"- Everything at once: {base}commands.json, {base}functions.json, {base}topics.json; "
         f"record format {base}schema.json; forms and status of every name for linters: {base}syntax.json",
         f"- Full list of every page with a summary (large): {base}llms-full.txt",
+        f"- What changed on the wiki recently: {base}changes.md (also changes.json, Atom feed {base}feed.xml)",
         "- The same data with daily git history: https://github.com/a3ref/data",
         "",
         "## Topics",

@@ -32,6 +32,8 @@ def main(argv=None) -> None:
         p.add_argument("--hidden", action="store_true", help="move the Chrome window off-screen")
         p.add_argument("--profile", type=Path, default=ROOT / ".browser-profile", help="Chrome profile directory")
     kinds_arg(sub.add_parser("build", help="generate Markdown/JSON from the raw cache"))
+    p = sub.add_parser("feed", help="write changes.json, changes.md and feed.xml from the data repository's git history")
+    p.add_argument("--data", type=Path, default=ROOT / "data", help="clone of a3ref/data, with history")
     p = sub.add_parser("report", help="compare the last build's report.json with known-problems.json")
     p.add_argument("--known", type=Path, default=ROOT / "known-problems.json", help="accepted problems baseline")
     p.add_argument("--accept", action="store_true", help="accept all current problems as the new baseline")
@@ -52,6 +54,11 @@ def main(argv=None) -> None:
         from .render import build
 
         build(a.raw, a.out, kinds, dataset=a.dataset, base_url=a.base_url.rstrip("/") + "/")
+    if a.cmd == "feed":
+        from .feed import write
+        from .render import page_slug
+
+        write(a.data, a.out, a.base_url.rstrip("/") + "/", page_slug)
     if a.cmd == "report":
         from .report import run
 
