@@ -1,10 +1,12 @@
 # Builds the site from the latest a3ref/data and deploys it to GitHub Pages.
-# Runs on every push here, and daily an hour after the data sync, deploying only if the data changed.
+# Runs on every push here, and every 6 hours, deploying only if the data changed. Scheduled runs are
+# best-effort on GitHub (they can be delayed or dropped), so the check runs often and costs seconds.
+# The watchdog fails, and GitHub emails, when the data sync has not run for more than 26 hours.
 name: Deploy site
 
 on:
   schedule:
-    - cron: "17 5 * * *"
+    - cron: "47 */6 * * *"
   push:
     branches: [main]
   workflow_dispatch:
@@ -14,6 +16,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  watchdog:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last=$(gh api "repos/a3ref/data/actions/workflows/sync.yml/runs?status=success&per_page=1" --jq '.workflow_runs[0].created_at')
+          age=$(( ($(date +%s) - $(date -d "$last" +%s)) / 3600 ))
+          echo "last successful data sync: $last ($age hours ago)"
+          if [ "$age" -gt 26 ]; then
+            echo "::error title=Data sync is late::The last successful sync in a3ref/data ran $age hours ago. Check its Actions tab, or run it by hand."
+            exit 1
+          fi
+
   check:
     runs-on: ubuntu-latest
     outputs:

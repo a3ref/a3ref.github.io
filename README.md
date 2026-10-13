@@ -111,13 +111,14 @@ and writes the mirror to `out/`.
 Three repositories, no secrets:
 
 - **[a3ref/data](https://github.com/a3ref/data)** holds the data: raw wikitext (`raw/*.json`) and the parsed
-  `commands.json`, `functions.json`, `topics.json`, `index.json`, `syntax.json`. Its workflow runs **daily at 04:17 UTC**: it checks out this
+  `commands.json`, `functions.json`, `topics.json`, `index.json`, `syntax.json`. Its workflow runs **twice a day, at 04:17 and 16:17 UTC**: it checks out this
   repository for the code, runs `sync` (real Chrome inside `xvfb`) and `build --dataset`, and commits only if
   something changed.
 - **this repository** holds only the code. `.github/workflows/site.yml` builds the site from the latest
   `a3ref/data` and deploys it to GitHub Pages:
   - on every push to `main` (parser or design changes);
-  - **daily at 05:17 UTC**, but only if the data commit differs from `data-version.txt` on the live site;
+  - **every 6 hours**, but only if the data commit differs from `data-version.txt` on the live site; the same run
+    fails (and GitHub emails) if the data sync has not succeeded for 26 hours, since GitHub may drop scheduled runs;
   - manually (Actions → Deploy site → Run workflow).
 - **[a3ref/mcp](https://github.com/a3ref/mcp)** is the MCP server and Claude Code plugin; it reads the live site.
 
