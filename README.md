@@ -229,16 +229,28 @@ In JSON, links are plain text (fewer tokens); in `.md` and `.html` they are real
 
 ## HTML version
 
-A static site with no build tooling and no JS dependencies: serve it with `python -m biwiki serve`
+A static documentation site with no build tooling and no JS dependencies: serve it with `python -m biwiki serve`
 or open `out/index.html` directly from disk.
 
-- search across every command and function (`/` to focus, arrow keys, Enter)
-- SQF highlighting where every command and function in code links to its page
-- Note / Important / Warning boxes, locality badges (filled = global, outlined = local), versions
-- table of contents, Copy button on code blocks, light/dark theme following the system, mobile layout
-- each page's header is a contour map generated from the command name
+- the other pages of the current group on the left, the table of contents on the right; one page per group
+  (`groups/<kind>/<group>.html`, next to the Markdown list for agents)
+- search across every command, function and topic (`/` to focus, arrow keys, Enter)
+- SQF highlighting where every command and function in code links to its page; Copy button on code blocks
+- Note / Important / Warning boxes, locality badges (filled = global, dashed = local), status, versions
+- light and dark theme following the system; mobile layout
 
-Fonts (Barlow, JetBrains Mono) load from Google Fonts; offline, system fonts are used.
+Built to pass the checkers search engines and browsers use, tested on every page: html-validate (all pages),
+the W3C HTML and CSS validators, axe (WCAG 2.2 AA, light and dark), and Lighthouse (100 for performance,
+accessibility, best practices, SEO and agentic browsing on the main page types). In practice that means:
+
+- one self-hosted font (JetBrains Mono, OFL) preloaded with `font-display: optional`; text uses the system font,
+  so nothing shifts while loading; CSS and JS are minified at build time
+- a strict Content-Security-Policy (no inline scripts; JSON-LD blocks listed by hash)
+- canonical URLs, Open Graph and Twitter cards with a preview image, `TechArticle` and `BreadcrumbList` structured
+  data, `sitemap.xml`, `robots.txt`, favicon, icons and a web manifest
+- headings never skip a level, every piece of content sits in a landmark, scrollable code is keyboard-focusable
+
+`scripts/make_brand_assets.py` regenerates the icons and the preview image.
 
 ## Code layout
 

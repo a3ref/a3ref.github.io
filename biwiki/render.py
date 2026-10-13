@@ -1,6 +1,7 @@
 """Write the mirror: per-page Markdown + JSON + HTML, combined JSON dumps, and the entry points for agents."""
 from __future__ import annotations
 
+import html
 import json
 import re
 import shutil
@@ -271,9 +272,10 @@ class Writer:
         if not self.aliases or s.lower() == s:
             return
         if ext == "html":  # people get a redirect, search engines a canonical link
-            content = (f'<!doctype html><meta charset="utf-8"><title>{title}</title>'
-                       f'<link rel="canonical" href="{s}.html"><meta http-equiv="refresh" content="0; url={s}.html">'
-                       f'<p>Moved to <a href="{s}.html">{s}</a>.</p>')
+            content = (f'<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>{html.escape(title)}</title>'
+                       f'<meta name="robots" content="noindex"><link rel="canonical" href="{s}.html">'
+                       f'<meta http-equiv="refresh" content="0; url={s}.html"></head>'
+                       f'<body><p>Moved to <a href="{s}.html">{html.escape(title)}</a>.</p></body></html>')
         (target / f"{s.lower()}.{ext}").write_text(content, encoding="utf-8")
 
 
@@ -284,8 +286,11 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     raws = {k: load_cache(raw_dir / f"{k}.json") for k in kinds}
     pages = Pages(raws)
     resolve_md, resolve_html = pages.resolver("md"), pages.resolver("html")
-    site = Site(out_dir, pages.script_names(), KIND_LABEL)
+    site = Site(out_dir, pages.script_names(), KIND_LABEL, base_url)
+    pending: list[tuple] = []  # HTML is rendered once every record is known (the side navigation lists group siblings)
     writer = Writer(out_dir)
+    if (out_dir / "groups").exists():
+        shutil.rmtree(out_dir / "groups")
     report = Report()
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -307,9 +312,9 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
             try:
                 md_r = Renderer(resolve_md)
                 if kind == "topics":
-                    rec, page_md, page_html, short = _topic(raw, md_r, resolve_html, site, s)
+                    rec, page_md, render_html, short = _topic(raw, md_r, resolve_html, site, s)
                 else:
-                    rec, page_md, page_html, short = _reference(raw, kind, md_r, pages, resolve_md, resolve_html, site, s)
+                    rec, page_md, render_html, short = _reference(raw, kind, md_r, pages, resolve_md, resolve_html, site, s)
                 if rec is None:
                     report.add("skipped", raw["title"], kind)
                     continue
@@ -319,7 +324,7 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
             report.check_page(raw["title"], kind, rec, page_md, md_r.unknown)
             writer.write(target, s, "md", page_md)
             writer.write(target, s, "json", json.dumps(rec, ensure_ascii=False, separators=(",", ":")))
-            writer.write(target, s, "html", page_html, rec["name"])
+            pending.append((target, s, rec, render_html))
             slugs[rec["title"]] = s
             summaries[rec["title"]] = short
             search.append([rec["name"], rec["type"][0], f"{kind}/{s}", _short(short, 110), rec.get("operator") or ""])
@@ -329,6 +334,16 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
         (target / "index.md").write_text(_kind_index(kind, records[kind], slugs), encoding="utf-8")
         site.kind_index(kind, records[kind], slugs, summaries)
         print(f"{kind}: {len(records[kind])} pages written")
+
+    members: dict[tuple[str, str], list[tuple[str, str]]] = defaultdict(list)
+    for kind, recs in records.items():
+        for r in sorted(recs, key=lambda r: r["name"].lower()):
+            for g in r["groups"]:
+                members[(kind, g)].append((r["name"], f"{slugs[r['title']]}.html"))
+    for target, s, rec, render_html in pending:
+        kind = target.name
+        group = rec["groups"][0] if rec["groups"] else None
+        writer.write(target, s, "html", render_html(members.get((kind, group))), rec["name"])
 
     # Stamp the data with its newest wiki edit, not the build time, so unchanged data stays byte-identical.
     updated = max((r["updated"] for recs in records.values() for r in recs if r["updated"]), default=None)
@@ -356,7 +371,7 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     (out_dir / "llms-full.txt").write_text(_llms_full(base_url, index), encoding="utf-8")
     (out_dir / "names.txt").write_text(_names_txt(base_url, index), encoding="utf-8")
     (out_dir / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {base_url}sitemap.xml\n", encoding="utf-8")
-    (out_dir / "sitemap.xml").write_text(_sitemap(base_url, records, slugs), encoding="utf-8")
+    (out_dir / "sitemap.xml").write_text(_sitemap(base_url, records, slugs, groups), encoding="utf-8")
     (out_dir / "index.md").write_text(_root_index(kinds, index, now), encoding="utf-8")
     site.home(kinds, records, slugs, now)
     site.not_found(base_url)
@@ -376,9 +391,9 @@ def _reference(raw, kind, md_r, pages: Pages, resolve_md, resolve_html, site: Si
     for r in (rec, rec_md, rec_html):
         _fix_references(r, pages)
     short = summary(rec["description"])
-    page_html = site.page(kind, s, rec_html, body_markdown(rec_html, resolve_html), short,
-                          status_note(rec_html, resolve_html))
-    return rec, page_markdown(rec_md, resolve_md), page_html, short
+    body, note = body_markdown(rec_html, resolve_html), status_note(rec_html, resolve_html)
+    render_html = lambda siblings: site.page(kind, s, rec_html, body, short, note, siblings)  # noqa: E731
+    return rec, page_markdown(rec_md, resolve_md), render_html, short
 
 
 def _topic(raw, md_r, resolve_html, site: Site, s: str):
@@ -390,7 +405,7 @@ def _topic(raw, md_r, resolve_html, site: Site, s: str):
     for r in (rec, rec_md, rec_html):
         r["groups"] = [group]
     short = summary(rec["markdown"])
-    return rec, topic_markdown(rec_md), site.topic(s, rec_html, short), short
+    return rec, topic_markdown(rec_md), (lambda siblings: site.topic(s, rec_html, short, siblings)), short
 
 
 def _fix_references(rec: dict, pages: Pages) -> None:
@@ -449,9 +464,7 @@ def _syntax_index(records: dict[str, list[dict]], updated) -> dict:
 
 def _group_lists(out_dir: Path, records, slugs, summaries) -> dict[str, list[tuple[str, str, int]]]:
     """groups/<kind>/<group>.md: small per-group lists an agent can fetch instead of the whole index."""
-    root = out_dir / "groups"
-    if root.exists():
-        shutil.rmtree(root)
+    root = out_dir / "groups"  # emptied at the start of build(); the HTML group pages live here too
     result: dict[str, list[tuple[str, str, int]]] = {}
     for kind, recs in records.items():
         by_group: dict[str, list[dict]] = defaultdict(list)
@@ -542,10 +555,12 @@ def _names_txt(base: str, index: list[dict]) -> str:
     return "\n".join(out)
 
 
-def _sitemap(base: str, records: dict[str, list[dict]], slugs: dict[str, str]) -> str:
+def _sitemap(base: str, records: dict[str, list[dict]], slugs: dict[str, str], groups) -> str:
     urls = [f"<url><loc>{base}</loc></url>"]
     for kind, recs in records.items():
         urls.append(f"<url><loc>{base}{kind}/index.html</loc></url>")
+        if kind != "topics":  # topics have no group pages
+            urls += [f"<url><loc>{base}{path[:-3]}.html</loc></url>" for _, path, _ in groups.get(kind, [])]
         for r in recs:
             lastmod = f"<lastmod>{r['updated'][:10]}</lastmod>" if r["updated"] else ""
             urls.append(f"<url><loc>{base}{kind}/{slugs[r['title']]}.html</loc>{lastmod}</url>")

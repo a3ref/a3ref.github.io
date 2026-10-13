@@ -4,3 +4,4 @@ __pycache__/
 out/
 data/
 mcp/
+out-*/

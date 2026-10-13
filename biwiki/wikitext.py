@@ -235,10 +235,23 @@ class Renderer:
         else:
             text = target
         page, _, anchor = target.partition("#")
+        if not text:  # MediaWiki's pipe trick, [[Page#Section|]]: the link shows the page or section name
+            text = page.split(":")[-1].strip() or anchor or target
+        fallback = anchor.replace("_", " ") or page.split(":")[-1] or target
         if not page:
             page = self.page_title
         url = self.resolve(page.replace("_", " ").strip(), anchor)
-        return f"[{text}]({url})" if url else text
+        return self._md_link(text, url, fallback, slots)
+
+    def _md_link(self, text: str, url: Optional[str], fallback: str, slots: list[str]) -> str:
+        """[text](url), with brackets in the text escaped and never an empty text (e.g. an icon-only wiki link)."""
+        visible = _SLOT.sub(lambda m: slots[int(m.group(1))] if int(m.group(1)) < len(slots) else "", text)
+        if not visible.strip():
+            text = fallback
+        if not url:
+            return text
+        escaped = re.sub(r"([\[\]])", r"\\\1", text)
+        return f"[{escaped}]({url})"
 
     def _expand(self, code) -> str:
         """Plain text of a link target, which may itself contain templates like {{arma2oa}} or {{=}}."""
@@ -249,7 +262,11 @@ class Renderer:
 
     def _heading(self, level: int, title: str, slots: list[str]) -> str:
         # In a slot, so the wiki-list pass does not read the leading "#" as a numbered list.
-        return self._slot(slots, f"\n\n{'#' * min(level + 1, 6)} {title.strip()}\n\n")
+        if not title.strip():
+            return ""  # "==== ====" on the wiki: an empty heading carries nothing
+        # a trailing "#" would read as the closing sequence of a Markdown heading ("=== # ===" is about the # operator)
+        title = re.sub(r"(#+)\s*$", lambda m: "\\#" * len(m.group(1)), title.strip())
+        return self._slot(slots, f"\n\n{'#' * min(level + 1, 6)} {title}\n\n")
 
     def _link_to(self, target: str, text: Optional[str]) -> str:
         if re.match(r"^(https?:)?//", target):
@@ -259,8 +276,7 @@ class Renderer:
             text = target.split(":", 1)[1]
         page, _, anchor = target.partition("#")
         url = self.resolve((page or self.page_title).replace("_", " ").strip(), anchor)  # "#Section" = this page
-        text = text or target
-        return f"[{text}]({url})" if url else text
+        return self._md_link(text or target, url, anchor.replace("_", " ") or target, [])
 
     # ---- templates --------------------------------------------------------------------------
 
@@ -297,8 +313,10 @@ class Renderer:
         if key == "gvi":
             ver = raw(1)
             return f"{game_name(raw(0))} v{ver}" if ver else game_name(raw(0))
-        if key == "link":
-            return self._link_to(self._expand(pos[0].value) if pos else "", arg(1) or None)
+        if key == "link":  # {{Link|target|text}} or {{Link|link= target|text= text}}
+            target = t.get("link").value if t.has("link") else (pos[0].value if pos else "")
+            text = self._nodes(t.get("text").value.nodes, slots).strip() if t.has("text") else arg(1)
+            return self._link_to(self._expand(target), text or None)
         if key == "icon":
             return ICON_TEXT.get(raw(0).lower(), "")
         if key in ("columns",):

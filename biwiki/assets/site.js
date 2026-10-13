@@ -1,63 +1,7 @@
-/* Arma 3 scripting reference: terrain masthead, search, copy buttons. No dependencies. */
+/* Arma 3 scripting reference: search, copy buttons, side navigation. No dependencies. */
 (function () {
   "use strict";
   var root = document.body.getAttribute("data-root") || "";
-
-  /* ---- terrain: contour lines seeded by the page title, so every page has its own map ---- */
-
-  function hash(str) {
-    var h = 2166136261;
-    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
-    return h >>> 0;
-  }
-  function rng(seed) {
-    return function () {
-      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
-      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-  function closedPath(pts) {
-    // Catmull-Rom through the points, as cubic Béziers
-    var n = pts.length, d = "M" + pts[0][0].toFixed(1) + " " + pts[0][1].toFixed(1);
-    for (var i = 0; i < n; i++) {
-      var p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
-      d += "C" + (p1[0] + (p2[0] - p0[0]) / 6).toFixed(1) + " " + (p1[1] + (p2[1] - p0[1]) / 6).toFixed(1) + " " +
-        (p2[0] - (p3[0] - p1[0]) / 6).toFixed(1) + " " + (p2[1] - (p3[1] - p1[1]) / 6).toFixed(1) + " " +
-        p2[0].toFixed(1) + " " + p2[1].toFixed(1);
-    }
-    return d + "Z";
-  }
-  function terrain(el, seedText) {
-    var W = 1200, H = 340, rand = rng(hash(seedText));
-    var hills = 2 + Math.floor(rand() * 2), paths = [];
-    for (var h = 0; h < hills; h++) {
-      var cx = W * (0.5 + rand() * 0.55), cy = H * (0.1 + rand() * 0.8);
-      var rings = 6 + Math.floor(rand() * 8), step = 14 + rand() * 10;
-      var shape = [], detail = [];
-      for (var w = 0; w < 3; w++) shape.push([2 + w, rand() * Math.PI * 2, 0.04 + rand() * 0.07]);
-      for (w = 0; w < 2; w++) detail.push([5 + Math.floor(rand() * 4), rand() * Math.PI * 2]);
-      var sx = 1.2 + rand() * 0.9, tilt = rand() * Math.PI;
-      for (var r = 1; r <= rings; r++) {
-        var pts = [], rad = r * step;
-        for (var k = 0; k < 40; k++) {
-          var a = (k / 40) * Math.PI * 2, f = 1;
-          // one shared shape for every ring keeps them nested; a little per-ring detail keeps them natural
-          for (w = 0; w < shape.length; w++) f += shape[w][2] * Math.sin(shape[w][0] * a + shape[w][1]);
-          for (w = 0; w < detail.length; w++) f += 0.012 * Math.sin(detail[w][0] * a + detail[w][1] + r * 0.9);
-          var x = Math.cos(a) * rad * f * sx, y = Math.sin(a) * rad * f;
-          pts.push([cx + x * Math.cos(tilt) - y * Math.sin(tilt) * 0.35, cy + x * Math.sin(tilt) * 0.35 + y * Math.cos(tilt)]);
-        }
-        paths.push('<path d="' + closedPath(pts) + '"' + (r % 5 === 0 ? ' class="index"' : "") + "/>");
-      }
-    }
-    el.innerHTML = '<svg viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="xMaxYMid slice">' +
-      '<g fill="none" stroke="currentColor" stroke-width="1" vector-effect="non-scaling-stroke" opacity=".7">' +
-      paths.join("").replace(/class="index"/g, 'stroke-width="2"') + "</g></svg>";
-  }
-  var t = document.querySelector(".terrain"), h1 = document.querySelector("h1");
-  if (t && h1) terrain(t, h1.textContent);
 
   /* ---- search ------------------------------------------------------------------------------- */
 
@@ -95,37 +39,43 @@
 
   function esc(s) { return s.replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
+  // Results are a plain list of links: arrow keys move focus between the input and the links, the count is
+  // announced through a live region. Simpler and better supported than a listbox/combobox widget.
   function initSearch(box) {
-    var input = box.querySelector("input"), list = box.querySelector(".results"), active = -1, items = [];
+    var input = box.querySelector("input"), list = box.querySelector(".results"), items = [];
+    var status = document.getElementById(input.id + "-status");
 
     function render() {
       var q = input.value.trim().toLowerCase();
-      if (!q) { list.hidden = true; return; }
+      if (!q) { list.hidden = true; if (status) status.textContent = ""; return; }
       items = rank(q);
-      active = items.length ? 0 : -1;
-      list.innerHTML = items.length ? items.map(function (e, i) {
-        return '<li role="option" id="r' + i + '"' + (i === 0 ? ' aria-selected="true"' : "") + ' class="' + (e.kind === "f" ? "r-fn" : "r-cmd") + '">' +
+      list.innerHTML = items.length ? items.map(function (e) {
+        return '<li class="' + (e.kind === "f" ? "r-fn" : "r-cmd") + '">' +
           '<a href="' + root + e.path + '.html"><span class="r-name">' + esc(e.name) + '</span>' +
           '<span class="r-kind">' + ({ f: "function", t: "topic" }[e.kind] || "command") + "</span>" +
           (e.sum ? '<span class="r-sum">' + esc(e.sum) + "</span>" : "") + "</a></li>";
       }).join("") : '<li class="r-empty">Nothing matches “' + esc(input.value.trim()) + '”. Try part of the name, e.g. “vehicle”.</li>';
       list.hidden = false;
+      if (status) status.textContent = items.length ? items.length + " results" : "No results";
     }
-    function move(d) {
-      if (!items.length) return;
-      var lis = list.querySelectorAll("[role=option]");
-      lis[active].removeAttribute("aria-selected");
-      active = (active + d + items.length) % items.length;
-      lis[active].setAttribute("aria-selected", "true");
-      lis[active].scrollIntoView({ block: "nearest" });
+    function links() { return Array.prototype.slice.call(list.querySelectorAll("a")); }
+    function focusAt(i) {
+      var all = links();
+      if (i < 0) { input.focus(); return; }
+      if (all.length) all[Math.min(i, all.length - 1)].focus();
     }
     input.addEventListener("focus", function () { loadIndex(render); });
     input.addEventListener("input", function () { loadIndex(render); });
     input.addEventListener("keydown", function (ev) {
-      if (ev.key === "ArrowDown") { ev.preventDefault(); move(1); }
-      else if (ev.key === "ArrowUp") { ev.preventDefault(); move(-1); }
-      else if (ev.key === "Enter" && active > -1) { location.href = root + items[active].path + ".html"; }
-      else if (ev.key === "Escape") { list.hidden = true; input.blur(); }
+      if (ev.key === "ArrowDown") { ev.preventDefault(); focusAt(0); }
+      else if (ev.key === "Enter" && items.length) { location.href = root + items[0].path + ".html"; }
+      else if (ev.key === "Escape") { list.hidden = true; }
+    });
+    list.addEventListener("keydown", function (ev) {
+      var i = links().indexOf(document.activeElement);
+      if (ev.key === "ArrowDown") { ev.preventDefault(); focusAt(i + 1); }
+      else if (ev.key === "ArrowUp") { ev.preventDefault(); focusAt(i - 1); }
+      else if (ev.key === "Escape") { list.hidden = true; input.focus(); }
     });
     document.addEventListener("click", function (ev) { if (!box.contains(ev.target)) list.hidden = true; });
   }
@@ -142,9 +92,15 @@
 
   /* ---- copy buttons on code blocks ----------------------------------------------------------- */
 
+  // The button sits in a wrapper around the <pre>, not in it: the <pre> scrolls sideways and would take
+  // the button along. The wrapper has no margin, padding or border, so the layout does not move.
   var pres = document.querySelectorAll("pre.code");
   for (i = 0; i < pres.length; i++) {
     (function (pre) {
+      var wrap = document.createElement("div");
+      wrap.className = "code-wrap";
+      pre.parentNode.insertBefore(wrap, pre);
+      wrap.appendChild(pre);
       var b = document.createElement("button");
       b.type = "button"; b.className = "copy"; b.textContent = "Copy";
       b.addEventListener("click", function () {
@@ -154,7 +110,15 @@
         }, function () { b.textContent = "Select and copy"; });
         setTimeout(function () { b.textContent = "Copy"; }, 1600);
       });
-      pre.appendChild(b);
+      wrap.appendChild(b);
     })(pres[i]);
   }
+})();
+
+/* keep the current page visible in the side navigation (scrolls the list only, not the page) */
+(function () {
+  "use strict";
+  var side = document.querySelector(".sidenav"), cur = side && side.querySelector("[aria-current]");
+  // next frame: reading layout right after the code-block wrappers were added would force a reflow
+  if (cur) requestAnimationFrame(function () { side.scrollTop = cur.offsetTop - side.offsetTop - side.clientHeight / 2; });
 })();
