@@ -2,11 +2,11 @@
 import os
 from pathlib import Path
 
-root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or ".")
+root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or ".").resolve()
 missing = [
-    f"{d}/ is missing: `git clone https://github.com/a3ref/{d} {d}` ({why})."
-    for d, why in (("data", "needed by build, feed and the tests of real output"), ("mcp", "only for work on the MCP server"))
-    if not (root / d / ".git").exists()
+    f"../{d} is missing: `git clone https://github.com/a3ref/{d} ../{d}` ({why})."
+    for d, why in (("data", "needed by build and feed"), ("mcp", "only for work on the MCP server"))
+    if not (root.parent / d / ".git").exists() and not (root / d / ".git").exists()
 ]
 if missing:
     print("a3ref setup: " + " ".join(missing))

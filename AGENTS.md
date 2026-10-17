@@ -13,27 +13,28 @@ publishes them as Markdown, JSON and HTML at https://a3ref.github.io/. This repo
 | Repository | Local path | Contents |
 |---|---|---|
 | a3ref/a3ref.github.io (this) | `.` | parser, site generator, deploy workflow |
-| [a3ref/data](https://github.com/a3ref/data) | `data/` (separate clone, gitignored) | raw wikitext cache and generated JSON; syncs from the wiki twice a day using this repo's code |
-| [a3ref/mcp](https://github.com/a3ref/mcp) | `mcp/` (separate clone, gitignored) | MCP server + Claude Code plugin; reads the live site, has its own [AGENTS.md](https://github.com/a3ref/mcp/blob/main/AGENTS.md) |
+| [a3ref/data](https://github.com/a3ref/data) | `../data` | raw wikitext cache and generated JSON; syncs from the wiki twice a day using this repo's code |
+| [a3ref/mcp](https://github.com/a3ref/mcp) | `../mcp` | MCP server + Claude Code plugin; reads the live site, has its own [AGENTS.md](https://github.com/a3ref/mcp/blob/main/AGENTS.md) |
 
-`git` commands in `data/` and `mcp/` act on those repositories, not this one.
+The three are sibling clones (e.g. `F:\github.com\a3ref\{a3ref.github.io,data,mcp}`). The code finds the data in
+`../data`, or in `./data` (where the deploy workflow checks it out).
 
 ## Setup
 
 ```sh
 pip install -r requirements.txt                 # Python 3.10+; CI uses 3.12
-git clone https://github.com/a3ref/data data    # needed by build and feed
+git clone https://github.com/a3ref/data ../data # needed by build and feed
 ```
 
 ## Commands
 
 | Command | Time | What it does |
 |---|---|---|
-| `python -m unittest` | <1 s | parser and end-to-end build tests on `tests/fixtures/raw/` (no `data/` needed) |
-| `python -m biwiki build` | ~20 s | full mirror from `data/raw/` into `out/` (gitignored) |
+| `python -m unittest` | <1 s | parser and end-to-end build tests on `tests/fixtures/raw/` (no data clone needed) |
+| `python -m biwiki build` | ~20 s | full mirror from `../data/raw/` into `out/` (gitignored) |
 | `python -m biwiki report` | 1 s | new parser problems in `out/report.json` compared with `known-problems.json` |
-| `python -m biwiki --dataset data build` | ~25 s | also rewrite the JSON bundles in `data/` |
-| `python -m biwiki feed` | ~5 s | `changes.*` and `feed.xml` from the history of `data/` |
+| `python -m biwiki --dataset ../data build` | ~25 s | also rewrite the JSON bundles in `../data` |
+| `python -m biwiki feed` | ~5 s | `changes.*` and `feed.xml` from the history of `../data` |
 | `python -m biwiki serve --port 8000` | — | serve `out/` |
 | `python -m biwiki sync` | ~1 min | download changed wiki pages: opens a real Chrome window and contacts the wiki. Do not run it unless the task needs fresh pages; `build` works from the cache |
 
@@ -58,27 +59,27 @@ git clone https://github.com/a3ref/data data    # needed by build and feed
 | file layout, `index.json`, `syntax.json`, `llms.txt`, `names.txt`, sitemap | `biwiki/render.py` (`build` and the `_*` writers) |
 | HTML pages, CSP, SEO metadata, structured data | `biwiki/site.py`; styles and scripts in `biwiki/assets/` |
 | which pages are mirrored | `biwiki/fetch.py`: `CATEGORIES`, `TOPIC_TITLES`, `TOPIC_CATEGORIES` (takes effect after a sync) |
-| JSON format documentation | `biwiki/schema.json` (copied to `out/` and `data/`) and "JSON record" in README.md |
+| JSON format documentation | `biwiki/schema.json` (copied to `out/` and `../data`) and "JSON record" in README.md |
 | parser health report, GitHub issue | `biwiki/report.py`, baseline `known-problems.json` |
 | change feed | `biwiki/feed.py` |
-| deployment, schedule, watchdog | `.github/workflows/site.yml`; the data sync is `data/.github/workflows/sync.yml` |
+| deployment, schedule, watchdog | `.github/workflows/site.yml`; the data sync is `../data/.github/workflows/sync.yml` |
 | icons, preview image | `scripts/make_brand_assets.py` |
 
-Data flow: `fetch.sync` → `data/raw/{commands,functions,topics}.json` (wikitext by page id) → `render.build`
+Data flow: `fetch.sync` → `../data/raw/{commands,functions,topics}.json` (wikitext by page id) → `render.build`
 (`parse.parse_page` / `parse_topic` with `wikitext.Renderer`, three times per page: plain text for JSON,
-mirror-only links for Markdown, wiki links for HTML) → `out/` and, with `--dataset`, `data/*.json`.
+mirror-only links for Markdown, wiki links for HTML) → `out/` and, with `--dataset`, `../data/*.json`.
 
 ## Rules
 
 - **English only** in everything committed: code, comments, docs, commit messages, generated text.
-- **Never edit generated files**: `out/`, `data/*.json`, `data/raw/`, `mcp/dist/`. Change the code and rebuild.
+- **Never edit generated files**: `out/`, `../data/*.json`, `../data/raw/`, `../mcp/dist/`. Change the code and rebuild.
   A Claude Code hook blocks these edits.
 - **Deterministic output.** No build times, random order or absolute paths in the data: bundles are sorted, one
   record per line, and `updated` is the newest wiki edit, so the daily sync commits only real changes.
 - **Contracts other code relies on**: `index.json` fields `name`, `type`, `syntax`, `summary`, `groups`, `status`,
   `operator`, `aliases`, `md`, `json`; `syntax.json` `commands`/`functions` keyed by lower-case name with `forms`,
-  `status`, `replaced_by`, `branch`, `syntax`; topic records' `sections`. The MCP server (`mcp/src/`) and
-  external users read them. Changing them means updating `biwiki/schema.json`, README.md and `mcp/`.
+  `status`, `replaced_by`, `branch`, `syntax`; topic records' `sections`. The MCP server (`../mcp/src/`) and
+  external users read them. Changing them means updating `biwiki/schema.json`, README.md and `../mcp`.
 - **Stable URLs.** Page paths come from `render.slug` / `page_slug`; changing them breaks links agents already use.
 - **Markdown links only to mirrored pages** (agents cannot open the wiki behind its bot check); HTML may link to
   the wiki.

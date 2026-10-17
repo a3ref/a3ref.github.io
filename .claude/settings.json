@@ -4,7 +4,7 @@
     "allow": [
       "Bash(python -m unittest*)",
       "Bash(python -m biwiki build*)",
-      "Bash(python -m biwiki --dataset data build*)",
+      "Bash(python -m biwiki --dataset ../data build*)",
       "Bash(python -m biwiki feed*)",
       "Bash(python -m biwiki report)",
       "Bash(git status*)",
