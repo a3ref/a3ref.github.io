@@ -11,7 +11,8 @@ agents; this mirror serves the same content as **Markdown** and **JSON** at stab
 no rate limit and open CORS. A readable **HTML** version is there for people too.
 
 Site: **https://a3ref.github.io/** · Data: **[a3ref/data](https://github.com/a3ref/data)** ·
-MCP server: **[a3ref/mcp](https://github.com/a3ref/mcp)** · Agent guide: **https://a3ref.github.io/llms.txt**
+MCP server: **[a3ref/mcp](https://github.com/a3ref/mcp)** · Agent guide: **https://a3ref.github.io/llms.txt** ·
+Working on the code: **[AGENTS.md](AGENTS.md)**
 
 ## For AI agents and programs
 
@@ -29,9 +30,9 @@ Without MCP, everything is a plain GET:
 | a concept | `https://a3ref.github.io/topics/<name>.md`, e.g. [`topics/Multiplayer_Scripting.md`](https://a3ref.github.io/topics/Multiplayer_Scripting.md), [`topics/Event_Handlers.md`](https://a3ref.github.io/topics/Event_Handlers.md) |
 | every name | [`names.txt`](https://a3ref.github.io/names.txt), one per line |
 | one group | `groups/commands/<group>.md`, `groups/functions/<group>.md`, listed in `llms.txt` |
-| to search | [`index.json`](https://a3ref.github.io/index.json): every entry with syntax, summary, groups, locality, status, operator symbol, paths |
-| everything | [`commands.json`](https://a3ref.github.io/commands.json), [`functions.json`](https://a3ref.github.io/functions.json), [`topics.json`](https://a3ref.github.io/topics.json) |
-| a linter's data | [`syntax.json`](https://a3ref.github.io/syntax.json): forms (nullary/unary/binary), status, replacements and syntax of every name |
+| to search | [`index.json`](https://a3ref.github.io/index.json) (2 MB): every entry with syntax, summary, groups, locality, status, operator symbol, paths |
+| everything | [`commands.json`](https://a3ref.github.io/commands.json) (7 MB), [`functions.json`](https://a3ref.github.io/functions.json) (4 MB), [`topics.json`](https://a3ref.github.io/topics.json) (1 MB): for programs; a model should read single pages instead |
+| a linter's data | [`syntax.json`](https://a3ref.github.io/syntax.json) (0.5 MB): forms (nullary/unary/binary), status, replacements and syntax of every name |
 | the record format | [`schema.json`](https://a3ref.github.io/schema.json) (JSON Schema 2020-12) |
 | what changed | [`changes.md`](https://a3ref.github.io/changes.md), [`changes.json`](https://a3ref.github.io/changes.json), Atom [`feed.xml`](https://a3ref.github.io/feed.xml) |
 | version history | the [a3ref/data](https://github.com/a3ref/data) repository, one commit per day with changes |
@@ -148,24 +149,23 @@ python -m biwiki report            # what is new compared to the baseline
 python -m biwiki report --accept   # accept the current state as the baseline
 ```
 
-## Installation
+## Development
 
-Requires Python 3.10+ and Google Chrome.
+Requires Python 3.10+ and Google Chrome (for `sync` only). Agents: read [AGENTS.md](AGENTS.md) first; it lists the
+commands, where to change what, the rules and how to verify a change.
 
 ```sh
 pip install -r requirements.txt
 git clone https://github.com/a3ref/data data   # the data lives in its own repository
-```
 
-## Usage
-
-```sh
+python -m unittest                 # tests on tests/fixtures (under a second, no data/ needed)
+python -m biwiki build             # regenerate out/ from the cache only (about 20 s)
+python -m biwiki report            # new parser problems compared with known-problems.json
+python -m biwiki serve --port 8000 # serve out/ over HTTP
 python -m biwiki update            # sync + build (opens a Chrome window for about a minute)
 python -m biwiki update --hidden   # same, with the Chrome window moved off-screen
 python -m biwiki sync --full       # re-download everything, ignoring the cache
-python -m biwiki build             # regenerate out/ from the cache only (about 20 s)
 python -m biwiki --dataset data build  # also refresh the parsed JSON in the data repository
-python -m biwiki serve --port 8000 # serve out/ over HTTP
 ```
 
 `--only commands` / `--only functions` limits the work to one category.
@@ -263,5 +263,7 @@ accessibility, best practices, SEO and agentic browsing on the main page types).
 - `biwiki/report.py`: parser health report, baseline comparison and the GitHub issue
 - `biwiki/feed.py`: change feed from the data repository's history
 - `biwiki/site.py`, `biwiki/assets/`: HTML version (markdown-it-py, SQF highlighting, page templates)
+- `tests/`: unit and end-to-end build tests on a few real pages in `tests/fixtures/raw/`
+- `AGENTS.md`, `CLAUDE.md`, `.claude/`: instructions and Claude Code hooks for AI agents working on the code
 
 Content belongs to the authors of the BI Community Wiki; every generated page links to its source and revision.

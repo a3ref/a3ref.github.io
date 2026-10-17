@@ -1,0 +1,136 @@
+{
+ "1378": {
+  "title": "alive",
+  "categories": [
+   "ArmA: Armed Assault: Scripting Commands",
+   "Arma 2: Operation Arrowhead: Scripting Commands",
+   "Arma 2: Scripting Commands",
+   "Arma 3: Scripting Commands",
+   "Command Group: Object Manipulation",
+   "Introduced with Operation Flashpoint version 1.00",
+   "Operation Flashpoint: Elite: Scripting Commands",
+   "Operation Flashpoint: New Scripting Commands",
+   "Operation Flashpoint: Scripting Commands",
+   "Scripting Commands",
+   "Take On Helicopters: Scripting Commands"
+  ],
+  "revid": 337581,
+  "timestamp": "2023-02-12T15:50:13Z",
+  "wikitext": "{{RV|type=command\n\n|game1= ofp\n|version1= 1.00\n\n|game2= ofpe\n|version2= 1.00\n\n|game3= arma1\n|version3= 1.00\n\n|game4= arma2\n|version4= 1.00\n\n|game5= arma2oa\n|version5= 1.50\n\n|game6= tkoh\n|version6= 1.00\n\n|game7= arma3\n|version7= 0.50\n\n|arg= global\n\n|gr1= Object Manipulation\n\n|descr= Check if given vehicle/person/building is alive (i.e. not dead or destroyed).\n\n|s1= [[alive]] object\n\n|p1= object: [[Object]]\n\n|r1= [[Boolean]] - [[true]] if alive, [[false]] if dead/destroyed\n\n|x1= SQS:\n<sqs>? not alive player : exit</sqs>\n\n|x2= SQF:\n<sqf>if (!alive player) exitWith {};</sqf>\n\n|x3= <sqf>alive objNull; // returns false</sqf>\n\n|seealso= [[setDamage]] [[damage]] [[waterDamaged]]\n}}\n\n{{Note\n|user= Pierre MGI\n|timestamp= 20151019234800\n|text= Alive or not could be the question! in multi-player, missions come with respawn module(s). When a player is dead shot, <sqf inline>alive player</sqf> will return false, then almost immediately true if the \"revive\" respawn template is enabled, then could turn to false again if time for assistance is elapsed or if the player activates the respawn menu before; and finally true after player respawns.\nJust be aware that in that case (respawn + revive enabled), the status of the player is toggling: true &rarr; false &rarr; true &rarr; false &rarr; true. Then, alive status while player is waiting for being rescued could lead to some script errors as player is supposed to be alive but is in limbo and the dead entity \"player\" gets passed to server.\n}}"
+ },
+ "1444": {
+  "title": "time",
+  "categories": [
+   "ArmA: Armed Assault: Scripting Commands",
+   "Arma 2: Operation Arrowhead: Scripting Commands",
+   "Arma 2: Scripting Commands",
+   "Arma 3: Scripting Commands",
+   "Command Group: Mission Information",
+   "Command Group: Time",
+   "Introduced with Operation Flashpoint version 1.00",
+   "Operation Flashpoint: Elite: Scripting Commands",
+   "Operation Flashpoint: New Scripting Commands",
+   "Operation Flashpoint: Scripting Commands",
+   "Scripting Commands",
+   "Take On Helicopters: Scripting Commands"
+  ],
+  "revid": 370500,
+  "timestamp": "2024-12-26T17:48:11Z",
+  "wikitext": "{{RV|type=command\n\n|game1= ofp\n|version1= 1.00\n\n|game2= ofpe\n|version2= 1.00\n\n|game3= arma1\n|version3= 1.00\n\n|game4= arma2\n|version4= 1.00\n\n|game5= arma2oa\n|version5= 1.50\n\n|game6= tkoh\n|version6= 1.00\n\n|game7= arma3\n|version7= 0.50\n\n|gr1= Time\n|gr2= Mission Information\n\n|descr= Returns time elapsed since mission started (in seconds). The value is different on each client. If you need unified time, use [[serverTime]]. Unlike [[uiTime]] the [[time]] stops when game is [[isGamePaused | paused]].\n\n|s1= [[time]]\n\n|r1= [[Number]]\n\n|x1= <sqf>\nprivate _future = time + 30;\nwaitUntil { time >= _future };  // continue after 30 seconds\n</sqf>\n\n|x2= Wait until mission fully started:\n<sqf>waitUntil { time > 0 };</sqf>\n\n|seealso= [[uiTime]] [[sleep]] [[date]] [[dayTime]] [[serverTime]] [[skipTime]] [[accTime]] [[dateToNumber]] [[timeMultiplier]] [[setTimeMultiplier]] [[missionStart]] [[diag_tickTime]] [[diag_deltaTime]] [[systemTime]] [[systemTimeUTC]] [[BIS_fnc_timeToString]]\n}}\n\n<dl class=\"command_description\">\n\n<dt><dt>\n<dd class=\"notedate\">Posted on 2006-08-04 - 12:02</dd>\n<dt class=\"note\">[[User:Hardrock|hardrock]]</dt>\n<dd class=\"note\">''Notes from before the conversion:''<br>\nNot to be confused with the '''SQS''' variable ''_time''. Within an '''SQS''' script, the reserved local variable ''_time'' returns the time elapsed since the script started running. Note that the value of _time is not saved when the mission is saved and so will be reset to zero when a mission is restarted from a saved position. The value of [[time]] is saved correctly and will resume from where it was.\n::''_time'' has only special meaning in SQS scripts, in SQF script it is just another variable. --[[User:Killzone_Kid|Killzone_Kid]] \n<dt><dt>\n<dd class=\"notedate\">Posted on 2007-01-05 - 12:24</dd>\n<dt class=\"note\">[[User:Giova|Giova]]</dt>\n<dd class=\"note\">''Notes from before the conversion:''<br>\ntime works properly in sqf called with execVM command. In an other hand, _time does not works in sqf called with execVM command.(Arma v1.02.5103GER)\n<dt><dt>\n<dd class=\"notedate\">Posted on 2010-10-02 - 12:02</dd>\n<dt class=\"note\">[[User:TeaCup|teaCup]]</dt>\n<dd class=\"note\">\nOn overloaded servers (below ~10 server FPS), time readings are unreliable. Seconds actually take longer. While the clients keep a steady tempo, server time lags behind, resulting in considerable offset between client and server time (easily 30 minutes for a 2 hour game). Client time is synchronised to server time during JIP, but other than that it runs independently.\n<dt><dt>\n<dd class=\"notedate\">Posted on 30 Oct 2013</dd>\n<dt class=\"note\">[[User:Dr_Eyeball|Dr Eyeball]]</dt>\n<dd class=\"note\">'''Arma 3 JIP bug:'''<br>\nAs of Arma 3 v1.02, for JIP clients 'time' value will start off counting from 0, not the real 'time' value. After about 2.5sec (on average), it will then jump to a high value and synchronise with the real 'time' value, which could be 900, for example.\n\nTherefore, do not use 'time' for any start of mission init timeouts; it is unreliable. (It's odd that it doesn't synchronise at the same time as public variables.)\n<dt><dt>\n<dd class=\"notedate\">Posted on 2016-09-01 - 18:18 (UTC)</dd>\n<dt class=\"note\">[[User:Demellion|Demellion]]</dt>\n<dd class=\"note\">\n'''In MP''': Since per-client time and server time is unconsistant I strongly recommend execution of time-critical tasks from server-side scripts and with [[remoteExec]] or [[remoteExecCall]] ('''Since only A3 1.50''' alternative may be [[publicVariableClient]] with pre-defined handler) as this will eliminate any time calculation lags and make it reliable.\n</dd>\n\n</dl>"
+ },
+ "1460": {
+  "title": "a != b",
+  "categories": [
+   "ArmA: Armed Assault: Scripting Commands",
+   "Arma 2: Operation Arrowhead: Scripting Commands",
+   "Arma 2: Scripting Commands",
+   "Arma 3: Scripting Commands",
+   "Command Group: Math",
+   "Command Group: Variables",
+   "Introduced with Operation Flashpoint version 1.00",
+   "Operation Flashpoint: Elite: Scripting Commands",
+   "Operation Flashpoint: New Scripting Commands",
+   "Operation Flashpoint: Scripting Commands",
+   "Scripting Commands",
+   "Take On Helicopters: Scripting Commands"
+  ],
+  "revid": 376993,
+  "timestamp": "2026-01-01T08:00:36Z",
+  "wikitext": "{{RV|type=command\n\n|sortKey= #\n\n|game1= ofp\n|version1= 1.00\n\n|game2= ofpe\n|version2= 1.00\n\n|game3= arma1\n|version3= 1.00\n\n|game4= arma2\n|version4= 1.00\n\n|game5= arma2oa\n|version5= 1.50\n\n|game6= tkoh\n|version6= 1.00\n\n|game7= arma3\n|version7= 0.50\n\n|gr1= Variables\n|gr2= Math\n\n|descr= Returns whether one value is '''not''' equal to another. String comparison is case-'''in'''sensitive (e.g <sqf inline>\"STRINGtext\" != \"stringTEXT\" // returns false - strings are equivalent</sqf>).\n{{Feature|important|''a'' and ''b'' types '''must''' match: comparing e.g [[String]] with [[Number]] is invalid.}}\n\n|s1= a [[a != b|!=]] b\n\n|p1= a:\n<table class=\"wikitable\">\n<tr>\n<th>Introduced in</th>\n<th>Possible Type</th>\n</tr>\n<tr>\n<td rowspan=\"5\">{{GVI|ofp|1.00}}</td>\n<td>Number</td>\n</tr>\n<tr><td>Side</td></tr>\n<tr><td>String</td></tr>\n<tr><td>Object</td></tr>\n<tr><td>Group</td></tr>\n<tr>\n<td rowspan=\"4\">{{GVI|arma1|1.00}}</td>\n<td>Structured Text</td>\n</tr>\n<tr><td>Config</td></tr>\n<tr><td>Display</td></tr>\n<tr><td>Control</td></tr>\n<tr>\n<td rowspan=\"1\">{{GVI|arma1|1.08}}</td>\n<td>Location</td>\n</tr>\n<tr>\n<td rowspan=\"3\">{{GVI|arma3|2.00}}</td>\n<td>Diary Record</td>\n</tr>\n<tr><td>Namespace</td></tr>\n<tr><td>Boolean</td></tr>\n</table>\n\n\n|p2= b: identical to ''a''<nowiki/>'s type\n\n|r1= [[Boolean]] - [[true]] if ''a'' is different from ''b'', [[false]] otherwise\n\n|x1= <sqf>\nif (_counter != 4) then\n{\n\thint \"The counter is not equal to the number 4\";\n};\n</sqf>\n\n|x2= <sqf>\nif (vehicle player != player) then\n{\n\thint \"you are in a vehicle\";\n}\nelse\n{\n\thint \"you are on foot\";\n};\n</sqf>\n\n|x3= <sqf>\nif (fuel truck1 != 1) then\n{\n\thint \"Truck1 has less than a full tank of fuel.\";\n};\n</sqf>\n\n|x4= <sqf>if (alive _unit1 != alive _unit2) then { hint \"One of the units is dead while another is alive\" };</sqf>\n\n|seealso= [[==]] [[Operators]]\n}}"
+ },
+ "1701": {
+  "title": "createVehicle",
+  "categories": [
+   "ArmA: Armed Assault: Scripting Commands",
+   "Arma 2: Operation Arrowhead: Scripting Commands",
+   "Arma 2: Scripting Commands",
+   "Arma 3: Scripting Commands",
+   "Command Group: Object Manipulation",
+   "Introduced with Operation Flashpoint version 1.34",
+   "Operation Flashpoint: Elite: Scripting Commands",
+   "Operation Flashpoint: New Scripting Commands",
+   "Operation Flashpoint: Scripting Commands",
+   "Scripting Commands",
+   "Scripting Commands: Global Effect",
+   "Take On Helicopters: Scripting Commands"
+  ],
+  "revid": 377509,
+  "timestamp": "2026-01-02T06:50:13Z",
+  "wikitext": "{{RV|type=command\n\n|game1= ofp\n|version1= 1.34\n\n|game2= ofpe\n|version2= 1.00\n\n|game3= arma1\n|version3= 1.00\n\n|game4= arma2\n|version4= 1.00\n\n|game5= arma2oa\n|version5= 1.50\n\n|game6= tkoh\n|version6= 1.00\n\n|game7= arma3\n|version7= 0.50\n\n|eff= global\n\n|gr1= Object Manipulation\n\n|descr= Creates an empty object of given classname type.\nSee [[Arma 3: Assets]] / [[Arma 3: createVehicle/vehicles]], or [[:Category:CfgVehicles]] for earlier games.\n\n{{Feature|informative|\n* To create objects of type {{hl|\"Logic\"}}, use [[createUnit]].\n* To create an editable [[:Category: Eden Editor| Eden Editor]] entity, see [[create3DENEntity]].\n}}\n\n{{Feature|arma3|\nTo avoid vehicle randomisation in {{arma3}}, set the {{hl|BIS_enableRandomization}} variable immediately after creating the vehicle:\n<sqf>\nprivate \"_vehicle\";\nisNil { // run [[Scheduler#Unscheduled Environment|unscheduled]]\n\t_vehicle = \"C_Offroad_01_F\" createVehicle getPosATL player;\n\t_vehicle setVariable [\"BIS_enableRandomization\", false];\n};\n// the _vehicle variable is available after that\n</sqf>\nSee the [[Arma 3: Vehicle Customisation]] page for more information and settings.\n}}\n\n|s1= type [[createVehicle]] position\n\n|p1= type: [[String]] - vehicle/object className\n\n|p2= position: [[Position]] - desired placement position. If the exact position is occupied, nearest empty position is used.\n\n|r1= [[Object]]\n\n|s2= [[createVehicle]] [type, position, markers, placement, special]\n\n|p21= type: [[String]] - vehicle/object className\n\n|p22= position: [[Object]], [[Position#Introduction|Position2D]], [[PositionATL]] or [[PositionAGL]] - desired placement position, ([[PositionAGL]] if watercraft or amphibious)\n\n|p23= markers: [[Array]] of [[String]]s - (Optional, default <sqf inline>[]</sqf>) if the markers array contains any markers, the position is randomly picked from array of given markers plus desired placement position.\nIf any of the markers were given z coordinate with [[setMarkerPos]], the vehicle will also be created at given z coordinate.\n\n|p24= placement: [[Number]] - (Optional, default 0) the vehicle is placed inside a circle with given position as center and placement as its radius.\n\n|p25= special: [[String]] - (Optional, default \"NONE\") can be one of the following:\n* {{hl|\"NONE\"}} - will look for suitable empty position near given position (subject to other placement params) before placing vehicle there.\n* {{hl|\"CAN_COLLIDE\"}} - places vehicle at given position (subject to other placement params), without checking if others objects can cross its 3D model.\n* {{hl|\"FLY\"}} - if vehicle is capable of flying and has crew, it will be made airborne at default height.\nIf ''special'' is \"\" or not specified, default {{hl|\"NONE\"}} is used.\n\n|r2= [[Object]] - created vehicle or [[objNull]] if failed\n\n|x1= <sqf>_jeep = \"Jeep\" createVehicle position player;</sqf>\n\n|x2= <sqf>_heli = \"AH1Z\" createVehicle getMarkerPos \"hspawn\";</sqf>\n\n|x3= <sqf>_veh = createVehicle [\"ah1w\", position player, [], 0, \"FLY\"];</sqf>\n\n|x4= <sqf>_veh = createVehicle [\"2S6M_Tunguska\", getMarkerPos \"marker1\", [\"marker2\", \"marker3\"], 0, \"NONE\"];</sqf>\n\n|x5= Objects such as\n* \"test_EmptyObjectForBubbles\"\n* \"test_EmptyObjectForFireBig\"\n* \"test_EmptyObjectForSmoke\"\ncreate additional emitters, which are stored in \"effects\" variable on the object. Since {{arma3}} v1.72 these emitters are automatically deleted when object is deleted\n<sqf>\n0 spawn\n{\n\tprivate _fire = \"test_EmptyObjectForFireBig\" createVehicle position player;\n\tsleep 5;\n\tdeleteVehicle _fire;\n};\n</sqf>\n\n|x6= The following explosives (ending with {{hl|_Scripted}}) can be set off by applying [[setDamage]] 1 to them for ease of scripting:\n* \"DemoCharge_Remote_Ammo_Scripted\"\n* \"SatchelCharge_Remote_Ammo_Scripted\"\n* \"ClaymoreDirectionalMine_Remote_Ammo_Scripted\"\n<sqf>\n_claymore = \"ClaymoreDirectionalMine_Remote_Ammo_Scripted\" createVehicle position player;\n_claymore spawn\n{\n\tsleep 5;\n\t_this setDamage 1;\n};\n</sqf>\n\n|x7= Add inventory to objects without inventory:\n<sqf>\n_boxes = \"Land_Pallet_MilBoxes_F\" createVehicle position player;\n_cargo = \"Supply500\" createVehicle [0,0,0];\n_cargo attachTo [_boxes, [0,0,0.85]];\n\n// optional for objects that can take damage\n_boxes addEventHandler [\"Killed\",\n{\n\t{\n\t\tdetach _x;\n\t\tdeleteVehicle _x;\n\t}\n\tforEach attachedObjects (_this select 0);\n}];\n</sqf>\n\n|x8= Drop player's weapon:\n<sqf>\n_weaponHolder = \"GroundWeaponHolder_Scripted\" createVehicle position player;\nplayer action [\"DropWeapon\", _weaponHolder, currentWeapon player];\n</sqf>\n\n|x9= The following weapon holders (ending with ''_Scripted'') do '''not''' auto-delete when empty. It is up to the mission maker to take care of these:\n* \"GroundWeaponHolder_Scripted\"\n* \"WeaponHolderSimulated_Scripted\"\n* \"Weapon_Empty\" (a special weaponholder that displays only a single weapon, even if it contains magazines for this weapon)\n<sqf>\n0 spawn \n{\n\tprivate _weaponHolder = createVehicle [\"Weapon_Empty\", getPosATL player, [], 0, \"CAN_COLLIDE\"];\n\t_weaponHolder addWeaponCargo [\"arifle_Katiba_F\", 1];\n\thint \"You have 5 seconds to grab this weapon\";\n\tsleep 5;\n\tdeleteVehicle _weaponHolder;\n};\n</sqf>\n\n|seealso= [[createVehicleLocal]] [[create3DENEntity]] [[createVehicleCrew]] [[createAgent]] [[createTrigger]] [[createUnit]] [[createMine]] [[deleteVehicle]] [[createGroup]] [[createCenter]] [[setVehiclePosition]]\n}}\n\n{{Note\n|user= MrSanchez\n|timestamp= 20150822130400\n|text= GroundWeaponHolder class is automatically deleted when empty after 0.5 to 1 seconds in A3 1.48. The exact delay is random but never lower than 0.50 secs after creation.\nYou can stop deletion by adding something (cargo) to it within 0.5 seconds.\n}}\n\n{{Note\n|user= AgentRev\n|timestamp= 20170516090500\n|text= For the alternative syntax, if the vehicle has <syntaxhighlight lang=\"cpp\" inline>canFloat = 1;</syntaxhighlight> in its config class (e.g. boats and wheeled APCs) the command expects [[Position#PositionAGL|PositionAGL]],\notherwise always [[Position#PositionATL|PositionATL]].\n}}\n\n{{Note\n|user= demellion\n|timestamp= 20181102121600\n|text= '''WARNING:''' Do not instigate [[createVehicle]] or [[createVehicleLocal]] within a server function executed with [[Arma 3: Functions Library#Pre_and_Post_Init|preInit]] flag.<br>\nThis will cause ''\"You cannot play/edit this mission\"'' for a vehicles compiled from a [[Arma 3: Startup Parameters#Modifications|-mod]] and make server skip/loop that mission init.\n}}\n\n{{Note\n|user= R3vo\n|timestamp= 20190810091000\n|text= The main syntax creates vehicles at ground level ignoring the Z in ''pos'' and is also faster than the alternative syntax.\n<sqf>\"vehclass\" createVehicle pos;</sqf>\n\nThis is equivalent to <sqf>createVehicle [\"vehclass\", [pos select 0, pos select 1, 0], [], 0, \"NONE\"];</sqf>\n}}\n\n{{Note\n|user= DreadedEntity\n|timestamp= 20220313172236\n|text= Objects are created with a [[vectorUp]] of [[surfaceNormal|terrain surface normal]]. If you are creating new buildings to add to the map, you will probably want to call [[setVectorUp]] on the newly-spawned object.\n<sqf>\n_veh = createVehicle [/*etc...*/];\n_veh setVectorUp [0,0,1];\n</sqf>\n}}"
+ },
+ "1782": {
+  "title": "setPos",
+  "categories": [
+   "ArmA: Armed Assault: Scripting Commands",
+   "Arma 2: Operation Arrowhead: Scripting Commands",
+   "Arma 2: Scripting Commands",
+   "Arma 3: Scripting Commands",
+   "Command Group: Positions",
+   "Introduced with Operation Flashpoint version 1.00",
+   "Operation Flashpoint: Elite: Scripting Commands",
+   "Operation Flashpoint: New Scripting Commands",
+   "Operation Flashpoint: Scripting Commands",
+   "Scripting Commands",
+   "Scripting Commands: Global Effect",
+   "Take On Helicopters: Scripting Commands"
+  ],
+  "revid": 377794,
+  "timestamp": "2026-01-03T03:50:30Z",
+  "wikitext": "{{RV|type=command\n\n|game1= ofp\n|version1= 1.00\n\n|game2= ofpe\n|version2= 1.00\n\n|game3= arma1\n|version3= 1.00\n\n|game4= arma2\n|version4= 1.00\n\n|game5= arma2oa\n|version5= 1.50\n\n|game6= tkoh\n|version6= 1.00\n\n|game7= arma3\n|version7= 0.50\n\n|eff= global\n|arg= global\n\n|gr1= Positions\n\n|descr= Sets object position to format [[Position#PositionAGLS|PositionAGLS]] (over surface). The Z value is used to calculate the nearest surface below the provided position. If the surface is close, it uses the Z position of the surface. Otherwise, Z value becomes the offset from that surface.\n{{Feature| important | It is recommended to '''avoid''' this command when placing objects above other objects, due to the unpredictable behavior described above.}}\n\n|mp= {{Feature|arma1|{{Name|arma1|short}} 1.00 to 1.06: this command has local effect, but some simulation types do synchronise their changes over the network whilst others do not.<br>\nSo far, the only known simulation type that doesn't synchronise its position over the net is \"static\" ({{hl|c= simulation{{=}}\"house\"}}).}}\n\n|s1= object [[setPos]] pos\n\n|p1= object: [[Object]]\n\n|p2= pos: [[Position#PositionAGL|PositionAGL]] or [[Position#Introduction|Position2D]] - if [[Position#Introduction|Position2D]], Z will be set to 0\n\n|r1= [[Nothing]]\n\n|x1= <sqf>\nplayer setPos [getPos player select 0, getPos player select 1, (getPos player select 2) +10];\n\n// the same as above using set (OFP:R v1.75)\n_pos = getPos player;\n_pos set [2, _pos select 2 + 10];\nplayer setPos _pos;\n\n// the same as above using modelToWorld (ArmA v1.00)\nplayer setPos (player modelToWorld [0,0,10]);\n\n// the same as above using vectorAdd (Arma 3 v1.22)\nplayer setPos (getPos player vectorAdd [0,0,10]);\n</sqf>\n\n|x2= <sqf>_obj setPos [getPos _obj select 0, getPos _obj select 1, -5];</sqf>\n\n|x3= <sqf>player setPos (getPos _obj);</sqf>\n\n|seealso= [[setPosASL]] [[getPos]] [[setVehiclePosition]] [[Position#setPosAGLS|setPosAGLS]]\n}}\n\n{{Note\n|user= Hduregger\n|timestamp= 20110206202000\n|text= Calling [[setPos]] on an object can cause the object's orientation to change. This depends on the terrain and/or objects below the object. This was tested by calling [[setPos]] on a test object with the position of a helicopter ([[modelToWorld]] with some offset). When flying over land the orientation of the test object would rapidly change depending on the slope of the ground and objects beneath it.\nComment applicable to Ver '''1.96''' and '''earlier''':\n<sqf>obj1 setPos [x,y,z]</sqf>\nWill place most objects z metres above ground level (negative numbers for underground). But if obj1 is a trigger then it will be placed z metres above sea level. This can be very useful if you want to check a unit's height above sea level but it can be a problem if you want to move a trigger to create an explosion or a sound. To move a trigger to a location at ground level: \n<sqf>\ntriggername setPos [x,y,0];\ntriggername setPos [x,y,abs(getPos triggername select 2)];\n</sqf>\nNote for {{Name|arma1|short}}: Using [[setPos]] for a trigger will work in exactly the same way that [[setPos]] works for other objects - namely that [[setPos]] [x,y,z] will place the trigger z metres above ground level. \n[[setPos]] for static objects like an ammo crate do not work in MP.\n}}\n\n{{Note\n|user= Tankbuster\n|timestamp= 20121123130600\n|text= You can use [[getPos]] and [[setPos]] on triggers.\n}}"
+ },
+ "2910": {
+  "title": "ctrlSetEventHandler",
+  "categories": [
+   "ArmA: Armed Assault: New Scripting Commands",
+   "ArmA: Armed Assault: Scripting Commands",
+   "Arma 2: Operation Arrowhead: Scripting Commands",
+   "Arma 2: Scripting Commands",
+   "Arma 3: Scripting Commands",
+   "Command Group: Event Handlers",
+   "Command Group: GUI Control - Event Handlers",
+   "Introduced with Armed Assault version 1.00",
+   "Scripting Commands",
+   "Take On Helicopters: Scripting Commands"
+  ],
+  "revid": 369343,
+  "timestamp": "2024-09-03T18:43:02Z",
+  "wikitext": "{{RV|type=command\n\n|game1= arma1\n|version1= 1.00\n\n|game2= arma2\n|version2= 1.00\n\n|game3= arma2oa\n|version3= 1.50\n\n|game4= tkoh\n|version4= 1.00\n\n|game5= arma3\n|version5= 0.50\n\n|gr1= GUI Control - Event Handlers\n|gr2= Event Handlers\n\n|descr= {{Feature|obsolete|Use [[ctrlAddEventHandler]] instead as it can stack event handlers.|arma2|1.00}}\nSets given event handler of given control: any previously added event handler is removed.\n\n{{Feature|informative|\n* See [[User Interface Event Handlers]] for the full list of handler names\n* See also [[DIK KeyCodes]] for a list of key code constants relevant to key-related events like [[User_Interface_Event_Handlers#onKeyDown|KeyDown]] and [[User_Interface_Event_Handlers#onKeyUp|KeyUp]]\n}}\n\n{{Feature|important|When using the event names listed [[User Interface Event Handlers|here]] with the [[ctrlAddEventHandler]], [[ctrlSetEventHandler]], [[displayAddEventHandler]] or [[displaySetEventHandler]] commands, the prefix \"on\" in the event name must be removed (e.g. ''''ButtonDown'''' instead of ''''onButtonDown'''').}}\n\n|s1= controlName [[ctrlSetEventHandler]] [handlerName, function]\n\n|p1= controlName: [[Control]]\n\n|p2= handlerName: [[String]]\n\n|p3= function: [[String]] - should return a [[Boolean]] indicating that the event has handled this event fully or not and whether the engine should execute its default code or not afterwards\n\n|r1= [[Nothing]]\n\n|x1= <sqf>_control ctrlSetEventHandler [\"KeyDown\", \"\"];</sqf>\n\n|x2= <sqf>(_display displayCtrl 108) ctrlSetEventHandler [\"LBSelChanged\",\"['ListChange',_this] call FireEvents\"];</sqf>\n\n|seealso= [[displaySetEventHandler]] [[ctrlAddEventHandler]] [[ctrlRemoveEventHandler]] [[User_Interface_Event_Handlers|UI Event Handlers]] [[DIK KeyCodes]]\n}}\n\n{{Note\n|user= pierremgi\n|timestamp= 20210428195900\n|text= This command doesn't work on map.\n<sqf>\nwaitUntil { !isNull (findDisplay 12 displayCtrl 51) };\n(findDisplay 12 displayCtrl 51) ctrlSetEventHandler [\"MouseButtonDblClick\", \"hint str _this; true\"]; // doesn't skip the marker dialog as it should.\n</sqf>\n}}"
+ },
+ "8230": {
+  "title": "diag fps",
+  "categories": [
+   "Arma 2: New Scripting Commands",
+   "Arma 2: Operation Arrowhead: Scripting Commands",
+   "Arma 2: Scripting Commands",
+   "Arma 3: Scripting Commands",
+   "Command Group: Diagnostic",
+   "Command Group: Performance Profiling",
+   "Introduced with Arma 2 version 1.00",
+   "Scripting Commands",
+   "Take On Helicopters: Scripting Commands"
+  ],
+  "revid": 341165,
+  "timestamp": "2023-05-13T22:13:12Z",
+  "wikitext": "{{RV|type=command\n\n|game1= arma2\n|version1= 1.00\n\n|game2= arma2oa\n|version2= 1.50\n\n|game3= tkoh\n|version3= 1.00\n\n|game4= arma3\n|version4= 0.50\n\n|gr1= Diagnostic\n\n|gr2= Performance Profiling\n\n|descr= Returns average framerate calculated over last 16 frames.\n\n\n|s1= [[diag_fps]]\n\n|r1= [[Number]]\n\n|x1= <sqf>diag_log diag_fps;</sqf>\n\n|seealso= [[diag_fpsMin]] [[diag_frameNo]] [[diag_log]] [[diag_tickTime]] [[diag_deltaTime]]\n}}\n\n\n<dl class=\"command_description\">\n\n<dt></dt>\n<dd class=\"notedate\">Posted on 2014-11-19 - 23:56 (UTC)</dd>\n<dt class=\"note\">[[User:DreadedEntity|DreadedEntity]]</dt>\n<dd class=\"note\">\nThe engine will always calculate the last 16 frames without caring if they are frames in which the loading screen was drawn, or actual mission frames.\n</dd>\n\n</dl>"
+ }
+}

@@ -1,7 +1,7 @@
 """Convert BI Community Wiki wikitext to Markdown.
 
 Covers the subset of MediaWiki markup and wiki templates that actually occur on
-the Arma 3 command/function pages (see ``python -m biwiki stats``).
+the mirrored pages. Anything it does not know is listed in report.json (unknown-template, unknown-tag, markup).
 """
 from __future__ import annotations
 

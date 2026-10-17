@@ -71,6 +71,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      - run: python -m unittest  # parser and build tests on tests/fixtures, under a second
       - id: build
         run: python -m biwiki build
       - run: python -m biwiki feed

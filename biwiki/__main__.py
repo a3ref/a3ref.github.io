@@ -1,4 +1,4 @@
-"""Command line: python -m biwiki {sync,build,update,serve}"""
+"""Command line: python -m biwiki {sync,update,build,feed,report,serve}"""
 from __future__ import annotations
 
 import argparse

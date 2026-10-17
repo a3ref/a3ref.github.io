@@ -1,0 +1,34 @@
+{
+ "9488": {
+  "title": "BIS fnc spawnGroup",
+  "categories": [
+   "Arma 2: Functions",
+   "Arma 2: New Functions",
+   "Arma 2: Operation Arrowhead: Functions",
+   "Arma 3: Functions",
+   "Function Group: Object Manipulation",
+   "Functions",
+   "Introduced with Arma 2 version 1.00",
+   "Take On Helicopters: Functions"
+  ],
+  "revid": 378466,
+  "timestamp": "2026-04-21T15:38:13Z",
+  "wikitext": "{{RV|type=function\n\n|game1= arma2\n|version1= 1.00\n\n|game2= arma2oa\n|version2= 1.50\n\n|game3= tkoh\n|version3= 1.00\n\n|game4= arma3\n|version4= 0.50\n\n|gr1= Object Manipulation\n\n|arg=\n\n|eff=\n\n|descr= Function which handles the spawning of a dynamic group of characters. The composition of the [[group]] can be passed to the function.\nAlternatively, a number can be passed and the function will spawn that amount of characters with a random type.\n\n{{Feature|informative|'''Before {{arma3}}''' a side's Center must have been created before a group may be spawned either by using [[createCenter]] or an editor placed (0% Probability of Presence is fine) unit of the appropriate side.}}\n\n|s1= [position, side, toSpawn, relPositions, ranks, skillRange, ammoRange, randomControls, azimuth, precisePos, maxVehicles] call [[BIS_fnc_spawnGroup]]\n\n|p1= position: [[Array]] format [[Position]] - group's starting position\n\n|p2= side: [[Side]] - group's side\n\n|p3= toSpawn - can be one of:\n* [[Array]] - list of character types ('''only''' viable option for the [[civilian]] side as no civilian groups are defined in config)\n* [[Number]] - amount of characters to spawn\n* [[Config]] - [[CfgGroups]] entry\n\n|p4= relPositions: [[Array]] of [[Position]]s (Optional, default <sqf inline>[]</sqf>) a list of relative positions\n\n|p5= ranks: [[Array]] of [[String]]s/[[Number]]s - (Optional, default <sqf inline>[]</sqf>) ranks (see [[BIS_fnc_setRank]]) - '''must''' be same size as ''toSpawn''<nowiki/>'s array\n\n|p6= skillRange: [[Array]] of [[Number]]s - (Optional, default <sqf inline>[]</sqf>) skill range format [min, max]\n\n|p7= ammoRange: [[Array]] of [[Number]]s - (Optional, default <sqf inline>[]</sqf>) ammunition range (0..1) format [min, max]\n\n|p8= randomControls: [[Array]] of [[Number]]s - (Optional, default [-1, 1]) to format [minUnits, chance]:\n* minUnits: [[Number]] - (Optional, default -1) amount of mandatory units\n* chance: [[Number]] - (Optional, default -1) spawn chance for remaining units in range 0..1\n\n|p9= azimuth: [[Number]] - (Optional, default 0) azimuth/[[direction]]\n\n|p10= precisePos: [[Boolean]] - (Optional, default [[true]]) forces precise position placement\n\n|p11= maxVehicles: [[Number]] - (Optional, default 10e10) vehicle number limit\n\n|r1= [[Group]]\n\n|x1= Spawn five random EAST units at aPosition:\n<sqf>[getPosATL aPosition, east, 5] call BIS_fnc_spawnGroup;</sqf>\n\n|x2= Spawn a Stryker MGS Platoon at marker \"tankSpawn\":\n<sqf>[getMarkerPos \"tankSpawn\", side player, (configFile >> \"CfgGroups\" >> \"West\" >> \"BIS_US\" >> \"Armored\" >> \"US_MGSPlatoon\")] call BIS_fnc_spawnGroup;</sqf>\n\n|x3= Spawn a TK Militia Medic and Soldier at aPos facing south:\n<sqf>[getPos aPos, east, [\"TK_INS_Bonesetter_EP1\", \"TK_INS_Soldier_2_EP1\"],[],[],[],[],[],180] call BIS_fnc_spawnGroup;</sqf>\n\n|seealso= [[:Category:CfgVehicles]] [[Arma 2: CfgVehicles]] [[Arma 3: Assets]]\n}}\n\n{{Note\n|user= Snake Plissken\n|timestamp= 20160823024200\n|text= Sides are as follow:\n* [[west]]/[[blufor]] = BLUFOR\n* [[east]]/[[opfor]] = OPFOR\n* [[resistance]]/[[independent]] = INDEPENDENT\n* [[civilian]] = CIVILIAN.\n\nTo spawn one BLUFOR group (\"MARK1\" is the name given to a map marker):\n<sqf>Group_Name_Here = [getMarkerPos \"MARK1\", WEST, [\"B_G_Soldier_A_F\", \"B_G_Soldier_F\", \"B_G_Soldier_AR_F\", \"B_G_Soldier_LAT_F\"]] call BIS_fnc_spawnGroup;</sqf>\n\nOr a random group OPFOR of seven units\n<sqf>Group_Name_Here = [getMarkerPos \"MARK1\", EAST, 7] call BIS_fnc_spawnGroup;</sqf>\n\nan independent group:\n<sqf>Group_Name_Here = [getMarkerPos \"MARK1\", INDEPENDENT, [\"I_G_Soldier_A_F\", \"I_G_Soldier_F\", \"I_G_Soldier_AR_F\", \"I_G_Soldier_LAT_F\"]] call BIS_fnc_spawnGroup;</sqf>\n}}\n\n{{Note\n|user= Cheitan\n|timestamp= 20170802190600\n|text= When using this function for making a dynamic AI spawn, pay attention to the fact that none of the created groups will be marked for auto-deletion when the group become empty (all members dead). It means that it can be very easy to hit the 144 (288 for A3) max groups per side limitation, implying that no more AI or group can be created afterwards. To avoid this issue on Arma 3, don't forget to use [[deleteGroupWhenEmpty]] command in your script.\n}}"
+ },
+ "15669": {
+  "title": "BIS fnc taskHandler",
+  "categories": [
+   "Arma 2: Functions",
+   "Arma 2: New Functions",
+   "Arma 2: Operation Arrowhead: Functions",
+   "Arma 3: Functions",
+   "Function Group: Tasks",
+   "Functions",
+   "Introduced with Arma 2 version 1.00",
+   "Take On Helicopters: Functions"
+  ],
+  "revid": 353667,
+  "timestamp": "2024-03-20T18:50:01Z",
+  "wikitext": "{{RV|type=function\n\n|game1= arma2\n|version1= 1.00\n\n|game2= arma2oa\n|version2= 1.50\n\n|game3= tkoh\n|version3= 1.00\n\n|game4= arma3\n|version4= 0.50\n\n|gr1= Tasks\n\n|descr= <pre>\n/*******************************************************************************\n *\n *\tversion: \t\t1.0\n *\tname:\t\t\tTask handler\n *\tdescription:\tautomatically sets tasks as current \t\n *\tparameters:\t\t_this select 0: a unit whose tasks will be handled (Array)\n \t\t\t\t\t_this select 1: links to tasks created via MP Framwork with\n \t\t\t\t\t\t\t\t\tpriorities (loewr number means higher\n \t\t\t\t\t\t\t\t\tpriority)\n *\treturn value:\tnone \t\n * \texample:\t \t[\n \t\t\t\t\t\tBIS_cooper,\n\t\t\t\t\t\t[\n\t\t\t\t\t\t\t[\"objShaftoe\",   \t\t1],\n\t\t\t\t\t\t\t[\"objGorka\",\t\t\t3],\n\t\t\t\t\t\t\t[\"objNikolayev\",\t\t5],\n\t\t\t\t\t\t\t[\"objLagushina\",   \t\t5],\n\t\t\t\t\t\t\t[\"objSmugglers\",   \t\t5],\n\t\t\t\t\t\t\t[\"objFindBase\",    \t\t4],\n\t\t\t\t\t\t\t[\"objSentries\",   \t\t3],\n\t\t\t\t\t\t\t[\"objLeader\",\t\t\t3],\n\t\t\t\t\t\t\t[\"objDestroyBase\",\t\t3],\n\t\t\t\t\t\t\t[\"objEscortLagushina\",\t1],\n\t\t\t\t\t\t\t[\"objRescueCrew\",   \t2],\n\t\t\t\t\t\t\t[\"objSafehouse\",    \t3],\n\t\t\t\t\t\t\t[\"objMaksim\",    \t\t6],\n\t\t\t\t\t\t\t[\"objEvidence\",    \t\t7]\n\t\t\t\t\t\t]\n\t\t\t\t\t] call BIS_fnc_taskHandler\n\n *\tTODO:\t\t\t* generalize so it can be used in WF\n \t\t\t\t\t* add support for standard tasks\n \t\t\t\t\t* randomize the selection of tasks with the same priority\n*/\n</pre>\n{{Wiki|placeholder}}\n\n|s1= <!-- [] call [[BIS_fnc_taskHandler]]; -->\n\n|r1=\n\n|x1=\n\n|seealso=\n}}"
+ }
+}
