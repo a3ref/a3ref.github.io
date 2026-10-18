@@ -1,6 +1,6 @@
 """Copy a few real wiki pages from the data clone into tests/fixtures/raw/, in the same format as data/raw/.
 
-    python tests/fixtures/refresh.py            # needs the a3ref/data clone in ../data
+    python tests/fixtures/refresh.py            # needs the a3ref/data clone (see biwiki/__main__.py: DATA)
 
 Add a title to PAGES when a parser fix needs a real page to test against; keep the set small.
 """

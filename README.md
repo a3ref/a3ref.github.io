@@ -125,8 +125,8 @@ Three repositories, no secrets:
 
 Everything in `out/` is generated during deployment and never committed.
 
-If Cloudflare ever blocks the GitHub runner, sync locally inside the data clone
-(`python -m biwiki sync && python -m biwiki --dataset ../data build`, then commit and push in `../data`).
+If Cloudflare ever blocks the GitHub runner, sync locally
+(`python -m biwiki sync && python -m biwiki --dataset data build`, then commit and push in the data clone).
 
 ## Parser problems
 
@@ -156,7 +156,7 @@ commands, where to change what, the rules and how to verify a change.
 
 ```sh
 pip install -r requirements.txt
-git clone https://github.com/a3ref/data ../data   # the data lives in its own repository, cloned next to this one
+git clone https://github.com/a3ref/data data      # the data lives in its own repository; elsewhere: --raw/--dataset/--data
 
 python -m unittest                 # tests on tests/fixtures (under a second, no data clone needed)
 python -m biwiki build             # regenerate out/ from the cache only (about 20 s)
@@ -165,7 +165,7 @@ python -m biwiki serve --port 8000 # serve out/ over HTTP
 python -m biwiki update            # sync + build (opens a Chrome window for about a minute)
 python -m biwiki update --hidden   # same, with the Chrome window moved off-screen
 python -m biwiki sync --full       # re-download everything, ignoring the cache
-python -m biwiki --dataset ../data build  # also refresh the parsed JSON in the data repository
+python -m biwiki --dataset data build  # also refresh the parsed JSON in the data repository
 ```
 
 `--only commands` / `--only functions` limits the work to one category.

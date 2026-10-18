@@ -9,15 +9,15 @@ from pathlib import Path
 from .fetch import CATEGORIES
 
 ROOT = Path(__file__).resolve().parent.parent
-# The a3ref/data clone: next to this repository (../data), or inside it (./data, as the deploy workflow checks it out).
-DATA = next((p for p in (ROOT / "data", ROOT.parent / "data") if p.is_dir()), ROOT.parent / "data")
+# The a3ref/data clone: ./data (where the deploy workflow checks it out), else ../data; anywhere else via --raw/--data.
+DATA = next((p for p in (ROOT / "data", ROOT.parent / "data") if p.is_dir()), ROOT / "data")
 
 
 def main(argv=None) -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(prog="biwiki", description=__doc__)
-    ap.add_argument("--raw", type=Path, default=DATA / "raw", help="raw wikitext cache directory (default: ../data/raw)")
+    ap.add_argument("--raw", type=Path, default=DATA / "raw", help="raw wikitext cache directory (default: ./data/raw, from the a3ref/data clone)")
     ap.add_argument("--dataset", type=Path, help="also write parsed commands.json/functions.json/index.json here")
     ap.add_argument("--base-url", default="https://a3ref.github.io/", help="public site URL, for llms.txt and sitemap.xml")
     ap.add_argument("--out", type=Path, default=ROOT / "out", help="generated mirror directory")
@@ -35,7 +35,7 @@ def main(argv=None) -> None:
         p.add_argument("--profile", type=Path, default=ROOT / ".browser-profile", help="Chrome profile directory")
     kinds_arg(sub.add_parser("build", help="generate Markdown/JSON from the raw cache"))
     p = sub.add_parser("feed", help="write changes.json, changes.md and feed.xml from the data repository's git history")
-    p.add_argument("--data", type=Path, default=DATA, help="clone of a3ref/data, with history (default: ../data)")
+    p.add_argument("--data", type=Path, default=DATA, help="clone of a3ref/data, with history (default: ./data)")
     p = sub.add_parser("report", help="compare the last build's report.json with known-problems.json")
     p.add_argument("--known", type=Path, default=ROOT / "known-problems.json", help="accepted problems baseline")
     p.add_argument("--accept", action="store_true", help="accept all current problems as the new baseline")
