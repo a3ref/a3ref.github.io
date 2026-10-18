@@ -210,11 +210,12 @@ Cloudflare rejects real headless Chrome; if a checkbox appears, run without `--h
     "syntax": "type createVehicle position",
     "since": null, "effect": null, "exec": null,
     "params": [{
-      "name": "type", "type": "String", "optional": false, "default": null,
+      "name": "type", "type": "String", "types": ["String"], "type_expr": "String",
+      "optional": false, "default": null,
       "description": "vehicle/object className", "since": null,
       "text": "full parameter text (markdown)"
     }],
-    "returns": {"type": "Object", "description": null, "text": "markdown"}
+    "returns": {"type": "Object", "types": ["Object"], "type_expr": "Object", "description": null, "text": "markdown"}
   }],
   "examples": [{"text": "markdown", "code": ["raw SQF"]}],
   "multiplayer": null, "problems": null,
@@ -226,6 +227,11 @@ Cloudflare rejects real headless Chrome; if a checkbox appears, run without `--h
 
 `name`, `type`, `optional` and `default` of parameters are extracted heuristically from the wiki text
 (`name: Type - (Optional, default x) description`); `text` always holds the original, losslessly.
+`type` is the type as the wiki writes it ("Object or Array of Objects"); `type_expr` is the same type
+normalised for programs: alternatives joined with ` | `, element types as `Array<...>`
+(`Object | Array<Object>`, `Array<Array<Number>>`), qualifiers such as "in range 0..1" dropped. When the
+wiki lists the alternatives below the parameter (`* [[Number]]: ...` / `* [[Boolean]]: ...`), `type` is
+null and `type_expr` collects them. `type_expr` is null when the type is free text.
 In JSON, links are plain text (fewer tokens); in `.md` and `.html` they are real links.
 
 ## HTML version

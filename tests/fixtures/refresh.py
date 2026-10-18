@@ -16,8 +16,10 @@ from biwiki.__main__ import DATA  # noqa: E402
 from biwiki.fetch import load_cache, save_cache  # noqa: E402
 
 PAGES = {
-    "commands": ["setPos", "time", "alive", "a != b", "diag fps", "ctrlSetEventHandler", "createVehicle"],
-    "functions": ["BIS fnc spawnGroup", "BIS fnc taskHandler"],
+    "commands": ["setPos", "time", "alive", "a != b", "a == b", "diag fps", "ctrlSetEventHandler", "createVehicle",
+                 "drawIcon3D"],
+    "functions": ["BIS fnc spawnGroup", "BIS fnc taskHandler", "BIS fnc dbClassCheck", "BIS fnc animateFlag",
+                  "BIS fnc typeText2", "BIS fnc getCfgDataPool"],
     "topics": ["Boolean", "Position"],
 }
 

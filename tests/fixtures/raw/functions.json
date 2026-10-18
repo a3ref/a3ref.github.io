@@ -30,5 +30,60 @@
   "revid": 353667,
   "timestamp": "2024-03-20T18:50:01Z",
   "wikitext": "{{RV|type=function\n\n|game1= arma2\n|version1= 1.00\n\n|game2= arma2oa\n|version2= 1.50\n\n|game3= tkoh\n|version3= 1.00\n\n|game4= arma3\n|version4= 0.50\n\n|gr1= Tasks\n\n|descr= <pre>\n/*******************************************************************************\n *\n *\tversion: \t\t1.0\n *\tname:\t\t\tTask handler\n *\tdescription:\tautomatically sets tasks as current \t\n *\tparameters:\t\t_this select 0: a unit whose tasks will be handled (Array)\n \t\t\t\t\t_this select 1: links to tasks created via MP Framwork with\n \t\t\t\t\t\t\t\t\tpriorities (loewr number means higher\n \t\t\t\t\t\t\t\t\tpriority)\n *\treturn value:\tnone \t\n * \texample:\t \t[\n \t\t\t\t\t\tBIS_cooper,\n\t\t\t\t\t\t[\n\t\t\t\t\t\t\t[\"objShaftoe\",   \t\t1],\n\t\t\t\t\t\t\t[\"objGorka\",\t\t\t3],\n\t\t\t\t\t\t\t[\"objNikolayev\",\t\t5],\n\t\t\t\t\t\t\t[\"objLagushina\",   \t\t5],\n\t\t\t\t\t\t\t[\"objSmugglers\",   \t\t5],\n\t\t\t\t\t\t\t[\"objFindBase\",    \t\t4],\n\t\t\t\t\t\t\t[\"objSentries\",   \t\t3],\n\t\t\t\t\t\t\t[\"objLeader\",\t\t\t3],\n\t\t\t\t\t\t\t[\"objDestroyBase\",\t\t3],\n\t\t\t\t\t\t\t[\"objEscortLagushina\",\t1],\n\t\t\t\t\t\t\t[\"objRescueCrew\",   \t2],\n\t\t\t\t\t\t\t[\"objSafehouse\",    \t3],\n\t\t\t\t\t\t\t[\"objMaksim\",    \t\t6],\n\t\t\t\t\t\t\t[\"objEvidence\",    \t\t7]\n\t\t\t\t\t\t]\n\t\t\t\t\t] call BIS_fnc_taskHandler\n\n *\tTODO:\t\t\t* generalize so it can be used in WF\n \t\t\t\t\t* add support for standard tasks\n \t\t\t\t\t* randomize the selection of tasks with the same priority\n*/\n</pre>\n{{Wiki|placeholder}}\n\n|s1= <!-- [] call [[BIS_fnc_taskHandler]]; -->\n\n|r1=\n\n|x1=\n\n|seealso=\n}}"
+ },
+ "15776": {
+  "title": "BIS fnc dbClassCheck",
+  "categories": [
+   "Arma 3: Functions",
+   "Function Group: Database",
+   "Functions",
+   "Introduced with Take On Helicopters version 1.00",
+   "Take On Helicopters: Functions",
+   "Take On Helicopters: New Functions"
+  ],
+  "revid": 327252,
+  "timestamp": "2022-07-12T22:11:49Z",
+  "wikitext": "{{RV|type=function\n\n|game1= tkoh\n|version1= 1.00\n\n|game2= arma3\n|version2= 0.50\n\n|gr1= Database\n\n|descr= Check if class exists in Scripted Database.\n\n|s1= [databaseArray, path] call [[BIS_fnc_dbClassCheck]]\n\n|p1= databaseArray - [[Array]]: An array in the Scripted Database format\n|p2= path - [[Array]]: Database path to be checked\n\n|r1= [[Boolean]]: True if class exists\n\n|x1= <sqf>[[\"#MILLER\", [\"&NAME\", \"Miller\", \"&UID\", \"1234\", \"&MONEY\", 1000], [\"miller\"]] call BIS_fnc_dbClassCheck // true</sqf>\n\n|seealso= [[:Category:Function Group: Database|Database functions]] [[BIS_fnc_dbClassId]] [[BIS_fnc_dbClassIndex]] [[BIS_fnc_dbClassList]] [[BIS_fnc_dbClassRemove]] [[BIS_fnc_dbClassReturn]] [[BIS_fnc_dbClassSet]] [[BIS_fnc_dbConfigPath]] [[BIS_fnc_dbImportConfig]] [[BIS_fnc_dbImportXML]] [[BIS_fnc_dbisClass]] [[BIS_fnc_dbisValue]] [[BIS_fnc_dbPrint]][[BIS_fnc_dbSymbolClass]] [[BIS_fnc_dbSymbolValue]] [[BIS_fnc_dbValueCheck]] [[BIS_fnc_dbValueId]] [[BIS_fnc_dbValueIndex]] [[BIS_fnc_dbValueList]] [[BIS_fnc_dbValueRemove]] [[BIS_fnc_dbValueReturn]] [[BIS_fnc_dbValueSet]]\n}}"
+ },
+ "15904": {
+  "title": "BIS fnc getCfgDataPool",
+  "categories": [
+   "Arma 3: Functions",
+   "Arma 3: New Functions",
+   "Function Group: Configs",
+   "Functions",
+   "Introduced with Arma 3 version 1.00"
+  ],
+  "revid": 309841,
+  "timestamp": "2022-05-05T12:09:52Z",
+  "wikitext": "{{RV|type=function\n\n|game1= arma3\n|version1= 1.00\n\n|gr1= Configs\n\n|descr= <pre>/*\n\n\tDescription:\n\t* Get array of attribute values out of the parent config class.\n\t* Attributes need to be in this format: \"_n\", where n is an index number (starting from 0).\n\t* If any discrepancy in indexing is detected, loading will stop and only the correctly indexed values will be returned.\n\t* Max. index supported is 99.\n\t* If more then 9 attributes used, 0-9 need to use leading zeroes.\n\n\tCFG example:\n\n\tclass Timeline\n\t{\n\t\tclass StageA\n\t\t{\n\t\t\t_0[] = {2035,7,7,04,30};\n\t\t\t_1[] = {2035,7,7,06,15};\n\t\t\t_2[] = {2035,7,7,18,35};\n\t\t\t_3[] = {2035,7,8,09,05};\n\t\t\t_4[] = {2035,7,8,13,25};\n\t\t\t_5[] = {2035,7,8,17,10};\n\t\t\t_6[] = {2035,7,8,21,40};\n\t\t\t_7[] = {2035,7,9,19,55};\n\t\t};\n\t};\n\n\tRemark(s):\n\t* Can by called 2 ways:\n\t\t* 1st way (general) works for any config.\n\t\t* 2nd way is for comfortable working with mission description.ext.\n\n\tParameter(s):\n\t\t_this: CFG\n\t\t_this: ARRAY of STRINGS - missionConfigFile classes.\n\n\tExample:\n\n\t* 1st way of calling:\n\n\t\t_array = (configfile >> \"BulletBubbles\" >> \"BulletBubbles1\") call BIS_fnc_getCfgData;\n\t\t_array = (missionconfigfile >> \"Timeline\" >> \"StageA\") call BIS_fnc_getCfgData;\n\n\t* 2nd way of calling:\n\n\t\t_array = [\"Timeline\",\"StageA\"] call BIS_fnc_getCfgData;\n\n\tReturns:\n\t\tARRAY or nil, if parent class is not found\n*/</pre>\n\n{{Wiki|placeholder}}\n\n|s1= <!-- [] call [[BIS_fnc_getCfgDataPool]] -->\n\n|r1=\n\n|x1= <!-- <sqf>[] call BIS_fnc_getCfgDataPool;</sqf> -->\n\n|seealso=\n}}"
+ },
+ "15991": {
+  "title": "BIS fnc typeText2",
+  "categories": [
+   "Arma 3: Functions",
+   "Arma 3: New Functions",
+   "Function Group: GUI",
+   "Functions",
+   "Functions: Local Effect",
+   "Introduced with Arma 3 version 1.00"
+  ],
+  "revid": 349484,
+  "timestamp": "2023-11-08T17:09:03Z",
+  "wikitext": "{{RV|type=function\n\n|game1= arma3\n|version1= 1.00\n\n|gr1= GUI\n\n|eff= local\n\n|descr= [[File:BIS_fnc_typeText2.gif|400px|right]]\nTypes a structured text on the screen, letter by letter, cursor blinking. Note that line returns are manual, unlike [[BIS_fnc_typeText]].\n\n|s1= [stringLines, posX, posY, alignBottom, rootFormat, abortParams, abortCond, playSounds] call [[BIS_fnc_typeText2]]\n\n|p1= stringLines:\n* [[Array]] of [[String]]s - array containing lines of text with same structured text formatting.\n* [[Array]] of [[Array]] of [[String]]s [text, format, color]\n** text: [[String]] - (Optional, default <sqf inline>\"\"</sqf>)\n** format: [[String]] - (Optional, default <sqf inline>\"align = 'center' size = '0.7'\"</sqf>) a linebreak is defined as \"&lt;br/&gt;\" '''and this only!'''\n** color: [[String]] - (Optional, default <sqf inline>\"#ffffff\"</sqf>)\n\n|p2= posX: [[Number]] - (Optional, default 0)\n\n|p3= posY: [[Number]] - (Optional, default 0)\n\n|p4= alignBottom: [[Boolean]] - (Optional, default [[true]])\n\n|p5= rootFormat: [[String]] - (Optional, default <sqf inline>\"<t>%1</t>\"</sqf>)\n\n|p6= abortParams: [[Array]] - (Optional, default <sqf inline>[]</sqf>)\n\n|p7= abortCond: [[Code]] - (Optional, default <sqf inline>{ false }</sqf>)\n\n|p8= playSounds: [[Boolean]] - (Optional, default [[true]])\n\n|r1= [[Nothing]]\n\n|x1= <sqf>\n[\n\t[\n\t\t[\"CAMP ROGAIN, \", \"align = 'center' shadow = '1' size = '0.7' font='PuristaBold'\"],\n\t\t[\"RESUPPLY POINT\", \"align = 'center' shadow = '1' size = '0.7'\", \"#aaaaaa\"],\n\t\t[\"\", \"<br/>\"], // line break\n\t\t[\"10 MINUTES LATER...\", \"align = 'center' shadow = '1' size = '1.0'\"]\n\t]\n] spawn BIS_fnc_typeText2;\n</sqf>\n\n|x2= <sqf>\n[\n\t[\"Hello there\"],\n\tsafeZoneX, safeZoneH / 2,\n\ttrue,\n\t\"<t font='PuristaBold'>%1</t>\",\n\t[],\n\t{ false },\n\ttrue\n] spawn BIS_fnc_typeText2;\n</sqf>\n\n|exec= spawn\n\n|seealso= [[BIS_fnc_dynamicText]] [[BIS_fnc_infoText]] [[BIS_fnc_textTiles]] [[BIS_fnc_typeText]] [[BIS_fnc_EXP_camp_SITREP]]\n}}"
+ },
+ "18479": {
+  "title": "BIS fnc animateFlag",
+  "categories": [
+   "Arma 3: Functions",
+   "Arma 3: New Functions",
+   "Function Group: Object Manipulation",
+   "Functions",
+   "Functions: Global Effect",
+   "Introduced with Arma 3 version 1.68"
+  ],
+  "revid": 364735,
+  "timestamp": "2024-05-30T21:39:57Z",
+  "wikitext": "{{RV|type=function\n\n|game1= arma3\n|version1= 1.68\n\n|gr1= Object Manipulation\n\n|arg= global\n\n|eff= global\n\n|descr= Smoothly animates given flag from current position on the flag pole to the given position. When flag animation is done, the {{Link|Arma 3: Scripted Event Handlers|scripted event handler}} {{Link|Arma 3: Scripted Event Handlers#BIS_fnc_animateFlag|\"FlagAnimationDone\"}} is called.\n\n|mp= The effect is global, MP compatible and its effect is persistent.\n\n|s1= [flag, phase, instant] call [[BIS_fnc_animateFlag]]\n\n|p1= flag: [[Object]] - [[flag]] object of the type \"FlagCarrier\"\n\n|p2= phase: [[Number]] - desired animation phase 0..1 (0 - bottom of the flag pole, 1 - top of the flag pole)\n\n|p3= instant (Optional, default [[false]]): \n* [[Boolean]] - when [[true]], animation is instant (\"FlagAnimationDone\" EH is not called in this case)\n* [[Number]] - animation duration multiplier\n\n|r1= [[Nothing]]\n\n|x1= <sqf>[flag1, 0] call BIS_fnc_animateFlag;</sqf>\n\n|x2= <sqf>\n// Adding the \"FlagAnimationDone\" EH\nprivate _eh = [<yourflag>, \"FlagAnimationDone\", { /* your code */ }] call BIS_fnc_addScriptedEventHandler;\n</sqf>\n\n|seealso= [[flag]] [[flagOwner]] [[setFlagOwner]] [[setFlagSide]] [[setFlagTexture]] [[flagSide]] [[flagTexture]] [[setFlagAnimationPhase]] [[flagAnimationPhase]] [[Arma 3: Flag Textures]]\n}}\n\n{{Note\n|user= Killzone_Kid\n|timestamp= 20161212200200\n|text= Flag Demo (https://www.youtube.com/watch?v=sJtQfRML0cc)\n<sqf>\nfnc_addFlagAction =\n{\n\t_this addAction\n\t[\n\t\t\"Pull The Cord\",\n\t\t{\n\t\t\tplayer playAction \"PutDown\";\n\t\t\tsleep 0.5;\n\t\t\t[_this select 0, flagAnimationPhase (_this select 0) + 0.2, 0.2] call BIS_fnc_animateFlag;\n\t\t\t_this select 0 removeAction (_this select 2);\n\t\t},\n\t\t\"\",\n\t\t10,\n\t\ttrue,\n\t\ttrue,\n\t\t\"\",\n\t\t\"_this distance2D _target < 2\"\n\t];\n};\n\nprivate _flag = createVehicle [\"Flag_BI_F\", player getRelPos [10, 0], [], 0, \"CAN_COLLIDE\"];\n[_flag, 0, true] call BIS_fnc_animateFlag;\n_flag call fnc_addFlagAction;\n\n[\n\t_flag,\n\t\"FlagAnimationDone\",\n\t{\n\t\tif (_this select 1 > 0.9) exitWith\n\t\t{\n\t\t\t[_this select 0, \"FlagAnimationDone\"] call BIS_fnc_removeAllScriptedEventHandlers;\n\t\t\tremoveAllActions (_this select 0);\n\t\t};\n\t\t_this select 0 call fnc_addFlagAction;\n\t}\n]\ncall BIS_fnc_addScriptedEventHandler;\n</sqf>\n}}"
  }
 }

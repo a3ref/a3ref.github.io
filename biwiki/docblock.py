@@ -27,6 +27,9 @@ import re
 import textwrap
 from typing import Optional
 
+from . import typeexpr
+from .typeexpr import TYPE_WORDS
+
 LABELS = {
     "author": "author", "authors": "author", "by": "author",
     "description": "description", "desc": "description", "purpose": "description", "campaign lobby": "description",
@@ -47,17 +50,6 @@ BARE = {"params", "parameters", "parameter(s)", "returns", "return", "descriptio
 _LABEL = re.compile(r"^[ \t]{0,3}(" + "|".join(sorted(map(re.escape, LABELS), key=len, reverse=True)) + r")\s*:\s?(.*)$",
                     re.I)
 
-TYPE_WORDS = {
-    "object": "Object", "array": "Array", "string": "String", "number": "Number", "scalar": "Number",
-    "float": "Number", "integer": "Number", "int": "Number", "bool": "Boolean", "boolean": "Boolean",
-    "code": "Code", "group": "Group", "side": "Side", "config": "Config", "control": "Control",
-    "display": "Display", "nothing": "Nothing", "none": "Nothing", "void": "Nothing", "any": "Anything",
-    "anything": "Anything", "hashmap": "HashMap", "location": "Location", "namespace": "Namespace",
-    "text": "Structured Text", "structuredtext": "Structured Text", "task": "Task", "team": "Team",
-    "position": "Position", "position2d": "Position2D", "position3d": "Position3D", "positionatl": "PositionATL",
-    "positionasl": "PositionASL", "positionagl": "PositionAGL", "positionaglS": "PositionAGLS",
-    "color": "Color", "colour": "Color", "vector": "Vector3D", "script": "Script Handle",
-}
 _TYPE = re.compile(r"\b(" + "|".join(sorted(TYPE_WORDS, key=len, reverse=True)) + r")s?\b", re.I)
 _PARAM = re.compile(r"^(?:_this\s+select\s+|#|\(?)(\d+)\s*(?:[:)\.]|\s-)\s*(.*)$", re.I)
 _NO_PARAMS = re.compile(r"^\s*(none|nothing|-|n/a|no parameters?)\.?\s*$", re.I)
@@ -123,6 +115,8 @@ def parse(body: str) -> dict:
     elif intro and not re.fullmatch(r"[\w.\- ]+\.sqf|[A-Z0-9 \-]+", intro):
         description = f"{intro}\n\n{description}"
     returns = body_of("returns")
+    ret_head = returns.split(" - ")[0].split("\n")[0]
+    boolean = re.match(r"(true|false)\b", returns, re.I) is not None
     examples = [e for e in re.split(r"\n\s*\n", body_of("examples")) if e.strip()]
     # "BIN_fnc_probeDelete" or ", _objects" is not a description
     if not re.search(r"[A-Za-z]{2,}\W+[A-Za-z]{2,}", description) or re.fullmatch(r"\s*\w+\s*", description):
@@ -131,8 +125,10 @@ def parse(body: str) -> dict:
         "author": re.sub(r"\s+", " ", author.replace("\n-", ",").lstrip("- ")).strip() or None,
         "description": _prose(description) or None,
         "params": parse_params(body_of("params")),
-        "returns": {"types": types_in(returns.split(" - ")[0].split("\n")[0])
-                    or (["Boolean"] if re.match(r"(true|false)\b", returns, re.I) else []), "text": returns}
+        "returns": {"types": types_in(ret_head) or (["Boolean"] if boolean else []),
+                    # "_priority:SCALAR - the priority": a named return value
+                    "type_expr": typeexpr.of_text(ret_head) or typeexpr.of_text(ret_head.split(":", 1)[-1])
+                    or ("Boolean" if boolean else None), "text": returns}
         if returns and not re.fullmatch(r"(0:)?\s*", returns) else None,
         "examples": [textwrap.dedent(e).strip() for e in examples],
         "syntax": body_of("syntax") or None,
@@ -197,36 +193,47 @@ def _param(index, lines: list[str]) -> dict:
     head = lines[0].strip()
     more = textwrap.dedent("\n".join(lines[1:])).strip("\n")
     name = None
-    m = re.match(r"^(_*[A-Za-z]\w*)\s*(?::|\s-\s|\()", head)
+    m = re.match(r"^(_*[A-Za-z]\w*)\s*(?::|\s-\s|\(|\s+(?=[A-Z]{3,}\b))", head)  # "_matrix ARRAY (...)" too
     if m and m.group(1).lower() not in TYPE_WORDS and m.group(1).lower().rstrip("s") not in TYPE_WORDS:
         name = m.group(1)
         head = head[m.end() - (1 if head[m.end() - 1] == "(" else 0):].strip(" :-")
     type_part, _, desc = head.partition(" - ")
     if not desc and not _TYPE.match(type_part):
         type_part, desc = "", head
-    types = types_in(type_part)
+    types, expr = types_in(type_part), typeexpr.of_text(type_part)
     if not types:
-        # "<object> unit allowed to use ..." or "a unit whose tasks will be handled (Array)"
-        marked = re.match(r"^<([A-Za-z ]+)>", head) or re.search(r"\(([A-Za-z ]+)\)\s*$", head)
+        # "<object> unit allowed to use ...", "a unit whose tasks will be handled (Array)",
+        # "profile unit (Object) [default player]"
+        marked = re.match(r"^<([A-Za-z ]+)>", head) or re.search(r"\(([A-Za-z ]+)\)\s*(\[[^\]]*\])?\s*$", head)
         if marked:
-            types = types_in(marked.group(1))
+            types, expr = types_in(marked.group(1)), typeexpr.of_text(marked.group(1))
             if head.startswith("<"):
                 desc = desc or head[marked.end():].strip(" -")
     if not types and not type_part and more:
         # "1:" followed by alternatives on deeper lines: "STRING - ...", "OBJECT - ..."
-        types = [t for l in more.split("\n") for t in types_in(l.split(" - ")[0]) if re.match(r"^\s*[A-Z]{3,}", l)]
-        types = list(dict.fromkeys(types))
+        alts = [l.split(" - ")[0] for l in more.split("\n") if re.match(r"^\s*[A-Z]{3,}", l)]
+        types = list(dict.fromkeys(t for a in alts for t in types_in(a)))
+        expr = typeexpr.union([e for e in map(typeexpr.of_text, alts) if e])
+    if name and more:
+        # the same name again on the next lines: alternatives ("_this: CFG" / "_this: ARRAY of STRINGS - ...")
+        alts = [l.split(":", 1)[1].split(" - ")[0] for l in more.split("\n") if re.match(rf"^\s*{re.escape(name)}\s*:", l)]
+        if alts:
+            types = list(dict.fromkeys(types + [t for a in alts for t in types_in(a)]))
+            expr = typeexpr.union([e for e in [expr, *map(typeexpr.of_text, alts)] if e])
     full = (head + ("\n" + more if more else "")).strip()
     optional = bool(re.search(r"\boptional\b", full, re.I))
     default = None
     dm = re.search(r"\bdefault(?:\s+value)?\s*(?:is|:|=)?\s*([^\n)]+?)(?:\)|\.?\s*$|\.\s)", full, re.I | re.M)
     if dm:
         default = dm.group(1).strip().rstrip(".,") or None
+        if default and default.endswith("]") and default.count("]") > default.count("["):
+            default = default[:-1].strip() or None  # "profile unit (Object) [default player]"
     desc = re.sub(r"^\(?\s*optional\s*\)?\s*[-,:]?\s*", "", desc, flags=re.I).strip()
     return {
         "index": index,
         "name": name,
         "types": types,
+        "type_expr": expr,
         "optional": optional,
         "default": default,
         "description": (desc + ("\n" + more if more else "")).strip() or None,

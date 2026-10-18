@@ -471,10 +471,16 @@ class Renderer:
         rows: list[list[tuple[str, bool]]] = []
         current: Optional[list] = None
 
-        def cell(node: Tag) -> tuple[str, bool]:
+        def span(node: Tag, attr: str) -> int:
+            if not node.has(attr):
+                return 1
+            m = re.match(r"\s*(\d+)", str(node.get(attr).value))
+            return max(1, min(int(m.group(1)), 50)) if m else 1
+
+        def cell(node: Tag) -> tuple[str, bool, int, int]:
             text = self._block(node.contents, []) if node.contents else ""
             text = text.replace("\n\n", "<br>").replace("\n", "<br>").replace("|", "\\|")
-            return text.strip(), str(node.tag).lower() == "th"
+            return text.strip(), str(node.tag).lower() == "th", span(node, "rowspan"), span(node, "colspan")
 
         for node in table.contents.nodes if table.contents else []:
             if not isinstance(node, Tag):
@@ -491,7 +497,7 @@ class Renderer:
                     current = []
                     rows.append(current)
                 current.append(cell(node))
-        rows = [r for r in rows if r]
+        rows = _unspan([r for r in rows if r])
         if not rows:
             return ""
         width = max(len(r) for r in rows)
@@ -527,6 +533,39 @@ class Renderer:
                 listish = any(c in "*#" for c in prefix)
                 out.append(("  " * (depth - 1) if listish else "") + rest)
         return "\n".join(out)
+
+
+def _unspan(rows: list[list[tuple[str, bool, int, int]]]) -> list[list[tuple[str, bool]]]:
+    """Markdown tables have no row/column spans. A row-spanning cell is repeated in every row it covers, so
+    each row reads on its own ("Arma 3 v2.00 | Location", not "Location" under the version column); a
+    column-spanning cell keeps its first column and leaves the others empty (titles across the whole table)."""
+    out: list[list[tuple[str, bool]]] = []
+    pending: dict[int, tuple[tuple[str, bool], int]] = {}  # column -> (cell, rows still covered)
+    for row in rows:
+        line: list[tuple[str, bool]] = []
+        cells = iter(row)
+        while True:
+            col = len(line)
+            if col in pending:
+                c, left = pending.pop(col)
+                line.append(c)
+                if left > 1:
+                    pending[col] = (c, left - 1)
+                continue
+            nxt = next(cells, None)
+            if nxt is None:
+                if pending and max(pending) > col:
+                    line.append(("", False))
+                    continue
+                break
+            text, is_th, rowspan, colspan = nxt
+            for k in range(colspan):
+                c = (text if k == 0 else "", is_th)
+                if rowspan > 1:
+                    pending[len(line)] = (c, rowspan - 1)
+                line.append(c)
+        out.append(line)
+    return out
 
 
 def parse_note(t: Template, r: Renderer) -> dict:

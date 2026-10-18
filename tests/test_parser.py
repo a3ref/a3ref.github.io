@@ -4,7 +4,7 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from biwiki import docblock
+from biwiki import docblock, typeexpr
 from biwiki.fetch import load_cache
 from biwiki.parse import parse_page, split_param, syntax_form
 from biwiki.render import page_slug, slug, summary
@@ -19,6 +19,10 @@ def fixture(kind: str, title: str) -> dict:
 
 def command(title: str) -> dict:
     return parse_page(fixture("commands", title), "commands", Renderer(None))
+
+
+def function(title: str) -> dict:
+    return parse_page(fixture("functions", title), "functions", Renderer(None))
 
 
 class WikitextTest(unittest.TestCase):
@@ -46,6 +50,18 @@ class ParamTest(unittest.TestCase):
     def test_split_param(self):
         p = split_param("unit: [[Object]] - (Optional, default objNull) the unit")
         self.assertEqual((p["name"], p["optional"], p["default"], p["description"]), ("unit", True, "objNull", "the unit"))
+
+    def test_optional_in_name(self):
+        p = split_param("instant (Optional, default false):\n* Boolean - when true, animation is instant")
+        self.assertEqual((p["name"], p["optional"], p["default"]), ("instant", True, "false"))
+        p = split_param("expected (Optional, default: nil): Anything - expected type.")
+        self.assertEqual((p["name"], p["optional"], p["default"]), ("expected", True, "nil"))
+        p = split_param("(optional) defaultValue - anything: return this value (Default: nil)")
+        self.assertEqual((p["name"], p["optional"], p["default"]), ("defaultValue", True, "nil"))
+
+    def test_optional_of_array_elements_is_not_the_params(self):
+        p = split_param("pos: Array with [a, b]\n- a: Number\n- b: Number - (Optional, default 0) offset")
+        self.assertEqual((p["optional"], p["default"]), (False, None))
 
     def test_syntax_forms(self):
         f = syntax_form("setPos", "obj setPos pos", [{"name": "obj", "types": ["Object"]}, {"name": "pos", "types": ["Array"]}])
@@ -81,10 +97,69 @@ class PageTest(unittest.TestCase):
         self.assertEqual(rec["name"], "BIS_fnc_spawnGroup")
         self.assertEqual([p["name"] for p in rec["syntaxes"][0]["params"]][:2], ["position", "side"])
 
+    def test_types_listed_below_the_param(self):
+        shadow = next(p for p in command("drawIcon3D")["syntaxes"][0]["params"] if p["name"] == "shadow")
+        self.assertEqual((shadow["type_expr"], shadow["types"]), ("Number | Boolean", ["Number", "Boolean"]))
+        self.assertEqual((shadow["optional"], shadow["default"]), (True, "0"))
+        lines = function("BIS fnc typeText2")["syntaxes"][0]["params"][0]
+        self.assertEqual(lines["type_expr"], "Array<String> | Array<Array<String>>")
+        self.assertFalse(lines["optional"], "the (Optional, ...) of an array element is not the parameter's")
+
+    def test_type_after_dash(self):
+        p = function("BIS fnc dbClassCheck")["syntaxes"][0]["params"][0]  # "databaseArray - [[Array]]: An array ..."
+        self.assertEqual((p["name"], p["type"], p["type_expr"]), ("databaseArray", "Array", "Array"))
+        self.assertFalse(p["description"].startswith("Array"))
+
+    def test_type_from_name_with_optional(self):
+        p = function("BIS fnc animateFlag")["syntaxes"][0]["params"][2]
+        self.assertEqual((p["name"], p["optional"], p["default"], p["type_expr"]), ("instant", True, "false", "Boolean | Number"))
+
+    def test_types_in_a_possible_type_table(self):
+        for title in ("a != b", "a == b"):
+            types = command(title)["syntaxes"][0]["params"][0]["types"]
+            self.assertTrue({"Number", "Side", "Structured Text", "Location", "Boolean"} <= set(types), title)
+
+    def test_docblock_alternatives_with_the_same_name(self):
+        p = function("BIS fnc getCfgDataPool")["syntaxes"][0]["params"][0]  # "_this: CFG" / "_this: ARRAY of STRINGS"
+        self.assertEqual(p["type_expr"], "Config | Array<String>")
+
     def test_placeholder_function_filled_from_docblock(self):
         rec = parse_page(fixture("functions", "BIS fnc taskHandler"), "functions", Renderer(None))
         self.assertTrue(rec["filled_from_docblock"])
         self.assertTrue(rec["description"])
+
+
+class TypeExprTest(unittest.TestCase):
+    def test_wiki_types(self):
+        cases = {
+            "[[Array]] of [[Number]]s": "Array<Number>",
+            "[[Array]] of [[Object]]s": "Array<Object>",
+            "[[Object]] or [[Array]] of [[Object]]s": "Object | Array<Object>",
+            "[[Array]] of [[Array]] of [[Number]]s": "Array<Array<Number>>",
+            "[[Boolean]], [[String]] or [[Array]] of [[String]]s": "Boolean | String | Array<String>",
+            "[[Array]] of [[Object]]s and/or [[Position]]s": "Array<Object | Position>",
+            "[[Color|Color (RGBA)]] or [[Array]] of two [[Color|Color (RGBA)]]": "Color | Array<Color>",
+            "[[Array]] format [[Position]]": "Position",
+            "[[Number]] in range 0..1": "Number",
+            "[[Position#PositionAGL|PositionAGL]] or [[Position#Introduction|Position2D]]": "PositionAGL | Position2D",
+            "[[Object]] or array": "Object | Array",
+            "unit that is inspected": None,
+        }
+        for text, expr in cases.items():
+            self.assertEqual(typeexpr.of_wikitext(text), expr, text)
+
+    def test_header_types(self):
+        self.assertEqual(typeexpr.of_text("ARRAY of STRINGs (Optional)"), "Array<String>")
+        self.assertEqual(typeexpr.of_text("scalar or BOOL"), "Number | Boolean")
+
+    def test_names(self):
+        self.assertEqual(typeexpr.names("Array<Object> | Side"), ["Array", "Object", "Side"])
+
+
+class TableTest(unittest.TestCase):
+    def test_row_and_column_spans(self):
+        md = Renderer(None).md('{|\n! A !! B !! C\n|-\n| rowspan="2" | x || y || z\n|-\n| y2 || z2\n|-\n| colspan="3" | all\n|}')
+        self.assertEqual(md.split("\n")[2:], ["| x | y | z |", "| x | y2 | z2 |", "| all |  |  |"])
 
 
 class DocblockTest(unittest.TestCase):

@@ -51,7 +51,7 @@ class BuildTest(unittest.TestCase):
         for f in ("commands.json", "functions.json", "topics.json", "index.json", "syntax.json", "schema.json"):
             self.assertTrue((self.dataset / f).is_file(), f)
         bundle = (self.dataset / "commands.json").read_text(encoding="utf-8")
-        self.assertEqual(json.loads(bundle)["count"], 7)
+        self.assertEqual(json.loads(bundle)["count"], 9)
         self.assertGreater(bundle.count("\n"), 7, "one record per line keeps git diffs readable")
 
     def test_no_crashes(self):

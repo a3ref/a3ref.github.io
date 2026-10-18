@@ -9,7 +9,7 @@ from urllib.parse import quote
 import mwparserfromhell as mw
 from mwparserfromhell.nodes import Template
 
-from . import docblock
+from . import docblock, typeexpr
 from .wikitext import Renderer, clean_code, game_name, parse_note, parse_wikitext, preprocess
 
 WIKI_URL = "https://community.bistudio.com/wiki/"
@@ -97,13 +97,46 @@ def _balanced_paren(s: str, start: int) -> int:
     return -1
 
 
+def _mask_optional(s: str) -> str:
+    """Blank out a "(Optional, default: x)" group, keeping positions, so its ':' is not a separator."""
+    m = re.search(r"\((?:O|o)ptional", s)
+    if not m:
+        return s
+    j = _balanced_paren(s, m.start())
+    end = j + 1 if j != -1 else len(s)
+    return s[: m.start()] + "x" * (end - m.start()) + s[end:]
+
+
+_SENTENCE_DEFAULT = re.compile(
+    r"\s*\(default(?::|\s+is)?\s+([^()\n]+)\)|(?:^|(?<=[.,;])\s+|\s+-\s+)default(?::|\s+is)\s*([^\n]+?)\.?\s*$", re.I)
+
+
+def _sentence_default(desc: str) -> tuple[str, Optional[str]]:
+    """A default given outside "(Optional, default x)" on the parameter's own line: "... (Default: nil)",
+    "... Default: false", "area radius - default: 50". Returns the description without it, and the default."""
+    own, nl, more = desc.partition("\n")
+    m = _SENTENCE_DEFAULT.search(own)
+    if not m:
+        return desc, None
+    own = (own[: m.start()] + own[m.end() :]).strip()
+    return (own + nl + more).strip(), (m.group(1) or m.group(2)).strip()
+
+
 def split_param(plain: str) -> dict:
     """Heuristically split ``name: Type - (Optional, default x) description``."""
     first, _, more = plain.partition("\n")
     name = type_ = desc = ""
-    m = re.match(r"^\s*([^:]{1,60}?)\s*:\s*(.*)$", first)
+    optional, default = False, None
+    lead = re.match(r"^\s*\((?:O|o)ptional\)\s*", first)  # "(optional) defaultValue - anything: ..."
+    if lead:
+        optional, first = True, first[lead.end():]
+    # "expected (Optional, default: nil): ...": the colon inside the parentheses does not end the name
+    m = re.match(r"^\s*([^:]{1,60}?)\s*:\s*(.*)$", _mask_optional(first))
     if m and " - " not in m.group(1):
-        name, rest = m.group(1), m.group(2)
+        name, rest = first[m.start(1) : m.end(1)], first[m.start(2) :]
+        in_name = re.search(r"\s*(\((?:O|o)ptional.*)$", name)  # "instant (Optional, default false): ..."
+        if in_name:
+            name, rest = name[: in_name.start()], in_name.group(1) + " " + rest
         type_, sep, desc = rest.partition(" - ")
         opt = re.search(r"\((?:O|o)ptional", rest)
         if opt and (not sep or opt.start() < len(type_)):  # "name: Type (Optional, default x) description"
@@ -117,18 +150,21 @@ def split_param(plain: str) -> dict:
         name, _, desc = first.partition(" - ")
     desc = (desc + ("\n" + more if more else "")).strip()
 
-    optional, default = False, None
-    i = desc.find("(Optional")
+    # Only the parameter's own line: "(Optional, ...)" further down belongs to array elements or modes.
+    own = desc.split("\n", 1)[0]
+    i = own.find("(Optional")
     if i == -1:
-        i = desc.find("(optional")
+        i = own.find("(optional")
     if i != -1:
         optional = True
         j = _balanced_paren(desc, i)
         inner = desc[i + 1 : j] if j != -1 else desc[i + 1 :]
-        dm = re.search(r"default(?:s to)?[:\s]+(.*)$", inner, flags=re.S | re.I)
+        dm = re.search(r"default(?:s to|\s+is)?[:\s]+(.*)$", inner, flags=re.S | re.I)
         if dm:
             default = dm.group(1).strip().rstrip(",").strip()
-        desc = (desc[:i] + (desc[j + 1 :] if j != -1 else "")).strip(" -\n")
+        desc = re.sub(r"^[\s:-]+", "", (desc[:i] + (desc[j + 1 :] if j != -1 else "")).strip(" -\n"))
+    if optional and default is None:
+        desc, default = _sentence_default(desc)
     return {
         "name": name.strip(),
         "type": type_.strip() or None,
@@ -161,10 +197,19 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
         params = []
         for pn, pv in _numbered(p, "p"):
             if (n - 1) * PARAMS_PER_SYNTAX < pn <= n * PARAMS_PER_SYNTAX:
+                plain = r.plain_lines(pv)
+                if _NO_PARAM.fullmatch(plain):  # "|p1= -" on pages of functions without parameters
+                    continue
                 md = r.md(pv)
-                item = split_param(r.plain_lines(pv))
-                item["types"] = type_links(pv, has_name=True)
-                item["description"] = _md_desc(md, item)
+                item = split_param(plain)
+                head = type_head(pv, has_name=True)
+                item["types"] = type_links(head)
+                item["type_expr"] = typeexpr.of_wikitext(head)
+                type_md = r.md(head).strip() if _type_after_dash(item, r.plain(head)) else None
+                if not item["types"] and not item["type"]:
+                    item["type_expr"] = _listed_types(pv) or _table_types(plain)
+                    item["types"] = typeexpr.names(item["type_expr"])
+                item["description"] = _md_desc(md, item, type_md)
                 item["since"] = _text(p, f"p{pn}since") or None
                 item["text"] = md
                 params.append(item)
@@ -306,7 +351,8 @@ def _fill_from_docblock(header: dict, name: str, syntaxes: list[dict], examples:
         ret = syntaxes[0]["returns"]
         if not ret or not ret["text"].strip():
             types = header["returns"]["types"]
-            syntaxes[0]["returns"] = {"type": ", ".join(types) or None, "types": types, "description": None,
+            syntaxes[0]["returns"] = {"type": ", ".join(types) or None, "types": types,
+                                      "type_expr": header["returns"]["type_expr"], "description": None,
                                       "text": header["returns"]["text"], "source": "docblock"}
             filled.append("returns")
     if header["examples"] and not examples:
@@ -321,6 +367,7 @@ def _header_param(hp: dict) -> dict:
         "name": hp["name"] or (f"param{hp['index']}" if hp["index"] is not None else "arg"),
         "type": ", ".join(hp["types"]) or None,
         "types": hp["types"],
+        "type_expr": hp["type_expr"],
         "optional": hp["optional"],
         "default": hp["default"],
         "description": hp["description"],
@@ -377,13 +424,21 @@ def split_sections(md: str) -> list[dict]:
     return out
 
 
-def _md_desc(md: str, item: dict) -> Optional[str]:
-    """The Markdown variant of the description: everything after the ' - ' type separator."""
+def _md_desc(md: str, item: dict, type_md: Optional[str] = None) -> Optional[str]:
+    """The Markdown variant of the description: everything after the ' - ' type separator.
+
+    ``type_md``: the rendered type when the first line is ``name - Type: description`` or
+    ``name - Type - description``; the description is what follows it.
+    """
     if not item["description"]:
         return None
     first, _, more = md.partition("\n")
     opt = re.search(r"\((?:O|o)ptional", first)
-    if " - " in first:
+    after_name = first.find(item["name"]) + len(item["name"]) if item["name"] and item["name"] in first else 0
+    at = first.find(type_md, after_name) if type_md else -1  # after the name: "databaseArray - Array: ..."
+    if at != -1:
+        head = re.sub(r"^[\s:-]+", "", first[at + len(type_md) :])
+    elif " - " in first:
         head = first.split(" - ", 1)[1]
     elif opt and item["type"]:
         head = first[opt.start() :]
@@ -394,7 +449,8 @@ def _md_desc(md: str, item: dict) -> Optional[str]:
         i = desc.lower().find("(optional")
         j = _balanced_paren(desc, i) if i != -1 else -1
         if i != -1 and j != -1:
-            desc = (desc[:i] + desc[j + 1 :]).strip(" -\n")
+            desc = re.sub(r"^[\s:-]+", "", (desc[:i] + desc[j + 1 :]).strip(" -\n"))
+        desc = _sentence_default(desc)[0]
     return desc or None
 
 
@@ -402,32 +458,114 @@ def _returns(code, r: Renderer) -> dict:
     md = r.md(code)
     plain = r.plain(code)
     type_, sep, desc = plain.partition(" - ")
+    head = type_head(code, has_name=False)
+    types, expr = type_links(head), typeexpr.of_wikitext(head)
+    if not expr:
+        expr = _listed_types(code, from_first=True)
+        types = types or typeexpr.names(expr)
     return {
         "type": type_.strip() if sep or len(plain) < 60 else None,
-        "types": type_links(code, has_name=False),
+        "types": types,
+        "type_expr": expr,
         "description": desc.strip() or None,
         "text": md,
     }
 
 
-def type_links(code, has_name: bool) -> list[str]:
-    """Data types linked in the type part of ``name: [[Array]] of [[String]]s - description``.
+def _mask_links(s: str) -> str:
+    """Blank out [[links]] so ':' and ' - ' inside them are not taken for separators."""
+    return re.sub(r"\[\[.*?\]\]", lambda m: "x" * len(m.group(0)), s)
 
-    A link with an anchor is named by its text (``[[Position#PositionAGL|PositionAGL]]`` -> PositionAGL).
+
+def type_head(code, has_name: bool) -> str:
+    """Wikitext of the type part of the first line.
+
+    ``name: [[Array]] of [[String]]s - description`` and ``name - [[Array]]: description`` both give
+    ``[[Array]] of [[String]]s`` / ``[[Array]]``; in ``name - description`` the dash form has no type.
     """
     first = str(code).strip().split("\n", 1)[0]
     if has_name:
-        first = first.split(":", 1)[1] if ":" in first.split("[[", 1)[0] else first
+        skeleton = _mask_optional(first)
+        masked = _mask_links(skeleton)
+        colon, dash = masked.find(":"), masked.find(" - ")
+        rest = first[dash + 3 :] if dash != -1 else ""
+        tokens = typeexpr.wiki_tokens(rest) if rest else []
+        if (dash != -1 and (colon == -1 or dash < colon) and "[[" not in first[:dash]
+                and tokens and tokens[0].kind == "type"):
+            first = rest
+        elif colon != -1 and ":" in skeleton.split("[[", 1)[0]:
+            # "position: - [[Object]] ...", "'''text:''': [[String]] ..."
+            first = re.sub(r"^[\s']*:?\s*(?:-\s+)?", "", first[colon + 1 :])
+        elif named := re.match(r"^\s*(?:'''|'')?\w+(?:'''|'')?\s+(?=\[\[)", first):
+            first = first[named.end() :]  # "oldUnit [[Object]] - old, dead unit"
     head = re.split(r" - |\((?:O|o)ptional", first, maxsplit=1)[0]
+    # "name - [[Array]]: description"; a return value's colon is part of the type ("[[Array]]: [[Number]]s")
+    colon = _mask_links(head).find(":") if has_name else -1
+    return head[:colon] if colon != -1 and typeexpr.of_wikitext(head[:colon]) else head
+
+
+def type_links(head) -> list[str]:
+    """Data types linked in a type part (see type_head): ``[[Array]] of [[String]]s`` -> Array, String.
+
+    A link with an anchor is named by its text (``[[Position#PositionAGL|PositionAGL]]`` -> PositionAGL).
+    """
     out = []
-    for link in parse_wikitext(head).filter_wikilinks():
-        target = str(link.title).strip().lstrip(":").replace("_", " ")
-        if target.lower().startswith(("category:", "file:", "image:")):
-            continue
-        name = str(link.text).strip() if link.text is not None and "#" in target else target.split("#")[0]
+    for link in parse_wikitext(str(head)).filter_wikilinks():
+        name = typeexpr.link_type(link)
         if name and name not in out:
             out.append(name)
     return out
+
+
+_NO_PARAM = re.compile(r"\s*(-|none|nothing|n/a)\.?\s*", re.I)
+_LIST_ITEM = re.compile(r"^\s*(?:\*(?![*:#])|<br\s*/?>)\s*(.*)$")
+
+
+def _listed_types(code, from_first: bool = False) -> Optional[str]:
+    """Types given as a list below an untyped first line, one alternative per item::
+
+        shadow: (Optional, default 0)
+        * [[Number]]: ...
+        ** '''0:''' no shadow
+        * [[Boolean]]: ...
+
+    Only top-level items that start with a type count; items about values ("* "SET" - ...") do not.
+    ``from_first``: the list may start on the first line (return values have no name line).
+    """
+    exprs = []
+    for line in str(code).strip().split("\n")[0 if from_first else 1 :]:
+        m = _LIST_ITEM.match(line)
+        if m:
+            exprs.append(typeexpr.of_wikitext(m.group(1)))
+    return typeexpr.union([e for e in exprs if e])
+
+
+def _table_types(plain: str) -> Optional[str]:
+    """Types listed in a "Possible Type" table (operator pages such as ``a == b``): its column or its row."""
+    rows = [[c.strip() for c in line.strip().strip("|").split(" | ")] for line in plain.split("\n")
+            if line.startswith("|") and not line.startswith("|---")]
+    label = re.compile(r"(possible )?types?", re.I)
+    cells: list[str] = []
+    if rows and any(label.fullmatch(c) for c in rows[0]):
+        col = next(i for i, c in enumerate(rows[0]) if label.fullmatch(c))
+        cells = [r[col] for r in rows[1:] if col < len(r)]
+    else:
+        cells = next((r[1:] for r in rows if r and label.fullmatch(r[0])), [])
+    return typeexpr.union([c for c in cells if c and re.fullmatch(r"[A-Z][\w ]*", c)])
+
+
+def _type_after_dash(item: dict, head_plain: str) -> bool:
+    """``name - Type: description``, ``name - Type - description`` and ``name: Color (RGBA)``: split_param read
+    the type as the start of the description; move it to ``type``. Returns whether it did, so the Markdown
+    description is cut too."""
+    desc = item["description"] or ""
+    if item["type"] or not item["type_expr"] or not head_plain or not desc.startswith(head_plain):
+        return False
+    if re.search(r"\.(\s|$)", head_plain):  # "Object the logic. Possible setVariable parameters": prose
+        return False
+    item["type"] = head_plain
+    item["description"] = desc[len(head_plain) :].lstrip(" :-\n") or None
+    return True
 
 
 def syntax_form(title: str, syntax: str, params: list[dict]) -> dict:
