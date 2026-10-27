@@ -32,6 +32,7 @@ CSP = ("default-src 'self' {origin}; script-src 'self' {origin} {hashes}; style-
 
 PRELOAD = ["jetbrains-mono-latin-600-normal", "jetbrains-mono-latin-400-normal"]  # text uses the system font
 THEME_COLOR = ("#ffffff", "#16181d")  # light, dark
+GOOGLE_SITE_VERIFICATION = "HHNWP8LwEWplPR4MXkhdQW79itoiuehWhhxliCgXj5Y"  # Search Console ownership; checked on the home page only
 
 LOCALITY_HELP = {
     ("argument", "local"): ("Local argument", "Arguments must be local to the machine running the command."),
@@ -505,7 +506,8 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
                          description="Every Arma 3 scripting command, BIS_fnc function and concept page from the Bohemia "
                                      "Interactive Community Wiki, updated daily, as HTML, Markdown and JSON.",
                          header=header, main=main, crumbs=[("Home", "index.html")], jsonld=[website],
-                         extra_head='<link rel="alternate" type="application/atom+xml" title="Wiki edits" href="feed.xml">\n',
+                         extra_head=f'<meta name="google-site-verification" content="{GOOGLE_SITE_VERIFICATION}">\n'
+                                    '<link rel="alternate" type="application/atom+xml" title="Wiki edits" href="feed.xml">\n',
                          footer=_site_footer(generated), page_class="page-home", og_type="website")
         (self.out / "index.html").write_text(doc, encoding="utf-8")
 
