@@ -63,6 +63,14 @@ class WikitextTest(unittest.TestCase):
         self.assertEqual(self.md("''Caliber<br />Rounds''"), "*Caliber\nRounds*")  # <br> is no line end here
         self.assertEqual(self.md("{{hl|'''name''' {{=}} 1}}"), "`name = 1`")
 
+    def test_list_marks_that_do_not_start_a_line(self):
+        # template arguments inside code and table cell text after "|" continue a line on the wiki
+        self.assertEqual(self.md("Always {{hl|*/*}}, then {{hl|#login}} and <code>#define X</code>"),
+                         "Always `*/*`, then `#login` and `#define X`")
+        self.assertEqual(self.md("a {{hl|;}} or {{hl|&nbsp;}} (space)"), "a `;` or ` ` (space)")
+        self.assertEqual(self.md('{| class="wikitable"\n! Key\n|-\n| * (numpad)\n|-\n|\n* a list\n|}'),
+                         "| Key |\n|---|\n| * (numpad) |\n| - a list |")
+
     def test_unknown_tags_are_text(self):
         self.assertEqual(self.md('{{hl|bone {{=}} "<string>"}} in <GroundContacts>'), '`bone = "<string>"` in <GroundContacts>')
 

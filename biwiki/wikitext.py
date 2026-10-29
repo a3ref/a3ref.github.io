@@ -201,11 +201,12 @@ class Renderer:
     """Stateless-per-call converter; ``unknown`` collects templates/tags it had no rule for."""
 
     def __init__(self, resolve: Optional[LinkResolver] = None, page_title: str = "", preformat: bool = True,
-                 emphasis: bool = True):
+                 emphasis: bool = True, inline: bool = False):
         self.resolve = resolve or (lambda title, anchor: None)
         self.page_title = page_title
         self.preformat = preformat  # off where the result is a single line or already code
         self.emphasis = emphasis  # off for the text of inline code, where "**" would show as is
+        self.inline = inline  # the text continues a line (see _finish)
         self.unknown: Counter = Counter()
 
     # ---- public API -------------------------------------------------------------------------
@@ -241,11 +242,13 @@ class Renderer:
         slots.append(content)
         return f"{len(slots) - 1}"
 
-    def _finish(self, text: str, slots: list[str]) -> str:
+    def _finish(self, text: str, slots: list[str], inline: bool = False) -> str:
+        """``inline``: the piece continues a line, as a template argument inside <code> or a table cell's text
+        after its "|" does, so its first line is no line start: {{hl|*/*}} and | * (numpad) are no lists."""
         text = MAGIC_WORDS.sub("", text)
         text = self._preformatted(text, slots)
         # lists and emphasis work on source lines: a <br> is no line start, and ''...<br>...'' is one span
-        text = self._lists(text)
+        text = self._lists(text, skip_first=inline or self.inline)
         text = "\n".join(_styles(line) for line in text.split("\n")).replace(STAR, "*" if self.emphasis else "")
         text = text.replace(BR, "\n").replace(BLOCK, "")
         # We never emit images, so "![" is always text such as SQF "!" before a link ("![[alive]]" -> "!alive").
@@ -304,10 +307,11 @@ class Renderer:
         flush()
         return "\n".join(out)
 
-    def _block(self, code, slots: list[str]) -> str:
-        """Render a nested piece as an independent, finished Markdown block."""
+    def _block(self, code, slots: list[str], inline: bool = False) -> str:
+        """Render a nested piece as an independent, finished Markdown block (``inline``: see _finish)."""
         inner: list[str] = []
-        return self._finish(self._nodes(code.nodes if hasattr(code, "nodes") else parse_wikitext(str(code)).nodes, inner), inner)
+        nodes = code.nodes if hasattr(code, "nodes") else parse_wikitext(str(code)).nodes
+        return self._finish(self._nodes(nodes, inner), inner, inline)
 
     def _nodes(self, nodes, slots: list[str]) -> str:
         return "".join(self._node(n, slots) for n in nodes)
@@ -411,6 +415,8 @@ class Renderer:
             return "="
         if key in ("hl", "cc"):
             code = html.unescape(self._plain_inner(pos[0].value) if pos else "")
+            if not code and pos and str(pos[0].value).strip():  # {{hl|&nbsp;}}: the rendering trimmed the space
+                code = " "
             if key == "cc":
                 code = "// " + code
             return self._slot(slots, _inline_code(code))
@@ -505,7 +511,7 @@ class Renderer:
         return arg(0)
 
     def _plain_inner(self, code) -> str:
-        r = Renderer(None, self.page_title, preformat=False, emphasis=False)
+        r = Renderer(None, self.page_title, preformat=False, emphasis=False, inline=True)
         out = r.md(code)
         self.unknown.update(r.unknown)
         # Inline code must not contain Markdown wrapping from nested code spans.
@@ -690,7 +696,7 @@ class Renderer:
             return max(1, min(int(m.group(1)), 50)) if m else 1
 
         def cell(node: Tag) -> tuple[str, bool, int, int]:
-            text = self._block(node.contents, []) if node.contents else ""
+            text = self._block(node.contents, [], inline=True) if node.contents else ""
             text = text.replace("\n\n", "<br>").replace("\n", "<br>").replace("|", "\\|")
             return text.strip(), str(node.tag).lower() == "th", span(node, "rowspan"), span(node, "colspan")
 
@@ -724,10 +730,10 @@ class Renderer:
 
     # ---- wiki list lines -> Markdown -------------------------------------------------------
 
-    def _lists(self, text: str) -> str:
+    def _lists(self, text: str, skip_first: bool = False) -> str:
         out = []
-        for line in text.split("\n"):
-            m = _LIST_LINE.match(line)
+        for i, line in enumerate(text.split("\n")):
+            m = None if skip_first and i == 0 else _LIST_LINE.match(line)
             if not m:
                 out.append(line)
                 continue
@@ -900,6 +906,8 @@ def _quote(body: str, alert: Optional[str] = None, label: Optional[str] = None) 
 
 
 def _inline_code(code: str) -> str:
+    if code and not code.strip():  # {{hl|&nbsp;}}: a space shown as code
+        return "` `"
     code = re.sub(r"\s*\n\s*", " ", code).strip()
     if not code:
         return ""
