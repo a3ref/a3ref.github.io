@@ -11,20 +11,13 @@
 from __future__ import annotations
 
 import unittest
-from dataclasses import dataclass
+from dataclasses import replace
 
 from biwiki.mediawiki.config import TEST, Config
 from biwiki.mediawiki.ext import cite
 from biwiki.mediawiki.parser import Parser
 from biwiki.mediawiki.parseroutput import get_text
 from biwiki.mediawiki.site import test_site
-
-
-@dataclass(frozen=True)
-class CiteConfig(Config):
-    """The test Config with Cite's settings ($wgCiteBookReferencing, $wgCiteResponsiveReferences)."""
-    cite_book_referencing: bool = False
-    cite_responsive_references: bool = True
 
 
 def _parser(config: Config = TEST) -> Parser:
@@ -86,14 +79,14 @@ class CiteTest(unittest.TestCase):
     def test_responsive_off(self):
         html = _render('<ref>x</ref>\n<references responsive="0" />')
         self.assertNotIn("mw-references-wrap", html)
-        html = _render("<ref>x</ref>", _parser(CiteConfig(**vars(TEST), cite_responsive_references=False)))
+        html = _render("<ref>x</ref>", _parser(replace(TEST, cite_responsive_references=False)))
         self.assertNotIn("mw-references-wrap", html)
 
     def test_book_referencing(self):
         wikitext = '<ref name="a">book</ref>\n<ref extends="a">page 2</ref>'
         html = _render(wikitext)
         self.assertIn("invalid names, e.g. too many", html)
-        parser = _parser(CiteConfig(**vars(TEST), cite_book_referencing=True))
+        parser = _parser(replace(TEST, cite_book_referencing=True))
         html = _render(wikitext, parser)
         self.assertIn('<a href="#cite_note-2">&#91;1.1&#93;</a>', html)
         self.assertIn('<ol class="mw-extended-references">', html)
