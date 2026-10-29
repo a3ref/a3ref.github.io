@@ -163,12 +163,70 @@ class Result:
     error: str = ""
 
 
+# Test options and !! config settings -> Config fields (ParserTestRunner::perTestSetup())
+_SETTINGS = {
+    "wgrawhtml": "raw_html", "wgallowexternalimages": "allow_external_images", "wgmaxtoclevel": "max_toc_level",
+    "wglinkholderbatchsize": "link_holder_batch_size", "wgenableuploads": "enable_uploads",
+    "wgallowexternalimagesfrom": "allow_external_images_from", "wgenableimagewhitelist": "enable_image_whitelist",
+    "wgexternallinktarget": "external_link_target", "wgnofollowlinks": "no_follow_links",
+    "wgfragmentmode": "fragment_mode", "wgallowimagetag": "allow_image_tag", "wgcapitallinks": "capital_links",
+    "wgmaxtemplatedepth": "max_template_depth", "wgmaxppnodecount": "max_pp_node_count",
+    "wgmaxppexpanddepth": "max_pp_expand_depth", "wgexpensiveparserfunctionlimit": "expensive_parser_function_limit",
+}
+
+
+def _php_value(text: str):
+    """A PHP or JSON literal of a test setting: true/false/null, numbers, quoted strings, [ ... ] and { ... }."""
+    import json
+
+    text = text.strip().rstrip(";")
+    low = text.lower()
+    if low in ("true", "false", "null"):
+        return {"true": True, "false": False, "null": None}[low]
+    if re.fullmatch(r"-?\d+", text):
+        return int(text)
+    if text[:1] in "\"'" and text[-1:] == text[:1]:
+        return text[1:-1]
+    if text.startswith(("[", "{")):
+        try:
+            return json.loads(text)
+        except ValueError:
+            items = [_php_value(x) for x in re.findall(r"'[^']*'|\"[^\"]*\"|[^,\[\]\s]+", text)]
+            return tuple(items)
+    return text
+
+
+def test_config(test: ParserTest):
+    """The settings a test runs with: the parser-test defaults, its options and its !! config section."""
+    from .config import TEST
+
+    changes: dict[str, object] = {}
+    settings = {k: v for k, v in test.options.items() if k.startswith("wg") or k == "thumbsize"}
+    for line in test.sections.get("config", "").split("\n"):
+        if "=" in line:
+            name, _, value = line.partition("=")
+            settings[name.strip().lower()] = _php_value(value)
+    for name, value in settings.items():
+        if isinstance(value, str) and name != "thumbsize":
+            value = _php_value(value)
+        if name == "wgenablemagiclinks":
+            changes["enable_magic_links"] = {"ISBN": True, "PMID": True, "RFC": True, **(value or {})}
+        elif name == "thumbsize":
+            changes["thumb_limits"] = (0, 0, 0, 0, 0, int(value))
+        elif name in _SETTINGS:
+            if isinstance(value, list):
+                value = tuple(value)
+            changes[_SETTINGS[name]] = value
+    return TEST.with_(**changes) if changes else TEST
+
+
 def run_test(test: ParserTest, articles: dict[str, str]) -> Result:
     from .parser import parse
 
     title = test.options.get("title", DEFAULT_TITLE)
     try:
-        actual = parse(test.wikitext or "", title=title if isinstance(title, str) else DEFAULT_TITLE, pages=articles)
+        actual = parse(test.wikitext or "", title=title if isinstance(title, str) else DEFAULT_TITLE, pages=articles,
+                       config=test_config(test))
     except Exception as e:  # noqa: BLE001 - a crash is a failed test, reported with the rest
         return Result(test, False, error=f"{type(e).__name__}: {e}")
     actual = re.sub(r"\s+$", "", actual)  # as ParserTestRunner does
