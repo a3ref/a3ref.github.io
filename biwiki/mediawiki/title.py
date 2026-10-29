@@ -321,7 +321,9 @@ def wf_expand_url(url: str, site: Site, default_proto: Union[str, int, None, boo
             url = default_proto_without_slashes + server_url + url
     m = _URL_PARTS.match(url)
     if m:
-        return m.group(1) + remove_dot_segments(m.group(2)) + m.group(3)
+        # wfAssembleUrl() leaves out an empty query: "http://x/a?" becomes "http://x/a"
+        rest = re.sub(r"^\?(?=#|$)", "", m.group(3))
+        return m.group(1) + remove_dot_segments(m.group(2)) + rest
     return url
 
 

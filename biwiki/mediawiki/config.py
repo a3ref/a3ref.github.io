@@ -57,6 +57,8 @@ class Config:
     max_article_size: int = 2048  # kibibytes
     max_include_size: Optional[int] = None  # ParserOptions maxIncludeSize in bytes; None: max_article_size * 1024
     remove_comments: bool = True  # ParserOptions removeComments
+    interwiki_magic: bool = True  # ParserOptions interwikiMagic: interlanguage links go to the language links
+    extra_interlanguage_link_prefixes: tuple[str, ...] = ()  # $wgExtraInterlanguageLinkPrefixes
     link_holder_batch_size: int = 1000
     localtimezone: str = "UTC"
 
@@ -89,6 +91,7 @@ TEST = Config(
     enable_magic_links={"ISBN": True, "PMID": True, "RFC": True},
     thumb_limits=(0, 0, 0, 0, 0, 180),
     max_toc_level=999,
+    extra_interlanguage_link_prefixes=("mul",),
 )
 
 # The Bohemia Interactive Community wiki (meta=siteinfo, 2026-10-29/30, saved in biki_siteinfo.json): titles are case

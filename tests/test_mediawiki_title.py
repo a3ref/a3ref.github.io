@@ -646,6 +646,10 @@ class SiteTest(unittest.TestCase):
         self.assertEqual(t("Foo#a b").fragment_for_url, "#a_b")
         self.assertEqual(t("Foo#ä").fragment_for_url, "#.C3.A4")  # legacy fragment mode in the parser tests
         self.assertEqual(t("en:Foo").get_full_url(), "//en.wikipedia.org/wiki/Foo")
+        # An empty title leaves an empty query, which wfExpandUrl() drops (parser test "Inline interwiki link with
+        # empty title (T4372)")
+        self.assertEqual(t("MeatBall:").get_link_url(), "http://www.usemod.com/cgi-bin/mb.pl")
+        self.assertEqual(t("meatball:#x").get_link_url(), "http://www.usemod.com/cgi-bin/mb.pl#x")
 
     def test_biki_site(self):
         site = biki_site()

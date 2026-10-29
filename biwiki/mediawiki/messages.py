@@ -21,6 +21,8 @@ MESSAGES = {
     "showtoc": "show",
     "hidetoc": "hide",
     "editsection": "edit",
+    "editsectionhint": "Edit section: $1",
+    "pipe-separator": "&#32;|&#32;",
 }
 
 

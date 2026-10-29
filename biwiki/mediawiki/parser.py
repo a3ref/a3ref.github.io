@@ -25,6 +25,7 @@ from .blocklevel import do_block_levels
 from .config import DEFAULT, Config
 from .linker import make_external_image, make_external_link, matches_domain_list, split_trail, valid_absolute_protocols, valid_protocols
 from .messages import msg
+from .parser_links import LinksMixin
 from .parser_preprocess import OT_HTML, PreprocessingMixin
 from .magicword import FACTORY, MagicWordFactory
 from .quotes import handle_all_quotes
@@ -62,6 +63,11 @@ class ParserOutput:
     categories: dict[str, str] = field(default_factory=dict)  # category name -> sort key
     indicators: dict[str, str] = field(default_factory=dict)
     display_title: str = ""
+    links: dict[int, dict[str, int]] = field(default_factory=dict)  # namespace -> DB key -> page ID (0: missing)
+    links_special: dict[str, int] = field(default_factory=dict)
+    interwiki_links: dict[str, dict[str, int]] = field(default_factory=dict)  # prefix -> DB key -> 1
+    language_links: list[str] = field(default_factory=list)
+    images: dict[str, int] = field(default_factory=dict)
 
     def add_warning_msg(self, key: str, *params) -> None:
         self.warnings.append((key, *params))
@@ -75,7 +81,7 @@ class ParserOutput:
             self.templates.append(title)
 
 
-class Parser(PreprocessingMixin):
+class Parser(LinksMixin, PreprocessingMixin):
     def __init__(self, pages: Optional[Mapping[str, str]] = None, config: Config = DEFAULT, site=None,
                  magic_words: MagicWordFactory = FACTORY):
         from .site import Site
@@ -105,6 +111,7 @@ class Parser(PreprocessingMixin):
         self.double_underscores = {}
         self.show_toc, self.force_toc_position = True, False
         self.autonumber = 0
+        self.clear_link_state()
         self._init_preprocessing(OT_HTML, text=text)
         text = self.internal_parse(text)
         text = self.internal_parse_half_parsed(text, True, True)
@@ -132,7 +139,7 @@ class Parser(PreprocessingMixin):
         text = re.sub(r"(^|\n)-----*", r"\1<hr />", text)
         text = self.handle_double_underscore(text)
         text = self.handle_headings(text)
-        # TODO: handleInternalLinks
+        text = self.handle_internal_links(text)
         text = handle_all_quotes(text)
         text = self.handle_external_links(text)
         # handleInternalLinks may sometimes leave behind absolute URLs, which have to be masked to hide them from
@@ -145,7 +152,8 @@ class Parser(PreprocessingMixin):
     def internal_parse_half_parsed(self, text: str, is_main: bool = True, linestart: bool = True) -> str:
         text = self.strip_state.unstrip_general(text)
         text = do_block_levels(text, linestart)
-        # TODO: replaceLinkHoldersPrivate; the language converter is a no-op for English
+        text = self.replace_link_holders_private(text)
+        # the language converter is a no-op for English
         text = self.strip_state.unstrip_no_wiki(text)
         text = self.strip_state.unstrip_general(text)
         # TODO: tidy (RemexHtml) with Sanitizer::armorFrenchSpaces
