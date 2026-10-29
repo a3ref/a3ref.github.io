@@ -1,9 +1,12 @@
 # Ported from MediaWiki 1.39 includes/language/Language.php (https://www.mediawiki.org/), (C) MediaWiki
 # contributors: Language::sprintfDate(), dateTimeObjFormat(), tsToIranian(), tsToHijri(), tsToHebrew(),
 # hebrewYearStart(), tsToYear(), romanNumeral(), hebrewNumeral(), and the calendar month name messages; with the
-# behaviour of PHP's DateTime constructor (timelib, by Derick Rethans) for the date strings #time accepts.
-# Changed by a3ref contributors on 2026-10-30: translated to Python; English only; DateTime::format() and the
-# DateTime parser are re-implemented for the formats listed in parse_datetime() (not a translation of timelib).
+# date strings of PHP's DateTime constructor after timelib as bundled with PHP 8.1 (ext/date/lib/parse_date.re,
+# tm2unixtime.c; (C) Derick Rethans, MongoDB, Inc.; MIT license, notice below) and php_date.c.
+# Changed by a3ref contributors on 2026-10-30: translated to Python; English only; DateTime::format() is
+# re-implemented for the characters sprintfDate() passes on (PHP 8.1 output); timelib's re2c scanner is rebuilt
+# with Python regular expressions (longest match, first rule on a tie), its rules, helper functions,
+# timelib_fill_holes() and timelib_update_ts() translated; time zones from Python's zoneinfo.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -18,6 +21,7 @@ import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone, tzinfo
+from functools import lru_cache
 from typing import Optional
 
 from ..messages import msg
@@ -145,12 +149,12 @@ def php_date_format(dt: datetime, code: str) -> str:
     if code == "P":
         return _offset(dt, True)
     if code == "T":
-        if dt.tzinfo is timezone.utc:
+        # the abbreviation of a zone identifier (tzdata's, e.g. "CET" or "+04"); "GMT+0100" for a bare offset
+        if dt.tzinfo is None or dt.tzinfo is timezone.utc:
             return "UTC"
-        name = dt.tzname()
-        if not name or re.fullmatch(r"[+-]\d+", name) or name.startswith("UTC") and name != "UTC":
-            return _offset(dt, True)
-        return name
+        if getattr(dt.tzinfo, "key", None):
+            return dt.tzname() or _offset(dt, True)
+        return "GMT" + _offset(dt, False)
     raise ValueError(f"unsupported date format character {code!r}")
 
 
@@ -432,11 +436,6 @@ def _php_mod(a: int, b: int) -> int:
     """PHP's %: the sign of the dividend"""
     r = abs(a) % abs(b)
     return -r if a < 0 else r
-
-
-def _php_int_div(a: float) -> int:
-    """(int) of a division: truncation toward zero"""
-    return int(a)
 
 
 def ts_to_hijri(ts: str) -> list[int]:
@@ -745,6 +744,27 @@ def hebrew_numeral(num) -> str:
 # ======================================================================================================================
 # new DateTime( $text, $zone )
 # ======================================================================================================================
+# timelib (ext/date/lib in PHP 8.1), from which the scanner rules and the date arithmetic below are translated:
+#
+#   The MIT License (MIT)
+#
+#   Copyright (c) 2015-2019 Derick Rethans
+#   Copyright (c) 2018 MongoDB, Inc.
+#
+#   Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+#   documentation files (the "Software"), to deal in the Software without restriction, including without
+#   limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the
+#   Software, and to permit persons to whom the Software is furnished to do so, subject to the following
+#   conditions:
+#
+#   The above copyright notice and this permission notice shall be included in all copies or substantial portions
+#   of the Software.
+#
+#   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+#   TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+#   THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+#   CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+#   DEALINGS IN THE SOFTWARE.
 
 
 class YearOutOfRange(ValueError):
@@ -755,352 +775,1030 @@ class YearOutOfRange(ValueError):
         self.year = year
 
 
-_MONTHS = {name.lower(): i + 1 for i, name in enumerate(MONTH_NAMES)}
-_MONTHS.update({name[:3].lower(): i + 1 for i, name in enumerate(MONTH_NAMES)})
-_MONTHS["sept"] = 9
-_MONTH_RE = "(" + "|".join(sorted(_MONTHS, key=len, reverse=True)) + r")\.?"
-_WEEKDAYS = {name.lower(): i for i, name in enumerate(WEEKDAY_NAMES)}  # 0 = Sunday
-_WEEKDAYS.update({name[:3].lower(): i for i, name in enumerate(WEEKDAY_NAMES)})
-_WEEKDAYS.update({"tues": 2, "wednes": 3, "thur": 4, "thurs": 4})
-_WEEKDAY_RE = "(" + "|".join(sorted(_WEEKDAYS, key=len, reverse=True)) + ")"
-_UNITS = {"sec": "s", "secs": "s", "second": "s", "seconds": "s", "min": "i", "mins": "i", "minute": "i",
-          "minutes": "i", "hour": "h", "hours": "h", "day": "d", "days": "d", "week": "w", "weeks": "w",
-          "fortnight": "f", "fortnights": "f", "forthnight": "f", "month": "m", "months": "m", "year": "y",
-          "years": "y", "weekday": "wd", "weekdays": "wd"}
-_UNIT_RE = "(" + "|".join(sorted(_UNITS, key=len, reverse=True)) + ")"
-_RELTEXT = {"next": 1, "last": -1, "previous": -1, "this": 0, "first": 1, "second": 2, "third": 3, "fourth": 4,
-            "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10, "eleventh": 11,
-            "twelfth": 12}
-_RELTEXT_RE = "(" + "|".join(sorted(_RELTEXT, key=len, reverse=True)) + ")"
-# Time zone abbreviations (a part of timelib's table) -> offset in minutes
-_TZ_ABBR = {
-    "utc": 0, "gmt": 0, "ut": 0, "z": 0, "wet": 0, "west": 60, "bst": 60, "cet": 60, "cest": 120, "met": 60,
-    "mest": 120, "eet": 120, "eest": 180, "msk": 180, "ist": 330, "est": -300, "edt": -240, "cst": -360,
-    "cdt": -300, "mst": -420, "mdt": -360, "pst": -480, "pdt": -420, "akst": -540, "akdt": -480, "hst": -600,
-    "jst": 540, "kst": 540, "aest": 600, "aedt": 660, "acst": 570, "awst": 480, "nzst": 720, "nzdt": 780,
+_SPECIAL_WEEKDAY = 0x01
+_SPECIAL_DAY_OF_WEEK_IN_MONTH = 0x02
+_SPECIAL_LAST_DAY_OF_WEEK_IN_MONTH = 0x03
+_SPECIAL_FIRST_DAY_OF_MONTH = 0x01
+_SPECIAL_LAST_DAY_OF_MONTH = 0x02
+_TIME_PART_DONT_KEEP = 0x00
+_TIME_PART_KEEP = 0x01
+_MAX_ABBR_LEN = 6  # _POSIX_TZNAME_MAX
+
+# timelib_relunit_lookup: word -> (unit, multiplier); units are the timelib_rel_time fields, "weekday" and
+# "special"
+_RELUNITS: dict[str, tuple[str, int]] = {
+    "ms": ("us", 1000), "msec": ("us", 1000), "msecs": ("us", 1000), "millisecond": ("us", 1000),
+    "milliseconds": ("us", 1000), "µs": ("us", 1), "usec": ("us", 1), "usecs": ("us", 1), "µsec": ("us", 1),
+    "µsecs": ("us", 1), "microsecond": ("us", 1), "microseconds": ("us", 1),
+    "sec": ("s", 1), "secs": ("s", 1), "second": ("s", 1), "seconds": ("s", 1),
+    "min": ("i", 1), "mins": ("i", 1), "minute": ("i", 1), "minutes": ("i", 1),
+    "hour": ("h", 1), "hours": ("h", 1),
+    "day": ("d", 1), "days": ("d", 1), "week": ("d", 7), "weeks": ("d", 7),
+    "fortnight": ("d", 14), "fortnights": ("d", 14), "forthnight": ("d", 14), "forthnights": ("d", 14),
+    "month": ("m", 1), "months": ("m", 1), "year": ("y", 1), "years": ("y", 1),
+    "weekday": ("special", _SPECIAL_WEEKDAY), "weekdays": ("special", _SPECIAL_WEEKDAY),
 }
-_TZ_ABBR_RE = "(" + "|".join(sorted(_TZ_ABBR, key=len, reverse=True)) + ")"
-_WS = r"[ \t,]*"
-_SEP = r"[ \t.,-]*"
+for _i, _name in enumerate(WEEKDAY_NAMES):  # 0 = Sunday
+    for _word in (_name.lower() + "s", _name.lower(), _name[:3].lower()):
+        _RELUNITS[_word] = ("weekday", _i)
+del _i, _name, _word
+# timelib_reltext_lookup: word -> (value, behavior)
+_RELTEXT = {"first": (1, 0), "next": (1, 0), "second": (2, 0), "third": (3, 0), "fourth": (4, 0),
+            "fifth": (5, 0), "sixth": (6, 0), "seventh": (7, 0), "eight": (8, 0), "eighth": (8, 0),
+            "ninth": (9, 0), "tenth": (10, 0), "eleventh": (11, 0), "twelfth": (12, 0), "last": (-1, 0),
+            "previous": (-1, 0), "this": (0, 1)}
+_ROMAN_MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"]
+# timelib_month_lookup
+_MONTH_LOOKUP = {name.lower(): i + 1 for i, name in enumerate(MONTH_NAMES)}
+_MONTH_LOOKUP.update({name[:3].lower(): i + 1 for i, name in enumerate(MONTH_NAMES)})
+_MONTH_LOOKUP.update({name.lower(): i + 1 for i, name in enumerate(_ROMAN_MONTHS)})
+_MONTH_LOOKUP["sept"] = 9
+# timezonemap.h: the first entry of each abbreviation (what abbr_search() finds without an offset), as the UTC
+# offset in seconds including DST
+_TZ_ABBR_OFFSETS = {
+    "a": 3600, "acdt": 37800, "acst": 34200, "addt": -7200, "adt": -10800, "aedt": 39600, "aest": 36000,
+    "ahdt": -32400, "ahst": -36000, "akdt": -28800, "akst": -32400, "amt": -13840, "apt": -10800, "ast": -14400,
+    "awdt": 32400, "awst": 28800, "awt": -10800, "b": 7200, "bdst": 7200, "bdt": -36000, "bmt": -14309, "bst": 3600,
+    "c": 10800, "cast": 34200, "cat": 7200, "cddt": -14400, "cdt": -18000, "cemt": 10800, "cest": 7200, "cet": 3600,
+    "chst": 36000, "cmt": -15408, "cpt": -18000, "cst": -21600, "cwt": -18000, "d": 14400, "dmt": -1521, "e": 18000,
+    "eat": 10800, "eddt": -10800, "edt": -14400, "eest": 10800, "eet": 7200, "emt": -26248, "ept": -14400,
+    "est": -18000, "ewt": -14400, "f": 21600, "ffmt": -14660, "fmt": -4056, "g": 25200, "gdt": 39600, "gmt": 0,
+    "gst": 36000, "h": 28800, "hdt": -34200, "hkst": 32400, "hkt": 28800, "hmt": -19776, "hpt": -34200,
+    "hst": -36000, "hwt": -34200, "i": 32400, "iddt": 14400, "idt": 10800, "imt": 25025, "ist": 7200, "jdt": 36000,
+    "jmt": 8440, "jst": 32400, "k": 36000, "kdt": 36000, "kmt": 5736, "kst": 30600, "l": 39600, "lst": 9394,
+    "m": 43200, "mddt": -18000, "mdst": 16279, "mdt": -21600, "mest": 7200, "met": 3600, "mmt": 9017, "mpt": -21600,
+    "msd": 14400, "msk": 10800, "mst": -25200, "mwt": -21600, "n": -3600, "nddt": -5400, "ndt": -9052, "npt": -9000,
+    "nst": -12600, "nwt": -9000, "nzdt": 46800, "nzmt": 41400, "nzst": 43200, "o": -7200, "p": -10800,
+    "pddt": -21600, "pdt": -25200, "pkst": 21600, "pkt": 18000, "plmt": 25590, "pmt": -13236, "ppmt": -17340,
+    "ppt": -25200, "pst": -28800, "pwt": -25200, "q": -14400, "qmt": -18840, "r": -18000, "rmt": 5794, "s": -21600,
+    "sast": 7200, "sdmt": -16800, "sjmt": -20173, "smt": -13884, "sst": -39600, "t": -25200, "tbmt": 10751,
+    "tmt": 12344, "u": -28800, "uct": 0, "utc": 0, "v": -32400, "w": -36000, "wast": 7200, "wat": 3600, "wemt": 7200,
+    "west": 3600, "wet": 0, "wib": 25200, "wit": 32400, "wita": 28800, "wmt": 5040, "x": -39600, "y": -43200,
+    "yddt": -25200, "ydt": -28800, "ypt": -28800, "yst": -32400, "ywt": -28800, "z": 0,
+}
+_ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# The regular expressions of parse_date.re ('...' is case-insensitive in re2c, "..." case-sensitive)
+# ----------------------------------------------------------------------------------------------------------------------
+
+def _alt(words) -> str:
+    """An alternation that tries the longer words first, so that it matches what re2c's longest match would."""
+    return "(?:" + "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True)) + ")"
+
+
+_R_SPACE = r"[ \t]+"
+_R_FRAC = r"\.[0-9]+"
+_R_HOUR24 = r"(?:2[0-4]|[01]?[0-9])"
+_R_HOUR24LZ = r"(?:2[0-4]|[01][0-9])"
+_R_HOUR12 = r"(?:1[0-2]|0?[1-9])"
+_R_MINUTE = r"[0-5]?[0-9]"
+_R_MINUTELZ = r"[0-5][0-9]"
+_R_SECOND = r"(?:60|[0-5]?[0-9])"
+_R_SECONDLZ = r"(?:60|[0-5][0-9])"
+_R_MERIDIAN = r"[ap]\.?m\.?(?:[\t ]|\Z)"
+_R_TZ_ABBR = r"\(?[a-z]{1,6}\)?"
+_R_TZ_ID = r"(?-i:[A-Z][a-z]+(?:[_/-][A-Za-z]+)+)"
+_R_TZCORRECTION = (r"(?-i:GMT)?[+-](?:" + _R_HOUR24LZ + ":" + _R_MINUTELZ + ":" + _R_SECONDLZ + "|" + _R_HOUR24LZ
+                   + _R_MINUTELZ + _R_SECONDLZ + "|" + _R_HOUR24 + "(?::?" + _R_MINUTE + ")?)")
+_R_TZ = "(?:" + _R_TZCORRECTION + "|" + _R_TZ_ID + "|" + _R_TZ_ABBR + ")"
+
+_R_MONTH = r"(?:1[0-2]|0?[0-9])"
+_R_DAY = r"(?:3[01]|[0-2]?[0-9])(?:st|nd|rd|th)?"
+_R_YEAR = r"[0-9]{1,4}"
+_R_YEAR2 = r"[0-9]{2}"
+_R_YEAR4 = r"[0-9]{4}"
+_R_YEAR4WITHSIGN = r"[+-]?[0-9]{4}"
+_R_YEARX = r"[+-][0-9]{5,19}"
+_R_DAYOFYEAR = r"(?:36[0-6]|3[0-5][0-9]|[12][0-9][0-9]|0[1-9][0-9]|00[1-9])"
+_R_WEEKOFYEAR = r"(?:5[0-3]|[1-4][0-9]|0[1-9])"
+_R_MONTHLZ = r"(?:1[0-2]|0[0-9])"
+_R_DAYLZ = r"(?:3[01]|[12][0-9]|0[0-9])"
+
+_DAYFULLS = [name.lower() + "s" for name in WEEKDAY_NAMES]
+_DAYFULL = [name.lower() for name in WEEKDAY_NAMES]
+_DAYABBR = [name[:3].lower() for name in WEEKDAY_NAMES]
+_R_DAYTEXT = _alt(_DAYFULLS + _DAYFULL + _DAYABBR + ["weekday", "weekdays"])
+_MONTHFULL = [name.lower() for name in MONTH_NAMES]
+_MONTHABBR = [name[:3].lower() for name in MONTH_NAMES] + ["sept"]
+_R_MONTHABBR = _alt(_MONTHABBR)
+_R_MONTHTEXT = "(?:" + _alt(_MONTHFULL + _MONTHABBR) + "|(?-i:" + _alt(_ROMAN_MONTHS) + "))"
+
+_R_TIMETINY12 = _R_HOUR12 + r"[ \t]*" + _R_MERIDIAN
+_R_TIMESHORT12 = _R_HOUR12 + "[:.]" + _R_MINUTELZ + r"[ \t]*" + _R_MERIDIAN
+_R_TIMELONG12 = _R_HOUR12 + "[:.]" + _R_MINUTE + "[:.]" + _R_SECONDLZ + r"[ \t]*" + _R_MERIDIAN
+_R_TIMETINY24 = "t" + _R_HOUR24
+_R_TIMESHORT24 = "t?" + _R_HOUR24 + "[:.]" + _R_MINUTE
+_R_TIMELONG24 = "t?" + _R_HOUR24 + "[:.]" + _R_MINUTE + "[:.]" + _R_SECOND
+_R_ISO8601LONG = _R_TIMELONG24 + _R_FRAC
+_R_ISO8601NORMTZ = "t?" + _R_HOUR24 + "[:.]" + _R_MINUTE + "[:.]" + _R_SECONDLZ + r"[ \t]*" + _R_TZ
+_R_DATENOYEAR = _R_MONTHTEXT + r"[ .\t-]*" + _R_DAY + r"(?:[,.stndrh\t ]+|\Z)"
+_R_RELTEXTNUMBER = _alt(["first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eight", "eighth",
+                         "ninth", "tenth", "eleventh", "twelfth"])
+_R_RELTEXTTEXT = _alt(["next", "last", "previous", "this"])
+_RELTEXTUNITS = [word for word in _RELUNITS if word != "week"]
+_R_RELTEXTUNIT = _alt(_RELTEXTUNITS)
+
+# The scanner rules in the order of parse_date.re: (rule, regular expression); a rule with several alternatives
+# (re2c's "a | b") has one entry per alternative.
+_RULES: list[tuple[str, re.Pattern[str]]] = []
+
+
+def _rule(name: str, *patterns: str) -> None:
+    for pattern in patterns:
+        _RULES.append((name, re.compile(pattern, re.I | re.A)))
+
+
+_rule("yesterday", "yesterday")
+_rule("now", "now")
+_rule("noon", "noon")
+_rule("midnight", "midnight", "today")
+_rule("tomorrow", "tomorrow")
+_rule("timestamp", r"@-?[0-9]+")
+_rule("timestampms", r"@-?[0-9]+\.[0-9]{0,6}")
+_rule("firstdayof", "first day of", "last day of")
+_rule("backof", "back of " + _R_HOUR24 + r"(?:[ \t]*" + _R_MERIDIAN + ")?",
+      "front of " + _R_HOUR24 + r"(?:[ \t]*" + _R_MERIDIAN + ")?")
+_rule("weekdayof", "(?:" + _R_RELTEXTNUMBER + "|" + _R_RELTEXTTEXT + ")" + _R_SPACE
+      + _alt(_DAYFULLS + _DAYFULL + _DAYABBR) + _R_SPACE + "of")
+_rule("time12", _R_TIMETINY12, _R_TIMESHORT12, _R_TIMELONG12)
+_rule("mssqltime", _R_HOUR12 + ":" + _R_MINUTELZ + ":" + _R_SECONDLZ + "[:.][0-9]+" + _R_MERIDIAN)
+_rule("time24", _R_TIMETINY24, _R_TIMESHORT24, _R_TIMELONG24, _R_ISO8601LONG)
+_rule("gnunocolon", "t?" + _R_HOUR24LZ + _R_MINUTELZ)
+_rule("iso8601nocolon", "t?" + _R_HOUR24LZ + _R_MINUTELZ + _R_SECONDLZ)
+_rule("american", _R_MONTH + "/" + _R_DAY, _R_MONTH + "/" + _R_DAY + "/" + _R_YEAR)
+_rule("iso8601date4", _R_YEAR4WITHSIGN + "-" + _R_MONTHLZ + "-" + _R_DAYLZ,
+      _R_YEAR4 + "/" + _R_MONTHLZ + "/" + _R_DAYLZ + "/?", _R_YEAR4 + "/" + _R_MONTH + "/" + _R_DAY)
+_rule("iso8601date2", _R_YEAR2 + "-" + _R_MONTHLZ + "-" + _R_DAYLZ)
+_rule("iso8601datex", _R_YEARX + "-" + _R_MONTHLZ + "-" + _R_DAYLZ)
+_rule("gnudateshorter", _R_YEAR4 + "-" + _R_MONTH)
+_rule("gnudateshort", _R_YEAR + "-" + _R_MONTH + "-" + _R_DAY)
+_rule("datefull", _R_DAY + r"[ \t.-]*" + _R_MONTHTEXT + r"[ \t.-]*" + _R_YEAR)
+_rule("pointeddate4", _R_DAY + r"[.\t-]" + _R_MONTH + "[.-]" + _R_YEAR4)
+_rule("pointeddate2", _R_DAY + r"[.\t]" + _R_MONTH + r"\." + _R_YEAR2)
+_rule("datenoday", _R_MONTHTEXT + r"[ .\t-]*" + _R_YEAR4)
+_rule("datenodayrev", _R_YEAR4 + r"[ .\t-]*" + _R_MONTHTEXT)
+_rule("datetextual", _R_MONTHTEXT + r"[ .\t-]*" + _R_DAY + r"[,.stndrh\t ]+" + _R_YEAR, _R_DATENOYEAR)
+_rule("datenoyearrev", _R_DAY + r"[ .\t-]*" + _R_MONTHTEXT)
+_rule("datenocolon", _R_YEAR4 + _R_MONTHLZ + _R_DAYLZ)
+_rule("xmlrpc",
+      _R_YEAR4 + _R_MONTHLZ + _R_DAYLZ + "(?-i:T)" + _R_HOUR24 + ":" + _R_MINUTELZ + ":" + _R_SECONDLZ,
+      _R_YEAR4 + _R_MONTHLZ + _R_DAYLZ + "t" + _R_HOUR24 + _R_MINUTELZ + _R_SECONDLZ,
+      _R_YEAR4 + "-" + _R_MONTHLZ + "-" + _R_DAYLZ + "(?-i:T)" + _R_HOUR24LZ + ":" + _R_MINUTELZ + ":"
+      + _R_SECONDLZ + _R_FRAC + "(?:" + _R_TZCORRECTION + ")?",
+      _R_YEAR4 + "-" + _R_MONTH + "-" + _R_DAY + "(?-i:T)" + _R_HOUR24 + ":" + _R_MINUTE + ":" + _R_SECOND,
+      _R_YEAR4 + ":" + _R_MONTHLZ + ":" + _R_DAYLZ + " " + _R_HOUR24LZ + ":" + _R_MINUTELZ + ":" + _R_SECONDLZ)
+_rule("pgydotd", _R_YEAR4 + "[.-]?" + _R_DAYOFYEAR)
+_rule("isoweekday", _R_YEAR4 + "-?(?-i:W)" + _R_WEEKOFYEAR + "-?[0-7]")
+_rule("isoweek", _R_YEAR4 + "-?(?-i:W)" + _R_WEEKOFYEAR)
+_rule("pgtextshort", _R_MONTHABBR + "-" + _R_DAYLZ + "-" + _R_YEAR)
+_rule("pgtextreverse", _R_YEAR + "-" + _R_MONTHABBR + "-" + _R_DAYLZ)
+_rule("clf", _R_DAY + "/" + _R_MONTHABBR + "/" + _R_YEAR4 + ":" + _R_HOUR24LZ + ":" + _R_MINUTELZ + ":"
+      + _R_SECONDLZ + _R_SPACE + _R_TZCORRECTION)
+_rule("year4", _R_YEAR4)
+_rule("ago", "ago")
+_rule("daytext", _R_DAYTEXT)
+_rule("relativetextweek", _R_RELTEXTTEXT + _R_SPACE + "week")
+_rule("relativetext", "(?:" + _R_RELTEXTNUMBER + "|" + _R_RELTEXTTEXT + ")" + _R_SPACE + _R_RELTEXTUNIT)
+_rule("month", _alt(_MONTHFULL + _MONTHABBR))
+_rule("tz", _R_TZCORRECTION, _R_TZ_ABBR, _R_TZ_ID)
+_rule("dateshortwithtime12", _R_DATENOYEAR + _R_TIMESHORT12, _R_DATENOYEAR + _R_TIMELONG12)
+_rule("dateshortwithtime24", _R_DATENOYEAR + _R_TIMESHORT24, _R_DATENOYEAR + _R_TIMELONG24,
+      _R_DATENOYEAR + _R_ISO8601NORMTZ)
+_rule("relative", r"[+-]*[ \t]*[0-9]{1,13}[ \t]*" + _alt(_RELTEXTUNITS + ["week"]))
+_rule("skip", r"[ .,\t\n\x00]")
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# The parsed time (timelib_time) and the scanner's helpers
+# ----------------------------------------------------------------------------------------------------------------------
+
+@dataclass
+class _Rel:
+    """timelib_rel_time with the special and weekday fields."""
+    y: int = 0
+    m: int = 0
+    d: int = 0
+    h: int = 0
+    i: int = 0
+    s: int = 0
+    us: int = 0
+    weekday: int = 0
+    weekday_behavior: int = 0
+    have_weekday_relative: bool = False
+    have_special_relative: bool = False
+    special_type: int = 0
+    special_amount: int = 0
+    first_last_day_of: int = 0
 
 
 @dataclass
-class _Parsed:
+class _Time:
+    """timelib_time while a string is scanned; None is TIMELIB_UNSET."""
     y: Optional[int] = None
     m: Optional[int] = None
     d: Optional[int] = None
     h: Optional[int] = None
     i: Optional[int] = None
     s: Optional[int] = None
-    us: int = 0
-    tz: Optional[tzinfo] = None
-    timestamp: Optional[float] = None
-    rel: dict = field(default_factory=lambda: {"y": 0, "m": 0, "d": 0, "h": 0, "i": 0, "s": 0})
-    weekday: Optional[tuple[int, int]] = None  # (weekday 0-6, behaviour: 0 this/next occurrence, n-th)
-    first_last_day_of: Optional[str] = None
+    us: Optional[int] = None
+    zone: Optional[tzinfo] = None
+    have_time: int = 0
     have_date: bool = False
-    have_time: bool = False
+    have_zone: int = 0
     have_relative: bool = False
+    relative: _Rel = field(default_factory=_Rel)
 
 
-def _year(text: str) -> int:
-    y = int(text)
-    if len(text) <= 2:
-        y += 1900 if y >= 70 else 2000
+def _have_time(t: _Time) -> None:
+    """TIMELIB_HAVE_TIME()"""
+    if t.have_time:
+        raise ValueError("Double time specification")
+    t.have_time = 1
+    t.h = t.i = t.s = t.us = 0
+
+
+def _unhave_time(t: _Time) -> None:
+    """TIMELIB_UNHAVE_TIME()"""
+    t.have_time = 0
+    t.h = t.i = t.s = t.us = 0
+
+
+def _have_date(t: _Time) -> None:
+    """TIMELIB_HAVE_DATE()"""
+    if t.have_date:
+        raise ValueError("Double date specification")
+    t.have_date = True
+
+
+def _unhave_date(t: _Time) -> None:
+    """TIMELIB_UNHAVE_DATE()"""
+    t.have_date = False
+    t.d = t.m = t.y = 0
+
+
+def _have_tz(t: _Time) -> bool:
+    """TIMELIB_HAVE_TZ(): False when the rule is to be skipped. A second time zone is only a warning (the first one
+    stays), a third one an error."""
+    if t.have_zone:
+        t.have_zone += 1
+        if t.have_zone > 2:
+            raise ValueError("Double timezone specification")
+        return False
+    t.have_zone = 1
+    return True
+
+
+def _process_year(y: Optional[int], length: int) -> Optional[int]:
+    """TIMELIB_PROCESS_YEAR(): years of fewer than four digits below 100 are 1970-2069."""
+    if y is None or length >= 4:
+        return y
+    if y < 100:
+        y += 2000 if y < 70 else 1900
     return y
 
 
-def _set_time(st: _Parsed, h: int, i: int, s: int, meridian: Optional[str] = None, frac: str = "") -> None:
-    if st.have_time:
-        raise ValueError("Double time specification")
-    if meridian:
-        mer = meridian.replace(".", "").lower()
-        if h > 12 or h == 0:
-            raise ValueError("invalid hour for 12-hour clock")
-        if mer == "am" and h == 12:
-            h = 0
-        elif mer == "pm" and h != 12:
-            h += 12
-    if h > 24 or i > 59 or s > 60:
-        raise ValueError("invalid time")
-    st.h, st.i, st.s = h, i, s
-    st.us = int((frac + "000000")[:6]) if frac else 0
-    st.have_time = True
+def _strtol(text: str) -> int:
+    m = re.match(r"[0-9]*", text)
+    return int(m.group(0)) if m.group(0) else 0
 
 
-def _set_date(st: _Parsed, y: Optional[int], m: Optional[int], d: Optional[int]) -> None:
-    if st.have_date:
-        raise ValueError("Double date specification")
-    if m is not None and not 1 <= m <= 12:
-        raise ValueError("invalid month")
-    if d is not None and not 0 <= d <= 31:
-        raise ValueError("invalid day")
-    st.y, st.m, st.d = y, m, d
-    st.have_date = True
+def _fixed_zone(seconds: int) -> tzinfo:
+    return timezone.utc if seconds == 0 else timezone(timedelta(seconds=seconds))
 
 
-def _zone_from_name(name: str) -> Optional[tzinfo]:
-    low = name.lower()
-    if low in _TZ_ABBR:
-        return timezone(timedelta(minutes=_TZ_ABBR[low]))
-    if "/" in name or low in ("utc", "gmt"):
-        try:
-            from zoneinfo import ZoneInfo
+@lru_cache(maxsize=1)
+def _zone_ids() -> dict[str, str]:
+    try:
+        from zoneinfo import available_timezones
 
-            return ZoneInfo(name)
-        except Exception:  # noqa: BLE001 - unknown zone, or no time zone database
-            return None
-    return None
+        return {key.lower(): key for key in available_timezones()}
+    except Exception:  # noqa: BLE001 - no time zone database
+        return {}
 
 
-_TOKENS: list[tuple[str, re.Pattern]] = []
+def _zone_by_id(name: str) -> Optional[tzinfo]:
+    """The time zone database lookup of timelib_parse_zone() (case-insensitive, as PHP's)."""
+    if not name:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+    except ImportError:
+        return timezone.utc if name.lower() == "utc" else None
+    for key in (name, _zone_ids().get(name.lower())):
+        if key:
+            try:
+                return ZoneInfo(key)
+            except Exception:  # noqa: BLE001 - unknown zone, invalid key, or no time zone database
+                pass
+    return timezone.utc if name.lower() == "utc" else None
 
 
-def _token(name: str, pattern: str) -> None:
-    _TOKENS.append((name, re.compile(pattern, re.I)))
+class _Ptr:
+    """A pointer into the text of one token, for timelib's helper functions (timelib_get_nr() and friends). Past
+    the end it reads NUL, as C reads the terminator."""
+
+    def __init__(self, s: str):
+        self.s = s
+        self.p = 0
+
+    def ch(self, offset: int = 0) -> str:
+        i = self.p + offset
+        return self.s[i] if i < len(self.s) else "\0"
+
+    def _digit(self) -> bool:
+        return "0" <= self.ch() <= "9"
+
+    def _letter(self) -> bool:
+        c = self.ch()
+        return "A" <= c <= "Z" or "a" <= c <= "z"
+
+    def get_nr_ex(self, max_length: int) -> tuple[Optional[int], int]:
+        """timelib_get_nr_ex(): the next number of at most max_length digits and its length"""
+        while not self._digit():
+            if self.ch() == "\0":
+                return None, 0
+            self.p += 1
+        begin = self.p
+        while self._digit() and self.p - begin < max_length:
+            self.p += 1
+        return int(self.s[begin:self.p]), self.p - begin
+
+    def get_nr(self, max_length: int) -> Optional[int]:
+        return self.get_nr_ex(max_length)[0]
+
+    def skip_day_suffix(self) -> None:
+        if self.ch().isspace():
+            return
+        if self.s[self.p:self.p + 2].translate(_ASCII_LOWER) in ("nd", "rd", "st", "th"):
+            self.p += 2
+
+    def get_frac_nr(self) -> Optional[int]:
+        """timelib_get_frac_nr(): the fraction of a second at the pointer, in microseconds"""
+        while self.ch() not in ".:" and not self._digit():
+            if self.ch() == "\0":
+                return None
+            self.p += 1
+        begin = self.p
+        while self.ch() in ".:" or self._digit():
+            self.p += 1
+        number = re.match(r"[0-9]*(?:\.[0-9]*)?", self.s[begin + 1:self.p]).group(0)  # strtod()
+        value = float(number) if number not in ("", ".") else 0.0
+        return int(value * 10 ** (7 - (self.p - begin)))
+
+    def get_signed_nr(self, max_length: int) -> int:
+        """timelib_get_signed_nr(): every "-" before the number flips its sign"""
+        while not self._digit() and self.ch() not in "+-":
+            if self.ch() == "\0":
+                raise ValueError("Found unexpected data")
+            self.p += 1
+        sign = 1
+        while self.ch() in "+-":
+            if self.ch() == "-":
+                sign = -sign
+            self.p += 1
+        return sign * (self.get_nr(max_length) or 0)
+
+    def _word(self) -> str:
+        begin = self.p
+        while self._letter():
+            self.p += 1
+        return self.s[begin:self.p].translate(_ASCII_LOWER)
+
+    def get_relative_text(self, behavior: int) -> tuple[int, int]:
+        """timelib_get_relative_text(): the amount of "next", "third", ... and its behavior (``behavior`` when the
+        word is unknown)"""
+        while self.ch() in " \t-/":
+            self.p += 1
+        value, found_behavior = _RELTEXT.get(self._word(), (0, behavior))
+        return value, found_behavior
+
+    def lookup_month(self) -> int:
+        return _MONTH_LOOKUP.get(self._word(), 0)
+
+    def get_month(self) -> int:
+        while self.ch() in " \t-./":
+            self.p += 1
+        return self.lookup_month()
+
+    def eat_spaces(self) -> None:
+        while self.ch() in " \t":
+            self.p += 1
+
+    def lookup_relunit(self) -> Optional[tuple[str, int]]:
+        begin = self.p
+        while self.ch() not in "\0 ,\t;:/.-()":
+            self.p += 1
+        return _RELUNITS.get(self.s[begin:self.p].translate(_ASCII_LOWER))
+
+    def meridian(self, h: int) -> int:
+        """timelib_meridian(): what "am"/"pm" adds to the hour h"""
+        while self.ch() not in "AaPp\0":
+            self.p += 1
+        if self.ch() in "aA":
+            retval = -12 if h == 12 else 0
+        else:
+            retval = 12 if h != 12 else 0
+        self.p += 1
+        if self.ch() == ".":
+            self.p += 1
+        if self.ch() in "Mm":
+            self.p += 1
+        if self.ch() == ".":
+            self.p += 1
+        return retval
+
+    def parse_tz_cor(self) -> tuple[int, bool]:
+        """timelib_parse_tz_cor(): the offset in seconds after the sign, and whether it is valid"""
+        begin = self.p
+        while self._digit() or self.ch() == ":":
+            self.p += 1
+        text = self.s[begin:self.p]
+        n = len(text)
+        if n in (1, 2):  # H, HH
+            return _strtol(text) * 3600, True
+        if n in (3, 4):  # H:M, H:MM, HH:M, HHMM
+            if text[1] == ":":
+                return _strtol(text) * 3600 + _strtol(text[2:]) * 60, True
+            if text[2] == ":":
+                return _strtol(text) * 3600 + _strtol(text[3:]) * 60, True
+            tmp = _strtol(text)
+            return tmp // 100 * 3600 + tmp % 100 * 60, True
+        if n == 5 and text[2] == ":":  # HH:MM
+            return _strtol(text) * 3600 + _strtol(text[3:]) * 60, True
+        if n == 6:  # HHMMSS
+            tmp = _strtol(text)
+            return tmp // 10000 * 3600 + tmp // 100 % 100 * 60 + tmp % 100, True
+        if n == 8 and text[2] == ":" and text[5] == ":":  # HH:MM:SS
+            return _strtol(text) * 3600 + _strtol(text[3:]) * 60 + _strtol(text[6:]), True
+        return 0, False
 
 
-_TIME = r"(\d{1,2}):(\d{2})(?::(\d{2})(?:[.,:](\d+))?)?(?:[ \t]*(a\.?m\.?|p\.?m\.?)(?![a-z]))?"
-_token("timestamp", r"@(-?\d+(?:\.\d+)?)")
-_token("now", r"now\b")
-_token("noon", r"noon\b")
-_token("midnight", r"(?:midnight|today)\b")
-_token("tomorrow", r"tomorrow\b")
-_token("yesterday", r"yesterday\b")
-_token("iso_datetime_compact", r"(\d{4})(\d{2})(\d{2})t(\d{2}):?(\d{2}):?(\d{2})(?:[.,](\d+))?")
-_token("iso_date", r"([+-]?\d{4})-(\d{1,2})-(\d{1,2})(?!\d)")
-_token("iso_date_slash", r"(\d{4})/(\d{1,2})/(\d{1,2})(?!\d)")
-_token("date_compact", r"(\d{4})(\d{2})(\d{2})(?!\d)")
-_token("american", r"(\d{1,2})/(\d{1,2})(?:/(\d{4}|\d{2}))?(?![\d/])")
-_token("dotted", r"(\d{1,2})[.](\d{1,2})[.](\d{4}|\d{2})(?![\d.])")
-_token("dmy_dash", r"(\d{1,2})-(\d{1,2})-(\d{4})(?!\d)")
-_token("year_month", r"(\d{4})-(\d{1,2})(?![\d-])")
-_token("time_t", r"t?" + _TIME)
-_token("hour_meridian", r"(\d{1,2})[ \t]*(a\.?m\.?|p\.?m\.?)(?![a-z])")
-_token("first_last_day_of", r"(first|last)[ \t]+day[ \t]+of\b")
-_token("day_month_year", r"(\d{1,2})(?:st|nd|rd|th)?" + _SEP + _MONTH_RE + r"(?![a-z])(?:" + _SEP + r"(\d{4}))?(?!\d)")
-_token("month_day_year", _MONTH_RE + r"(?![a-z])" + _SEP + r"(\d{1,2})(?:st|nd|rd|th)?(?![\d:])(?:" + _SEP
-       + r"(\d{4}))?(?![\d:])")
-_token("month_year", _MONTH_RE + r"(?![a-z])" + _SEP + r"(\d{4})(?!\d)")
-_token("year_month_day_text", r"(\d{4})" + _SEP + _MONTH_RE + r"(?![a-z])" + _SEP + r"(\d{1,2})(?!\d)")
-_token("month", _MONTH_RE + r"(?![a-z])")
-_token("relative_number", r"([+-]?)[ \t]*(\d+)[ \t]*" + _UNIT_RE + r"(?![a-z])")
-_token("relative_text_unit", _RELTEXT_RE + r"[ \t]+" + _UNIT_RE + r"(?![a-z])")
-_token("relative_text_weekday", _RELTEXT_RE + r"[ \t]+" + _WEEKDAY_RE + r"(?![a-z])")
-_token("weekday", _WEEKDAY_RE + r"(?![a-z])")
-_token("ago", r"ago\b")
-_token("year4", r"(\d{4})(?!\d)")
-_token("tz_offset", r"(?:gmt|utc)?([+-])(\d{1,2})(?::?(\d{2}))?(?!\d)")
-_token("tz_name", r"([A-Za-z]+(?:/[A-Za-z_+-]+)+)")
-_token("tz_abbr", _TZ_ABBR_RE + r"(?![a-z])")
+def _parse_zone(t: _Time, p: _Ptr) -> bool:
+    """timelib_parse_zone(): an offset, an abbreviation or a zone identifier; False when it is none of them."""
+    while p.ch() in " \t(":
+        p.p += 1
+    if p.s.startswith("GMT", p.p) and p.ch(3) in "+-":
+        p.p += 3
+    zone: Optional[tzinfo] = None
+    if p.ch() in "+-":
+        sign = -1 if p.ch() == "-" else 1
+        p.p += 1
+        offset, found = p.parse_tz_cor()
+        zone = _fixed_zone(sign * offset)
+    else:
+        begin = p.p
+        while p._letter() or p._digit() or p.ch() in "/_-+":
+            p.p += 1
+        word = p.s[begin:p.p]
+        found = False
+        lower = word.translate(_ASCII_LOWER)
+        # First, we lookup by abbreviation only
+        if len(word) < _MAX_ABBR_LEN and lower in _TZ_ABBR_OFFSETS:
+            zone = _fixed_zone(_TZ_ABBR_OFFSETS[lower])
+            found = True
+        # Otherwise, we look if we have a TimeZone identifier
+        if not found or word == "UTC":
+            by_id = _zone_by_id(word)
+            if by_id is not None:
+                zone = by_id
+                found = True
+    while p.ch() == ")":
+        p.p += 1
+    if found:
+        t.zone = zone
+    return found
+
+
+def _parse_zone_rest(t: _Time, p: _Ptr) -> None:
+    """The time zone some rules allow at the end of their token."""
+    if p.ch() != "\0" and not _parse_zone(t, p):
+        raise ValueError("The timezone could not be found in the database")
+
+
+def _set_relative(t: _Time, p: _Ptr, amount: int, behavior: int, time_part: int) -> None:
+    """timelib_set_relative(): ``amount`` times the unit word at the pointer."""
+    relunit = p.lookup_relunit()
+    if relunit is None:
+        return
+    unit, multiplier = relunit
+    rel = t.relative
+    if unit == "weekday":
+        t.have_relative = rel.have_weekday_relative = True
+        if time_part != _TIME_PART_KEEP:
+            _unhave_time(t)
+        rel.d += (amount - 1 if amount > 0 else amount) * 7
+        rel.weekday = multiplier
+        rel.weekday_behavior = behavior
+    elif unit == "special":
+        t.have_relative = rel.have_special_relative = True
+        if time_part != _TIME_PART_KEEP:
+            _unhave_time(t)
+        rel.special_type = multiplier
+        rel.special_amount = amount
+    else:
+        setattr(rel, unit, getattr(rel, unit) + amount * multiplier)
+
+
+def _day_of_week(y: int, m: int, d: int) -> int:
+    """timelib_day_of_week(): 0 is Sunday"""
+    return (_days_from_civil(y, m, d) + 4) % 7
+
+
+def _daynr_from_weeknr(iy: int, iw: int, id_: int) -> int:
+    """timelib_daynr_from_weeknr(): the day of the year of ISO week iw, day id_ (counted from 1 January)."""
+    dow = _day_of_week(iy, 1, 1)
+    day = 0 - (dow - 7 if dow > 4 else dow)
+    return day + (iw - 1) * 7 + id_
+
+
+def _scan_rule(t: _Time, rule: str, p: _Ptr) -> None:
+    """The action of a scanner rule of parse_date.re, on the text ``p`` it matched."""
+    rel = t.relative
+    if rule == "yesterday":
+        t.have_relative = True
+        _unhave_time(t)
+        rel.d = -1
+    elif rule == "now":
+        pass
+    elif rule == "noon":
+        _unhave_time(t)
+        _have_time(t)
+        t.h = 12
+    elif rule == "midnight":
+        _unhave_time(t)
+    elif rule == "tomorrow":
+        t.have_relative = True
+        _unhave_time(t)
+        rel.d = 1
+    elif rule in ("timestamp", "timestampms"):
+        t.have_relative = True
+        _unhave_date(t)
+        _unhave_time(t)
+        if not _have_tz(t):
+            return
+        is_negative = p.ch(1) == "-"
+        i = p.get_signed_nr(24)
+        if rule == "timestampms":
+            before = p.p
+            us = p.get_signed_nr(6)
+            us = us * 10 ** (7 - (p.p - before))
+            rel.us = -us if is_negative else us
+        t.y, t.m, t.d = 1970, 1, 1
+        t.h = t.i = t.s = t.us = 0
+        rel.s += i
+        t.zone = timezone.utc
+    elif rule == "firstdayof":
+        t.have_relative = True
+        rel.first_last_day_of = _SPECIAL_LAST_DAY_OF_MONTH if p.ch() in "lL" else _SPECIAL_FIRST_DAY_OF_MONTH
+    elif rule == "backof":
+        _unhave_time(t)
+        _have_time(t)
+        if p.ch() == "b":
+            t.h = p.get_nr(2)
+            t.i = 15
+        else:
+            t.h = p.get_nr(2) - 1
+            t.i = 45
+        if p.ch() != "\0":
+            p.eat_spaces()
+            t.h += p.meridian(t.h)
+    elif rule == "weekdayof":
+        t.have_relative = rel.have_special_relative = True
+        i, behavior = p.get_relative_text(0)
+        p.eat_spaces()
+        if i > 0:  # first, second... etc
+            rel.special_type = _SPECIAL_DAY_OF_WEEK_IN_MONTH
+            _set_relative(t, p, i, 1, _TIME_PART_DONT_KEEP)
+        else:  # last
+            rel.special_type = _SPECIAL_LAST_DAY_OF_WEEK_IN_MONTH
+            _set_relative(t, p, i, behavior, _TIME_PART_DONT_KEEP)
+    elif rule == "time12":
+        _have_time(t)
+        t.h = p.get_nr(2)
+        if p.ch() in ":.":
+            t.i = p.get_nr(2)
+            if p.ch() in ":.":
+                t.s = p.get_nr(2)
+        t.h += p.meridian(t.h)
+    elif rule == "mssqltime":
+        _have_time(t)
+        t.h = p.get_nr(2)
+        t.i = p.get_nr(2)
+        if p.ch() in ":.":
+            t.s = p.get_nr(2)
+            if p.ch() in ":.":
+                t.us = p.get_frac_nr()
+        p.eat_spaces()
+        t.h += p.meridian(t.h)
+    elif rule == "time24":
+        _have_time(t)
+        t.h = p.get_nr(2)
+        if p.ch() in ":.":
+            t.i = p.get_nr(2)
+            if p.ch() in ":.":
+                t.s = p.get_nr(2)
+                if p.ch() == ".":
+                    t.us = p.get_frac_nr()
+        _parse_zone_rest(t, p)
+    elif rule == "gnunocolon":
+        # four digits are a time (HHMM), or a year after a time
+        if t.have_time == 0:
+            t.h = p.get_nr(2)
+            t.i = p.get_nr(2)
+            t.s = 0
+        elif t.have_time == 1:
+            t.y = p.get_nr(4)
+        else:
+            raise ValueError("Double time specification")
+        t.have_time += 1
+    elif rule == "iso8601nocolon":
+        _have_time(t)
+        t.h = p.get_nr(2)
+        t.i = p.get_nr(2)
+        t.s = p.get_nr(2)
+        _parse_zone_rest(t, p)
+    elif rule == "american":
+        _have_date(t)
+        t.m = p.get_nr(2)
+        t.d = p.get_nr(2)
+        if p.ch() == "/":
+            t.y = _process_year(*p.get_nr_ex(4))
+    elif rule == "iso8601date4":
+        _have_date(t)
+        t.y = p.get_signed_nr(4)
+        t.m = p.get_nr(2)
+        t.d = p.get_nr(2)
+    elif rule in ("iso8601date2", "gnudateshort"):
+        _have_date(t)
+        y, length = p.get_nr_ex(4)
+        t.m = p.get_nr(2)
+        t.d = p.get_nr(2)
+        t.y = _process_year(y, length)
+    elif rule == "iso8601datex":
+        _have_date(t)
+        t.y = p.get_signed_nr(19)
+        t.m = p.get_nr(2)
+        t.d = p.get_nr(2)
+    elif rule == "gnudateshorter":
+        _have_date(t)
+        y, length = p.get_nr_ex(4)
+        t.m = p.get_nr(2)
+        t.d = 1
+        t.y = _process_year(y, length)
+    elif rule == "datefull":
+        _have_date(t)
+        t.d = p.get_nr(2)
+        p.skip_day_suffix()
+        t.m = p.get_month()
+        t.y = _process_year(*p.get_nr_ex(4))
+    elif rule == "pointeddate4":
+        _have_date(t)
+        t.d = p.get_nr(2)
+        t.m = p.get_nr(2)
+        t.y = p.get_nr(4)
+    elif rule == "pointeddate2":
+        _have_date(t)
+        t.d = p.get_nr(2)
+        t.m = p.get_nr(2)
+        t.y = _process_year(*p.get_nr_ex(2))
+    elif rule == "datenoday":
+        _have_date(t)
+        t.m = p.get_month()
+        y, length = p.get_nr_ex(4)
+        t.d = 1
+        t.y = _process_year(y, length)
+    elif rule == "datenodayrev":
+        _have_date(t)
+        y, length = p.get_nr_ex(4)
+        t.m = p.get_month()
+        t.d = 1
+        t.y = _process_year(y, length)
+    elif rule in ("datetextual", "pgtextshort"):
+        _have_date(t)
+        t.m = p.get_month()
+        t.d = p.get_nr(2)
+        t.y = _process_year(*p.get_nr_ex(4))
+    elif rule == "datenoyearrev":
+        _have_date(t)
+        t.d = p.get_nr(2)
+        p.skip_day_suffix()
+        t.m = p.get_month()
+    elif rule == "datenocolon":
+        _have_date(t)
+        t.y = p.get_nr(4)
+        t.m = p.get_nr(2)
+        t.d = p.get_nr(2)
+    elif rule == "xmlrpc":
+        _have_time(t)
+        _have_date(t)
+        t.y = p.get_nr(4)
+        t.m = p.get_nr(2)
+        t.d = p.get_nr(2)
+        t.h = p.get_nr(2)
+        t.i = p.get_nr(2)
+        t.s = p.get_nr(2)
+        if p.ch() == ".":
+            t.us = p.get_frac_nr()
+            _parse_zone_rest(t, p)  # timezone is optional
+    elif rule == "pgydotd":
+        _have_date(t)
+        y, length = p.get_nr_ex(4)
+        t.d = p.get_nr(3)
+        t.m = 1
+        t.y = _process_year(y, length)
+    elif rule in ("isoweekday", "isoweek"):
+        _have_date(t)
+        t.have_relative = True
+        t.y = p.get_nr(4)
+        w = p.get_nr(2)
+        d = p.get_nr(1) if rule == "isoweekday" else 1
+        t.m = 1
+        t.d = 1
+        rel.d = _daynr_from_weeknr(t.y, w, d)
+    elif rule == "pgtextreverse":
+        _have_date(t)
+        y, length = p.get_nr_ex(4)
+        t.m = p.get_month()
+        t.d = p.get_nr(2)
+        t.y = _process_year(y, length)
+    elif rule == "clf":
+        _have_time(t)
+        _have_date(t)
+        t.d = p.get_nr(2)
+        t.m = p.get_month()
+        t.y = p.get_nr(4)
+        t.h = p.get_nr(2)
+        t.i = p.get_nr(2)
+        t.s = p.get_nr(2)
+        if not _parse_zone(t, p):
+            raise ValueError("The timezone could not be found in the database")
+    elif rule == "year4":
+        t.y = p.get_nr(4)
+    elif rule == "ago":
+        rel.y, rel.m, rel.d, rel.h, rel.i, rel.s = -rel.y, -rel.m, -rel.d, -rel.h, -rel.i, -rel.s
+        rel.weekday = -rel.weekday
+        if rel.weekday == 0:
+            rel.weekday = -7
+        if rel.have_special_relative and rel.special_type == _SPECIAL_WEEKDAY:
+            rel.special_amount = -rel.special_amount
+    elif rule == "daytext":
+        t.have_relative = rel.have_weekday_relative = True
+        _unhave_time(t)
+        rel.weekday = p.lookup_relunit()[1]
+        if rel.weekday_behavior != 2:
+            rel.weekday_behavior = 1
+    elif rule == "relativetextweek":
+        t.have_relative = True
+        i, behavior = p.get_relative_text(0)
+        p.eat_spaces()
+        _set_relative(t, p, i, behavior, _TIME_PART_DONT_KEEP)
+        rel.weekday_behavior = 2
+        # to handle the format weekday + last/this/next week
+        if not rel.have_weekday_relative:
+            rel.have_weekday_relative = True
+            rel.weekday = 1
+    elif rule == "relativetext":
+        t.have_relative = True
+        i, behavior = p.get_relative_text(0)
+        p.eat_spaces()
+        _set_relative(t, p, i, behavior, _TIME_PART_DONT_KEEP)
+    elif rule == "month":
+        _have_date(t)
+        t.m = p.lookup_month()
+    elif rule == "tz":
+        if not _have_tz(t):
+            return
+        if not _parse_zone(t, p):
+            raise ValueError("The timezone could not be found in the database")
+    elif rule in ("dateshortwithtime12", "dateshortwithtime24"):
+        _have_date(t)
+        t.m = p.get_month()
+        t.d = p.get_nr(2)
+        _have_time(t)
+        t.h = p.get_nr(2)
+        t.i = p.get_nr(2)
+        if rule == "dateshortwithtime12":
+            if p.ch() in ":.":
+                t.s = p.get_nr(2)
+                if p.ch() == ".":
+                    t.us = p.get_frac_nr()
+            t.h += p.meridian(t.h)
+        else:
+            if p.ch() == ":":
+                t.s = p.get_nr(2)
+                if p.ch() == ".":
+                    t.us = p.get_frac_nr()
+            _parse_zone_rest(t, p)
+    elif rule == "relative":
+        t.have_relative = True
+        i = p.get_signed_nr(24)
+        p.eat_spaces()
+        _set_relative(t, p, i, 1, _TIME_PART_KEEP)
 
 
 def parse_datetime(text: str, default_zone: tzinfo, now: datetime) -> datetime:
-    """new DateTime( $text, $defaultZone ): the date and time a string describes, as an aware datetime. ``now`` is
-    the base of relative formats and missing fields (PHP uses the current time).
+    """new DateTime( $text, $defaultZone ): the date and time a string describes, as an aware datetime in the zone
+    the string names (else ``default_zone``). ``now``, taken in ``default_zone``, fills the fields the string leaves
+    out and is the base of relative formats (PHP uses the current time).
 
-    Supported: "now", "today"/"midnight", "noon", "tomorrow", "yesterday", "@<Unix time>"; ISO 8601 dates and
-    times (2001-01-15, 2001-01-15T10:00:00, 20010115, 20010115T100000, fractions of a second); 2001/01/15,
-    1/15/2001 and 1/15 (American), 15.01.2001, 15-01-2001, 2001-01; "15 January 2001", "January 15, 2001", "Jan
-    2001", "2001 January 15", "January" (month names and three-letter abbreviations, ordinal suffixes); times
-    10:00, 10:00:30, 10pm, 10:30 a.m.; relative parts "+1 day", "-2 weeks", "3 months ago", "next month", "last
-    year", "next monday", "monday", "first day of next month", "last day of"; time zones Z, UTC, GMT, +01:00,
-    -0500, common abbreviations (CET, EST, ...) and identifiers (Europe/Paris). Anything else raises ValueError, as
-    PHP throws an exception."""
-    st = _Parsed()
-    pos = 0
-    n = len(text)
+    All of timelib's formats (https://www.php.net/manual/en/datetime.formats.php): "now", "today", "midnight",
+    "noon", "tomorrow", "yesterday", "@<Unix time>[.<fraction>]"; ISO 8601 and other numeric dates (2001-01-15,
+    +2001-01-15, +10000-01-15, 01-01-15, 2001-1-5, 2001/01/15, 1/15/2001, 1/15, 15.01.2001, 15-01-2001, 15.01.01,
+    20010115, 2001-01, 2001.032, 2001W03, 2001-W03-2); dates with month names or Roman numerals (15 January 2001,
+    15-Jan-01, January 15, 2001, Jan 2001, 2001 Jan, January 15, 15 Jan, January, Jan-15-2001, 2001-Jan-15); times
+    (10:00, 10.00.30, t1000, 10:00:30.5, 100030, 10pm, 10:30 a.m., 10:00:00.5pm, back of 7pm); combined forms
+    (2001-01-15T10:00:00Z, 20010115T100000, 2001-01-15T10:00:00.5+01:00, 2001:01:15 10:00:00, 10/Oct/2000:13:55:36
+    -0700, Jan 15 10:00); relative parts (+1 day, -2 weeks, 3 months ago, +1 weekday, next month, last year, next
+    monday, monday, this week, first day of next month, last day of, first monday of January); time zones (Z, UTC,
+    GMT+1, +01:00, -0500, timelib's abbreviations such as CET or EST, identifiers such as Europe/Paris). Four digits
+    alone are a time (2001 is 20:01), after a time a year. An invalid date such as 31 February overflows into the
+    next month, as in PHP. Anything timelib reports as an error raises ValueError, as PHP throws an exception; a
+    year Python's datetime cannot hold raises YearOutOfRange."""
+    s = text.strip(" \t\n\r\v\f")
+    t = _Time()
+    pos, n = 0, len(s)
     while pos < n:
-        m = re.compile(r"[ \t\n,]+").match(text, pos)
-        if m:
-            pos = m.end()
-            continue
-        for name, regex in _TOKENS:
-            m = regex.match(text, pos)
-            if m and m.end() > pos:
-                break
-        else:
-            raise ValueError(f"The timezone could not be found in the database / unexpected character at {pos}")
-        _apply_token(st, name, m)
-        pos = m.end()
-    return _compose(st, default_zone, now)
+        best_rule, best = "", None
+        for rule, regex in _RULES:
+            m = regex.match(s, pos)
+            if m and (best is None or m.end() > best.end()):
+                best_rule, best = rule, m
+        if best is None or best.end() == pos:
+            raise ValueError(f"Unexpected character at position {pos}")
+        if best_rule != "skip":
+            _scan_rule(t, best_rule, _Ptr(best.group(0)))
+        pos = best.end()
+    return _compose(t, default_zone, now)
 
 
-def _apply_token(st: _Parsed, name: str, m: re.Match) -> None:
-    g = m.groups()
-    if name == "timestamp":
-        st.timestamp = float(g[0])
-        st.tz = timezone.utc
-        st.have_date = st.have_time = True
-    elif name == "now":
-        pass
-    elif name == "noon":
-        st.h, st.i, st.s, st.us = 12, 0, 0, 0
-        st.have_time = True
-    elif name == "midnight":
-        st.h, st.i, st.s, st.us = 0, 0, 0, 0
-        st.have_time = True
-    elif name in ("tomorrow", "yesterday"):
-        st.rel["d"] += 1 if name == "tomorrow" else -1
-        st.h, st.i, st.s, st.us = 0, 0, 0, 0
-        st.have_time = True
-    elif name == "iso_datetime_compact":
-        _set_date(st, int(g[0]), int(g[1]), int(g[2]))
-        _set_time(st, int(g[3]), int(g[4]), int(g[5]), None, g[6] or "")
-    elif name in ("iso_date", "iso_date_slash", "date_compact"):
-        _set_date(st, int(g[0]), int(g[1]), int(g[2]))
-    elif name == "american":
-        _set_date(st, _year(g[2]) if g[2] else None, int(g[0]), int(g[1]))
-    elif name in ("dotted", "dmy_dash"):
-        _set_date(st, _year(g[2]), int(g[1]), int(g[0]))
-    elif name == "year_month":
-        _set_date(st, int(g[0]), int(g[1]), 1)
-    elif name == "time_t":
-        _set_time(st, int(g[0]), int(g[1]), int(g[2] or 0), g[4], g[3] or "")
-    elif name == "hour_meridian":
-        _set_time(st, int(g[0]), 0, 0, g[1])
-    elif name == "first_last_day_of":
-        st.first_last_day_of = g[0].lower()
-        st.have_relative = True
-    elif name == "day_month_year":
-        _set_date(st, int(g[2]) if g[2] else None, _MONTHS[g[1].lower()], int(g[0]))
-    elif name == "month_day_year":
-        _set_date(st, int(g[2]) if g[2] else None, _MONTHS[g[0].lower()], int(g[1]))
-    elif name == "month_year":
-        _set_date(st, int(g[1]), _MONTHS[g[0].lower()], 1)
-    elif name == "year_month_day_text":
-        _set_date(st, int(g[0]), _MONTHS[g[1].lower()], int(g[2]))
-    elif name == "month":
-        _set_date(st, None, _MONTHS[g[0].lower()], None)
-    elif name == "relative_number":
-        amount = int(g[1]) * (-1 if g[0] == "-" else 1)
-        _add_relative(st, _UNITS[g[2].lower()], amount)
-    elif name == "relative_text_unit":
-        amount = _RELTEXT[g[0].lower()]
-        _add_relative(st, _UNITS[g[1].lower()], amount)
-    elif name == "relative_text_weekday":
-        word = g[0].lower()
-        amount = _RELTEXT[word]
-        day = _WEEKDAYS[g[1].lower()]
-        # "next monday": the first monday after today; "last monday": the last before; "this monday": today or
-        # the next one
-        st.weekday = (day, amount if word != "this" else 0)
-        st.have_relative = True
-        if not st.have_time:
-            st.h, st.i, st.s, st.us = 0, 0, 0, 0
-    elif name == "weekday":
-        st.weekday = (_WEEKDAYS[g[0].lower()], 0)
-        st.have_relative = True
-        if not st.have_time:
-            st.h, st.i, st.s, st.us = 0, 0, 0, 0
-    elif name == "ago":
-        for key in st.rel:
-            st.rel[key] = -st.rel[key]
-    elif name == "year4":
-        if st.have_date and st.y is None:
-            st.y = int(g[0])
-        elif not st.have_date:
-            _set_date(st, int(g[0]), None, None)
-        else:
-            raise ValueError("Double date specification")
-    elif name == "tz_offset":
-        minutes = int(g[1]) * 60 + int(g[2] or 0)
-        if len(g[1]) > 2 or minutes > 18 * 60:
-            raise ValueError("invalid time zone offset")
-        st.tz = timezone(timedelta(minutes=-minutes if g[0] == "-" else minutes))
-    elif name in ("tz_name", "tz_abbr"):
-        zone = _zone_from_name(g[0])
-        if zone is None:
-            raise ValueError("The timezone could not be found in the database")
-        st.tz = zone
+# ----------------------------------------------------------------------------------------------------------------------
+# timelib_fill_holes() and timelib_update_ts() (tm2unixtime.c)
+# ----------------------------------------------------------------------------------------------------------------------
+
+def _days_from_civil(y: int, m: int, d: int) -> int:
+    """Days since 1970-01-01 of a proleptic Gregorian date (timelib_epoch_days_from_time())."""
+    y -= m <= 2
+    era = y // 400
+    year_of_era = y - era * 400
+    day_of_year = (153 * (m + (-3 if m > 2 else 9)) + 2) // 5 + d - 1
+    day_of_era = year_of_era * 365 + year_of_era // 4 - year_of_era // 100 + day_of_year
+    return era * 146097 + day_of_era - 719468
 
 
-def _add_relative(st: _Parsed, unit: str, amount: int) -> None:
-    st.have_relative = True
-    if unit == "w":
-        st.rel["d"] += 7 * amount
-    elif unit == "f":
-        st.rel["d"] += 14 * amount
-    elif unit == "wd":
-        st.rel["wd"] = st.rel.get("wd", 0) + amount
+def _civil_from_days(z: int) -> tuple[int, int, int]:
+    z += 719468
+    era = z // 146097
+    day_of_era = z - era * 146097
+    year_of_era = (day_of_era - day_of_era // 1460 + day_of_era // 36524 - day_of_era // 146096) // 365
+    day_of_year = day_of_era - (365 * year_of_era + year_of_era // 4 - year_of_era // 100)
+    mp = (5 * day_of_year + 2) // 153
+    d = day_of_year - (153 * mp + 2) // 5 + 1
+    m = mp + 3 if mp < 10 else mp - 9
+    return year_of_era + era * 400 + (m <= 2), m, d
+
+
+def _c_div(a: int, b: int) -> int:
+    """C's integer division: truncation toward zero"""
+    q = abs(a) // abs(b)
+    return q if (a < 0) == (b < 0) else -q
+
+
+def _do_normalize(t: _Time) -> None:
+    """timelib_do_normalize(): seconds overflow into minutes, ..., days into months (31 February is 3 March)."""
+    q, t.us = divmod(t.us, 1000000)
+    t.s += q
+    q, t.s = divmod(t.s, 60)
+    t.i += q
+    q, t.i = divmod(t.i, 60)
+    t.h += q
+    q, t.h = divmod(t.h, 24)
+    t.d += q
+    q, m = divmod(t.m - 1, 12)
+    t.y += q
+    t.y, t.m, t.d = _civil_from_days(_days_from_civil(t.y, m + 1, 1) + t.d - 1)
+
+
+def _do_adjust_for_weekday(t: _Time) -> None:
+    rel = t.relative
+    current_dow = _day_of_week(t.y, t.m, t.d)
+    if rel.weekday_behavior == 2:
+        # To make "this week" work, where the current DOW is a "sunday"
+        if current_dow == 0 and rel.weekday != 0:
+            rel.weekday -= 7
+        # To make "sunday this week" work, where the current DOW is not a "sunday"
+        if rel.weekday == 0 and current_dow != 0:
+            rel.weekday = 7
+        t.d -= current_dow
+        t.d += rel.weekday
+        return
+    difference = rel.weekday - current_dow
+    if (rel.d < 0 and difference < 0) or (rel.d >= 0 and difference <= -rel.weekday_behavior):
+        difference += 7
+    if rel.weekday >= 0:
+        t.d += difference
     else:
-        st.rel[unit] += amount
+        t.d -= 7 - (abs(rel.weekday) - current_dow)
+    rel.have_weekday_relative = False
 
 
-def _days_in_month(y: int, m: int) -> int:
-    return calendar.monthrange(y, m)[1]
+def _do_adjust_first_last_day_of(t: _Time) -> None:
+    if t.relative.first_last_day_of == _SPECIAL_FIRST_DAY_OF_MONTH:
+        t.d = 1
+    elif t.relative.first_last_day_of == _SPECIAL_LAST_DAY_OF_MONTH:
+        t.d = 0
+        t.m += 1
 
 
-def _normalize(y: int, m: int, d: int, h: int, i: int, s: int, us: int) -> tuple:
-    """timelib's do_range_limit: months overflow into years, days into months (31 February is 3 March)."""
-    y += (m - 1) // 12
-    m = (m - 1) % 12 + 1
-    if not 1 <= y <= 9999:
-        raise YearOutOfRange(y)
-    base = datetime(y, m, 1)
-    try:
-        dt = base + timedelta(days=d - 1, hours=h, minutes=i, seconds=s, microseconds=us)
-    except OverflowError:
-        raise YearOutOfRange(y) from None
-    return dt
-
-
-def _compose(st: _Parsed, default_zone: tzinfo, now: datetime) -> datetime:
-    zone = st.tz or default_zone
-    if st.timestamp is not None:
-        whole = math.floor(st.timestamp)
-        try:
-            base = datetime(1970, 1, 1, tzinfo=timezone.utc) + timedelta(seconds=whole,
-                                                                         microseconds=round((st.timestamp - whole) * 1e6))
-        except OverflowError:
-            raise YearOutOfRange(10000 if st.timestamp > 0 else 0) from None
-        local = base.replace(tzinfo=None)
-        zone = timezone.utc
+def _do_adjust_special_weekday(t: _Time) -> None:
+    count = t.relative.special_amount
+    dow = _day_of_week(t.y, t.m, t.d)
+    # Add increments of 5 weekdays as a week, leaving the DOW unchanged.
+    t.d += _c_div(count, 5) * 7
+    # Deal with the remainder.
+    rem = count - 5 * _c_div(count, 5)
+    if count > 0:
+        if rem == 0:
+            # Head back to Friday if we stop on the weekend.
+            if dow == 0:
+                t.d -= 2
+            elif dow == 6:
+                t.d -= 1
+        elif dow == 6:
+            # We ended up on Saturday, but there's still work to do, so move to Sunday and continue from there.
+            t.d += 1
+        elif dow + rem > 5:
+            # We're on a weekday, but we're going past Friday, so skip right over the weekend.
+            t.d += 2
     else:
-        now_local = now.astimezone(zone).replace(tzinfo=None)
-        # fields the string does not give are taken from now
-        y = st.y if st.y is not None else now_local.year
-        mo = st.m if st.m is not None else now_local.month
-        d = st.d if st.d is not None else now_local.day
-        if st.have_time:
-            h, i, s, us = st.h or 0, st.i or 0, st.s or 0, st.us
-        elif st.have_date:
-            h, i, s, us = 0, 0, 0, 0
-        else:
-            h, i, s, us = now_local.hour, now_local.minute, now_local.second, 0
-        if not 1 <= y <= 9999:
-            raise YearOutOfRange(y)
-        local = _normalize(y, mo, d, h, i, s, us)
+        # Completely mirror the forward direction. This also covers the 0 case, since if we start on the weekend,
+        # we want to move forward as if we stopped there while going backwards.
+        if rem == 0:
+            if dow == 6:
+                t.d += 2
+            elif dow == 0:
+                t.d += 1
+        elif dow == 0:
+            t.d -= 1
+        elif dow + rem < 1:
+            t.d -= 2
+    t.d += rem
 
-    # relative parts
-    rel = st.rel
-    if rel["y"] or rel["m"]:
-        y, mo = local.year + rel["y"], local.month + rel["m"]
-        local = _normalize(y, mo, local.day, local.hour, local.minute, local.second, local.microsecond)
-    if st.first_last_day_of == "first":
-        local = local.replace(day=1)
-    elif st.first_last_day_of == "last":
-        local = local.replace(day=_days_in_month(local.year, local.month))
-    try:
-        local = local + timedelta(days=rel["d"], hours=rel["h"], minutes=rel["i"], seconds=rel["s"])
-    except OverflowError:
-        raise YearOutOfRange(10000) from None
-    if rel.get("wd"):
-        step = 1 if rel["wd"] > 0 else -1
-        left = abs(rel["wd"])
-        while left:
-            local += timedelta(days=step)
-            if local.weekday() < 5:
-                left -= 1
-    if st.weekday is not None:
-        day, behaviour = st.weekday
-        current = (local.weekday() + 1) % 7
-        if behaviour == 0:
-            delta = (day - current) % 7
-        elif behaviour > 0:
-            delta = (day - current) % 7 or 7
-            delta += 7 * (behaviour - 1)
-        else:
-            delta = -((current - day) % 7 or 7)
-        local += timedelta(days=delta)
-    return local.replace(tzinfo=zone)
+
+def _compose(t: _Time, default_zone: tzinfo, now: datetime) -> datetime:
+    """php_date_initialize(): timelib_fill_holes() with the current time in the given zone, then
+    timelib_update_ts() (do_adjust_special_early(), do_adjust_relative(), do_adjust_special())."""
+    now_local = now.astimezone(default_zone)
+    if t.have_date and not t.have_time:
+        t.h = t.i = t.s = t.us = 0
+    if any(v is not None for v in (t.y, t.m, t.d, t.h, t.i, t.s)):
+        if t.us is None:
+            t.us = 0
+    elif t.us is None:
+        t.us = now_local.microsecond
+    t.y = now_local.year if t.y is None else t.y
+    t.m = now_local.month if t.m is None else t.m
+    t.d = now_local.day if t.d is None else t.d
+    t.h = now_local.hour if t.h is None else t.h
+    t.i = now_local.minute if t.i is None else t.i
+    t.s = now_local.second if t.s is None else t.s
+    zone = t.zone if t.zone is not None else default_zone
+    rel = t.relative
+
+    # do_adjust_special_early()
+    if rel.have_special_relative:
+        if rel.special_type == _SPECIAL_DAY_OF_WEEK_IN_MONTH:
+            t.d = 1
+            t.m += rel.m
+            rel.m = 0
+        elif rel.special_type == _SPECIAL_LAST_DAY_OF_WEEK_IN_MONTH:
+            t.d = 1
+            t.m += rel.m + 1
+            rel.m = 0
+    _do_adjust_first_last_day_of(t)
+    _do_normalize(t)
+
+    # do_adjust_relative()
+    if rel.have_weekday_relative:
+        _do_adjust_for_weekday(t)
+    _do_normalize(t)
+    if t.have_relative:
+        t.us += rel.us
+        t.s += rel.s
+        t.i += rel.i
+        t.h += rel.h
+        t.d += rel.d
+        t.m += rel.m
+        t.y += rel.y
+    _do_adjust_first_last_day_of(t)
+    _do_normalize(t)
+
+    # do_adjust_special()
+    if rel.have_special_relative and rel.special_type == _SPECIAL_WEEKDAY:
+        _do_adjust_special_weekday(t)
+    _do_normalize(t)
+
+    if not 1 <= t.y <= 9999:
+        raise YearOutOfRange(t.y)
+    return datetime(t.y, t.m, t.d, t.h, t.i, t.s, t.us, tzinfo=zone)
