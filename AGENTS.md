@@ -95,6 +95,19 @@ mirror-only links for Markdown, wiki links for HTML) → `out/` and, with `--dat
 - **Outward actions need the maintainer's consent**: pushing to `main` deploys the site; `report --issue` writes
   to GitHub; `sync` contacts the wiki.
 
+## MediaWiki parser port (`biwiki/mediawiki/`)
+
+A Python port of the MediaWiki 1.39 parser is being written, so pages render as the wiki renders them; see
+`biwiki/mediawiki/README.md`. Its rules:
+
+- **License: GPL-2.0-or-later**, as MediaWiki; the rest of the repository is MIT (see `LICENSE`). Code translated
+  or adapted from MediaWiki goes into `biwiki/mediawiki/` only, never into MIT files, with the header given in
+  its README (origin file, "(C) MediaWiki contributors", what was changed and when).
+- Port from MediaWiki branch `REL1_39` (commit `19ddcf0`), file by file, keeping names and comments so it can be
+  compared with the PHP.
+- `python -m biwiki.mediawiki.parsertests` runs MediaWiki's parser tests (`tests/mediawiki/parserTests.txt`);
+  after a step that makes more of them pass, `--accept` and commit `tests/mediawiki/passing.txt`.
+
 ## Conventions
 
 - Style: as in the surrounding code; type hints, `from __future__ import annotations`, docstrings that explain why.

@@ -276,7 +276,15 @@ accessibility, best practices, SEO and agentic browsing on the main page types).
 - `biwiki/report.py`: parser health report, baseline comparison and the GitHub issue
 - `biwiki/feed.py`: change feed from the data repository's history
 - `biwiki/site.py`, `biwiki/assets/`: HTML version (markdown-it-py, SQF highlighting, page templates)
-- `tests/`: unit and end-to-end build tests on a few real pages in `tests/fixtures/raw/`
+- `biwiki/mediawiki/`: a Python port of the MediaWiki 1.39 parser, in progress (see its README);
+  `python -m biwiki.mediawiki.parsertests` runs MediaWiki's own parser tests against it
+- `tests/`: unit and end-to-end build tests on a few real pages in `tests/fixtures/raw/`; `tests/mediawiki/`:
+  MediaWiki's parser test cases
 - `AGENTS.md`, `CLAUDE.md`, `.claude/`: instructions and Claude Code hooks for AI agents working on the code
 
-Content belongs to the authors of the BI Community Wiki; every generated page links to its source and revision.
+## License
+
+The code is MIT-licensed ([LICENSE](LICENSE)), except `biwiki/mediawiki/` and `tests/mediawiki/`, which are derived
+from MediaWiki and licensed GPL-2.0-or-later ([COPYING](biwiki/mediawiki/COPYING)); the program as a whole is
+therefore distributed under the GPL. Content belongs to the authors of the BI Community Wiki; every generated page
+links to its source and revision.

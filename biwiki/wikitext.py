@@ -11,6 +11,8 @@ from collections import Counter
 from typing import Callable, Optional
 
 import mwparserfromhell as mw
+
+from .mediawiki.quotes import do_quotes
 from mwparserfromhell.nodes import (
     Argument,
     Comment,
@@ -849,68 +851,8 @@ def _styles(line: str) -> str:
     closed at the end of the line, so "'''DO NOT'' use" is "'*DO NOT* use", not a markup error."""
     if "''" not in line:
         return line
-    parts = re.split(r"('{2,})", line)
-    italics = bold = 0
-    for i in range(1, len(parts), 2):
-        n = len(parts[i])
-        if n == 4:  # an apostrophe, then bold
-            parts[i - 1] += "'"
-            parts[i] = "'''"
-        elif n > 5:  # apostrophes, then bold italic
-            parts[i - 1] += "'" * (n - 5)
-            parts[i] = "'''''"
-        n = len(parts[i])
-        italics += n in (2, 5)
-        bold += n in (3, 5)
-    if italics % 2 and bold % 2:
-        single = multi = space = None
-        for i in range(1, len(parts), 2):
-            if len(parts[i]) != 3:
-                continue
-            before = parts[i - 1]
-            x1, x2 = before[-1:], (before[-2] if len(before) > 1 else before[:1])
-            if x1 == " ":
-                space = i if space is None else space
-            elif x2 == " ":  # after a one-letter word
-                single = i
-                break
-            elif multi is None:
-                multi = i
-        pick = next((i for i in (single, multi, space) if i is not None), None)
-        if pick is not None:
-            parts[pick - 1] += "'"
-            parts[pick] = "''"
-
-    i_, b_, ic, bc = _I_OPEN, _B_OPEN, _I_CLOSE, _B_CLOSE
-    out, state, buffer = [], "", ""
-    for i, part in enumerate(parts):
-        if i % 2 == 0:
-            if state == "both":
-                buffer += part
-            else:
-                out.append(part)
-            continue
-        n = len(part)
-        if n == 2:
-            out.append({"i": ic, "bi": ic, "ib": bc + ic + b_, "both": b_ + i_ + buffer + ic}.get(state, i_))
-            state = {"i": "", "bi": "b", "ib": "b", "both": "b"}.get(state, state + "i")
-        elif n == 3:
-            out.append({"b": bc, "bi": ic + bc + i_, "ib": bc, "both": i_ + b_ + buffer + bc}.get(state, b_))
-            state = {"b": "", "bi": "i", "ib": "i", "both": "i"}.get(state, state + "b")
-        else:  # 5
-            out.append({"b": bc + i_, "i": ic + b_, "bi": ic + bc, "ib": bc + ic,
-                        "both": i_ + b_ + buffer + bc + ic}.get(state, ""))
-            state = {"b": "i", "i": "b", "bi": "", "ib": "", "both": ""}.get(state, "both")
-            buffer = ""
-    if state in ("b", "ib"):
-        out.append(bc)
-    if state in ("i", "bi", "ib"):
-        out.append(ic)
-    if state == "bi":
-        out.append(bc)
-    if state == "both" and buffer:
-        out.append(b_ + i_ + buffer + ic + bc)
-    return _emphasis("".join(out))
+    # the port of MediaWiki's code is GPL-licensed and lives in biwiki/mediawiki/ (see LICENSE)
+    return _emphasis(do_quotes(line, (_I_OPEN, _I_CLOSE, _B_OPEN, _B_CLOSE)))
 
 
 def _emphasis(text: str) -> str:
