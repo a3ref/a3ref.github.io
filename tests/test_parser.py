@@ -8,6 +8,7 @@ from biwiki import docblock, typeexpr
 from biwiki.fetch import load_cache
 from biwiki.parse import parse_page, split_param, syntax_form
 from biwiki.render import page_slug, slug, summary
+from biwiki.report import leftover_markup, load_known, position, save_known
 from biwiki.wikitext import Renderer
 
 RAW = Path(__file__).parent / "fixtures" / "raw"
@@ -44,6 +45,49 @@ class WikitextTest(unittest.TestCase):
         self.assertEqual(self.md("<sqf>player setPos [0,0,0];</sqf>"), "```sqf\nplayer setPos [0,0,0];\n```")
         self.assertEqual(self.md("== Head ==\ntext"), "### Head\n\ntext")
         self.assertEqual(self.md("{{Feature|warning|Careful}}"), "> [!WARNING]\n> Careful")
+
+
+    def test_space_led_lines_are_preformatted(self):
+        md = self.md("Run it:\n AddonBuilder.exe\n AddonBuilder.exe -help\nDone.")
+        self.assertEqual(md, "Run it:\n\n```\nAddonBuilder.exe\nAddonBuilder.exe -help\n```\n\nDone.")
+        # not after <br> (the space is not at the start of a source line) nor before a block element
+        self.assertNotIn("```", self.md("Text.<br><br> More text."))
+        self.assertNotIn("```", self.md("a\n <div>b</div>"))
+
+    def test_quotes_like_mediawiki(self):
+        # odd '' and ''': one ''' is an apostrophe plus ''; what is left open closes at the end of the line
+        self.assertEqual(self.md("'''DO NOT'' use it"), "'*DO NOT* use it")
+        self.assertEqual(self.md("when ''layer is a [[String]]"), "when *layer is a String*")
+        self.assertEqual(self.md("''a'''s type"), "*a'*s type")
+        self.assertEqual(self.md("''a''<nowiki/>'s type"), "*a*'s type")  # <nowiki/> ends the run of quotes
+        self.assertEqual(self.md("''Caliber<br />Rounds''"), "*Caliber\nRounds*")  # <br> is no line end here
+        self.assertEqual(self.md("{{hl|'''name''' {{=}} 1}}"), "`name = 1`")
+
+    def test_unknown_tags_are_text(self):
+        self.assertEqual(self.md('{{hl|bone {{=}} "<string>"}} in <GroundContacts>'), '`bone = "<string>"` in <GroundContacts>')
+
+    def test_unclosed_table_in_a_parameter(self):
+        self.assertIn("| A | B |", self.md("Mines:\n{{{!}} class=\"wikitable\"\n! A\n! B\n{{!}}-\n{{!}} 1\n{{!}} 2"))
+
+    def test_code_display_block(self):
+        md = self.md('<code style="display: block">[[player]] setPos [0, 0, 0];<br>{{cc|done}}</code>')
+        self.assertEqual(md, "```\nplayer setPos [0, 0, 0];\n// done\n```")
+
+    def test_magic_words_and_pipe_trick(self):
+        self.assertEqual(self.md("__NOTOC__\n[[raP (ArmA)|]] and [[Seattle, Washington|]]"), "raP and Seattle")
+
+    def test_definition_line_with_colon(self):
+        self.assertEqual(self.md("; Type: String\n; Description: Text."), "**Type:** String\n\n**Description:** Text.")
+
+    def test_infobox_templates(self):
+        md = self.md("{{Tool\n|AUTHOR= BI\n|COMMAND=\n tool.exe -help\n|SEEALSO= [[Other]]\n}}")
+        self.assertEqual(md, "**Author:** BI\n\n**Command:**\n\n```\ntool.exe -help\n```\n\n**See also:** Other")
+
+    def test_control_type_attribute(self):
+        md = self.md("{{CT|attribute\n|name=colorText\n|type1=Array\n|value1={1,1,1,1}\n|description=Text colour.\n}}")
+        self.assertIn("##### colorText", md)
+        self.assertIn("**Type:** Array\n\n**Description:** Text colour.", md)
+        self.assertIn("```cpp\ncolorText[] = {1,1,1,1};\n```", md)
 
 
 class ParamTest(unittest.TestCase):
@@ -119,6 +163,17 @@ class PageTest(unittest.TestCase):
             types = command(title)["syntaxes"][0]["params"][0]["types"]
             self.assertTrue({"Number", "Side", "Structured Text", "Location", "Boolean"} <= set(types), title)
 
+    def test_param_slots_that_are_no_plain_param(self):
+        raw = {"title": "BIS fnc test", "wikitext": (
+            "{{RV|type=function\n|game1= arma3\n|s1= [a, b] call [[BIS_fnc_test]]\n"
+            "|p1= <nowiki/>\n{{{!}} class=\"wikitable\"\n! Game\n{{!}} v1\n{{!}}}\n"
+            "a - vector starting point, [[Position]] '''or''' [[Object]]\n"
+            "|p2= <!-- to delete if unused -->\n}}")}
+        params = parse_page(raw, "functions", Renderer(None))["syntaxes"][0]["params"]
+        self.assertEqual([p["name"] for p in params], ["a"])  # the comment-only p2 is no parameter
+        self.assertEqual(params[0]["types"], ["Position", "Object"])  # types after the description
+        self.assertIn("| Game |", params[0]["description"])  # the table before it moves after the description
+
     def test_docblock_alternatives_with_the_same_name(self):
         p = function("BIS fnc getCfgDataPool")["syntaxes"][0]["params"][0]  # "_this: CFG" / "_this: ARRAY of STRINGS"
         self.assertEqual(p["type_expr"], "Config | Array<String>")
@@ -183,12 +238,38 @@ class DocblockTest(unittest.TestCase):
         self.assertEqual(d["returns"]["types"], ["Boolean"])
 
 
+class ReportTest(unittest.TestCase):
+    def test_leftover_markup_and_where(self):
+        self.assertEqual(leftover_markup("torqueCurve[] = {{0.0, 0.8}, {1.0, 0.8}} in prose"), {})
+        md = "intro\nsee {{hl|x}} and `''code''`\n''dangling }}"
+        found = leftover_markup(md)
+        self.assertEqual(sorted(found), ["''", "{{", "}}"])  # the }} of {{hl|x}} closes its {{: only the last one
+        self.assertEqual(position(md, found["{{"]), (2, 5))
+        self.assertEqual(position(md, found["''"]), (3, 1))  # not the one in inline code
+
+    def test_known_problems_keep_the_key(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "known.json"
+            save_known(path, {"markup|topics/X|''": {"where": {"md": "3:1", "wiki": "7:2", "context": "''x"}}})
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")),
+                             [{"key": "markup|topics/X|''", "md": "3:1", "wiki": "7:2", "context": "''x"}])
+            self.assertEqual(load_known(path), {"markup|topics/X|''"})
+            path.write_text('["markup|topics/Y|{{"]', encoding="utf-8")  # the older format: keys only
+            self.assertEqual(load_known(path), {"markup|topics/Y|{{"})
+
+
 class SlugTest(unittest.TestCase):
     def test_slugs(self):
         self.assertEqual(slug("setPos"), "setPos")
         self.assertEqual(slug("a != b"), "a_~21~3D_b")
         self.assertEqual(slug("con"), "con_")  # reserved file name on Windows
         self.assertEqual(page_slug("Arma 3: Event Handlers", "topics"), "Event_Handlers")
+        # both "Publisher" and "Arma 3: Publisher" are topics: the prefixed one keeps its prefix
+        topics = {"Publisher", "Arma 3: Publisher"}
+        self.assertEqual(page_slug("Publisher", "topics", topics), "Publisher")
+        self.assertEqual(page_slug("Arma 3: Publisher", "topics", topics), "Arma_3~3A_Publisher")
 
     def test_summary(self):
         self.assertEqual(summary("First [link](x.md) here. Second.\n\nMore."), "First link here. Second.")

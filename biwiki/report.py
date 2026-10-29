@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 from .parse import wiki_url
 
@@ -29,7 +30,9 @@ KIND_ORDER = list(KIND_TITLES)
 
 # Wiki markup that should never survive conversion (checked outside code blocks and inline code).
 LEFTOVERS = {
-    "{{": re.compile(r"\{\{"),
+    # a template call {{name|...}} / {{name}}; config arrays in prose such as {{0, 1}, {1, 0}} are text on the wiki too
+    "{{": re.compile(r"\{\{\s*[^\s{}|\[\]<][^{}|\n]*(?:\||\}\})"),
+    # a }} that closes nothing on its line (see _orphan_closes)
     "}}": re.compile(r"\}\}"),
     # an unconverted [[Title]] / [[Title|text]]; nested SQF arrays like [[x, y], [z]] in prose are fine
     "[[": re.compile(r"\[\[[A-Za-z:][^\[\]\n,]*(?:\|[^\[\]\n]+)?\]\]"),
@@ -50,19 +53,28 @@ class Report:
     def __init__(self):
         self.problems: dict[str, dict] = {}
 
-    def add(self, kind: str, title: str, page_kind: str, detail: str = "", note: str = "") -> None:
+    def add(self, kind: str, title: str, page_kind: str, detail: str = "", note: str = "", where: Optional[dict] = None) -> None:
         page = f"{page_kind}/{title}"
         key = f"{kind}|{page}" + (f"|{detail}" if detail else "")
+        # the key stays stable across edits of the page; "where" is only for finding the spot
         self.problems.setdefault(key, {
             "key": key, "kind": kind, "page": page, "url": wiki_url(title), "detail": detail, "note": note,
+            **({"where": where} if where else {}),
         })
 
-    def check_page(self, title: str, page_kind: str, rec: dict, md: str, unknown) -> None:
+    def check_page(self, title: str, page_kind: str, rec: dict, md: str, unknown, wikitext: str = "") -> None:
         for name in unknown:
             what, _, ident = name.partition(":")
-            self.add(f"unknown-{what}", title, page_kind, ident)
-        for pattern in leftover_markup(md):
-            self.add("markup", title, page_kind, pattern)
+            needle = re.compile(r"\{\{\s*" + re.escape(ident) if what == "template" else "<" + re.escape(ident), re.I)
+            m = needle.search(wikitext)
+            where = {"wiki": "%d:%d" % position(wikitext, m.start())} if m else None
+            self.add(f"unknown-{what}", title, page_kind, ident, where=where)
+        for pattern, offset in leftover_markup(md).items():
+            where = {"md": "%d:%d" % position(md, offset), "context": _context(md, offset)}
+            src = source_position(wikitext, md, offset)
+            if src:
+                where["wiki"] = "%d:%d" % src
+            self.add("markup", title, page_kind, pattern, where=where)
         if rec["type"] == "topic":  # free-form page: no syntax or parameters to check
             return
         if not rec["syntaxes"]:
@@ -72,7 +84,12 @@ class Report:
                 if not p["name"]:
                     self.add("unnamed-param", title, page_kind, f"syntax {i}: {p['text'][:40]}")
                 elif not p["types"] and not p["type"]:
-                    self.add("untyped-param", title, page_kind, f"syntax {i}: {p['name']}")
+                    name = re.escape(p["name"])
+                    # its |pN= line, else the name in the function's header comment
+                    m = (re.search(r"(?m)^\|\s*p\d+\s*=\s*(?:\(optional\)\s*)?" + name, wikitext, re.I)
+                         or re.search(r"(?<![\w.])" + name + r"(?![\w.])", wikitext))
+                    where = {"wiki": "%d:%d" % position(wikitext, m.start())} if m else None
+                    self.add("untyped-param", title, page_kind, f"syntax {i}: {p['name']}", where=where)
 
     def to_json(self, updated) -> dict:
         items = sorted(self.problems.values(), key=lambda p: (KIND_ORDER.index(p["kind"]), p["key"]))
@@ -80,9 +97,52 @@ class Report:
         return {"updated": updated, "counts": counts, "problems": items}
 
 
-def leftover_markup(md: str) -> list[str]:
-    text = _INLINE.sub("", _FENCED.sub("", md))
-    return [name for name, rx in LEFTOVERS.items() if rx.search(text)]
+def leftover_markup(md: str) -> dict[str, int]:
+    """Leftover markup -> offset of its first occurrence in ``md``."""
+    # code is blanked out with spaces, so offsets stay those of the page
+    text = _FENCED.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), md)
+    text = _INLINE.sub(lambda m: " " * len(m.group(0)), text)
+    found = {}
+    for name, rx in LEFTOVERS.items():
+        for m in rx.finditer(text):
+            if name != "}}" or _orphan_close(text, m.start()):
+                found[name] = m.start()
+                break
+    return found
+
+
+def _orphan_close(text: str, at: int) -> bool:
+    """Whether the }} at ``at`` closes fewer than two braces opened earlier on its line."""
+    line = text[text.rfind("\n", 0, at) + 1 : at]
+    return line.count("{") - line.count("}") < 2
+
+
+def position(text: str, offset: int) -> tuple[int, int]:
+    """1-based line and column of ``offset``."""
+    line = text.count("\n", 0, offset) + 1
+    return line, offset - (text.rfind("\n", 0, offset) + 1) + 1
+
+
+def _context(text: str, offset: int) -> str:
+    start, end = text.rfind("\n", 0, offset) + 1, text.find("\n", offset)
+    line = text[start : end if end != -1 else len(text)]
+    col = offset - start
+    return (("…" if col > 40 else "") + line[max(0, col - 40) : col + 60] + ("…" if len(line) > col + 60 else "")).strip()
+
+
+def source_position(wikitext: str, md: str, offset: int) -> Optional[tuple[int, int]]:
+    """Where the Markdown at ``offset`` comes from in the wikitext: the first source line that holds the words
+    right after it (markup differs between the two, words do not). None if they cannot be found."""
+    after = md[offset : offset + 120].split("\n", 1)[0]
+    words = re.findall(r"[A-Za-z0-9_]{3,}", after)[:4]
+    if not words:
+        return None
+    rx = re.compile(r"\W+".join(map(re.escape, words)))
+    for n, line in enumerate(wikitext.split("\n"), 1):
+        m = rx.search(line)
+        if m:
+            return n, m.start() + 1
+    return None
 
 
 # ---- comparing against the accepted baseline and reporting ------------------------------------
@@ -90,15 +150,18 @@ def leftover_markup(md: str) -> list[str]:
 def load_known(path: Path) -> set[str]:
     if not path.exists():
         return set()
-    return set(json.loads(path.read_text(encoding="utf-8")))
+    return {e["key"] if isinstance(e, dict) else e for e in json.loads(path.read_text(encoding="utf-8"))}
 
 
-def save_known(path: Path, keys) -> None:
-    path.write_text(json.dumps(sorted(keys), ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
+def save_known(path: Path, problems: dict[str, dict]) -> None:
+    """One problem per line: its key, and where it was when accepted ("md": line:column in the page's .md,
+    "wiki": line:column in the wikitext, "context": the text around it). Only the key is compared."""
+    lines = [json.dumps({"key": k, **problems[k].get("where", {})}, ensure_ascii=False) for k in sorted(problems)]
+    path.write_text("[\n " + ",\n ".join(lines) + "\n]\n", encoding="utf-8", newline="\n")
 
 
 def markdown(report: dict, new: list[dict], resolved: list[str], site: str) -> str:
-    from .render import slug  # local import: render imports this module
+    from .render import page_slug  # local import: render imports this module
 
     counts = report["counts"]
     lines = ["## Parser report", ""]
@@ -118,11 +181,15 @@ def markdown(report: dict, new: list[dict], resolved: list[str], site: str) -> s
         for p in group[:LIST_LIMIT]:
             kind, _, title = p["page"].partition("/")
             detail = f": `{p['detail']}`" if p["detail"] else ""
+            where = p.get("where", {})
+            spots = [f"{label} {where[k]}" for k, label in (("md", "md"), ("wiki", "wikitext")) if k in where]
+            if spots:
+                detail += f" at {', '.join(spots)}" + (f" — `{where['context']}`" if where.get("context") else "")
             note = f"\n  ```\n  {p['note']}\n  ```" if p["note"] else ""
             if p["kind"] in ("error", "skipped"):  # no page on the site to link to
                 lines.append(f"- [{title}]({p['url']}){detail}{note}")
             else:
-                lines.append(f"- [{title}]({site}{kind}/{slug(title)}.html) ([wiki]({p['url']})){detail}{note}")
+                lines.append(f"- [{title}]({site}{kind}/{page_slug(title, kind)}.html) ([wiki]({p['url']})){detail}{note}")
         if len(group) > LIST_LIMIT:
             lines.append(f"- … and {len(group) - LIST_LIMIT} more (see `report.json`)")
     if resolved:

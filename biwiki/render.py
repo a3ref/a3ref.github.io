@@ -6,10 +6,11 @@ import json
 import re
 import shutil
 from collections import Counter, defaultdict
+from collections.abc import Collection
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .fetch import CATEGORIES, load_cache
+from .fetch import CATEGORIES, TOPIC_TITLES, load_cache
 from .parse import parse_page, parse_topic, script_name, wiki_url
 from .report import Report
 from .site import Site, _anchor, heading_id
@@ -22,6 +23,16 @@ KIND_LABEL = {"commands": "Scripting Commands", "functions": "Functions", "topic
 TYPE_OF = {"commands": "command", "functions": "function", "topics": "topic"}
 KIND_OF = {v: k for k, v in TYPE_OF.items()}
 DATA_TYPE_CATEGORIES = {"Data Types", "Magic Types", "Syntactical Helper Types"}
+# Topic groups by words in the wiki categories, first match wins; anything else is "General".
+TOPIC_GROUPS = [
+    ("GUI", ["Control Types", "GUI", "Dialog"]),
+    ("Scripting", ["Scripting", "Syntax", "Arrays", "Example Code"]),
+    ("Multiplayer and Server", ["Multiplayer", "Startup Parameters", "Server", "MP Modes"]),
+    ("Mission Editing", ["Mission Editing", "Eden Editor", "2D Editor", "Briefing", "Editor Modules"]),
+    ("Tools and File Formats", ["Official Tools", "File Formats", "File extensions", "Terrain", "Modelling", "Texturing"]),
+    ("Reference Lists", ["Reference Lists", "CfgWeapons", "CfgVehicles", "Moves"]),
+    ("Configuration", ["Configuration", "Config", "Assets", "Sound", "Particle", "AI"]),
+]
 _RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(10)), *(f"LPT{i}" for i in range(10))}
 
 
@@ -39,9 +50,11 @@ def slug(title: str) -> str:
     return s + "_" if s.upper() in _RESERVED else s
 
 
-def page_slug(title: str, kind: str) -> str:
-    # "Arma 3: Event Handlers" -> topics/Event_Handlers: shorter, and what an agent would guess
-    return slug(title.removeprefix("Arma 3: ")) if kind == "topics" else slug(title)
+def page_slug(title: str, kind: str, topics: Collection[str] = ()) -> str:
+    # "Arma 3: Event Handlers" -> topics/Event_Handlers: shorter, and what an agent would guess; unless
+    # ``topics`` (all topic titles) has a page with the shorter title too ("Publisher" and "Arma 3: Publisher")
+    short = title.removeprefix("Arma 3: ")
+    return slug(short) if kind == "topics" and (short == title or short not in topics) else slug(title)
 
 
 def summary(md: str, limit: int = 220) -> str:
@@ -222,13 +235,17 @@ class Pages:
     def __init__(self, raws: dict[str, dict[int, dict]]):
         self.where: dict[str, tuple[str, str]] = {}  # title -> (kind, slug)
         self.names: dict[str, str] = {}  # title -> name as written in scripts
+        self.topics = {v["title"] for v in raws.get("topics", {}).values()}
         for kind, pages in raws.items():
             for v in pages.values():
-                self.where[v["title"]] = (kind, page_slug(v["title"], kind))
+                self.where[v["title"]] = (kind, self.slug(v["title"], kind))
                 self.names[v["title"]] = script_name(v["title"], kind, v["wikitext"])
         for v in raws.get("topics", {}).values():
             for alias in v.get("redirects", []):
-                self.where.setdefault(alias, ("topics", page_slug(v["title"], "topics")))
+                self.where.setdefault(alias, ("topics", self.slug(v["title"], "topics")))
+
+    def slug(self, title: str, kind: str) -> str:
+        return page_slug(title, kind, self.topics)
 
     def resolver(self, ext: str):
         """Links to mirrored pages stay local; others go to the wiki (HTML) or become plain text (Markdown:
@@ -307,7 +324,7 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
         target.mkdir(parents=True)
         records[kind] = []
         for raw in sorted(raws[kind].values(), key=lambda v: v["title"].lower()):
-            s = page_slug(raw["title"], kind)
+            s = pages.slug(raw["title"], kind)
             # One broken page must not take the whole site down: record it and move on.
             try:
                 md_r = Renderer(resolve_md)
@@ -321,7 +338,7 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
             except Exception as e:  # noqa: BLE001 - reported, the build goes on
                 report.add("error", raw["title"], kind, note=f"{type(e).__name__}: {e}"[:300])
                 continue
-            report.check_page(raw["title"], kind, rec, page_md, md_r.unknown)
+            report.check_page(raw["title"], kind, rec, page_md, md_r.unknown, raw["wikitext"])
             writer.write(target, s, "md", page_md)
             writer.write(target, s, "json", json.dumps(rec, ensure_ascii=False, separators=(",", ":")))
             pending.append((target, s, rec, render_html))
@@ -396,12 +413,27 @@ def _reference(raw, kind, md_r, pages: Pages, resolve_md, resolve_html, site: Si
     return rec, page_markdown(rec_md, resolve_md), render_html, short
 
 
+def topic_group(raw: dict) -> str:
+    """The first group whose words occur in one of the page's wiki categories; the concept pages picked by hand
+    (TOPIC_TITLES) stay under Scripting."""
+    categories = raw.get("categories", [])
+    if DATA_TYPE_CATEGORIES & set(categories):
+        return "Data Types"
+    if "Event Handlers" in raw["title"]:
+        return "Event Handlers"
+    if raw["title"] in TOPIC_TITLES:
+        return "Scripting"
+    for group, words in TOPIC_GROUPS:
+        if any(w in c for c in categories for w in words):
+            return group
+    return "General"
+
+
 def _topic(raw, md_r, resolve_html, site: Site, s: str):
     rec_md = parse_topic(raw, md_r)
     rec = parse_topic(raw, Renderer(None))
     rec_html = parse_topic(raw, Renderer(resolve_html))
-    group = "Data Types" if DATA_TYPE_CATEGORIES & set(raw.get("categories", [])) else (
-        "Event Handlers" if "Event Handlers" in raw["title"] else "Scripting")
+    group = topic_group(raw)
     for r in (rec, rec_md, rec_html):
         r["groups"] = [group]
     short = summary(rec["markdown"])
@@ -491,7 +523,8 @@ def _llms_txt(base: str, index: list[dict], groups, records) -> str:
         "# Arma 3 Scripting Reference (a3ref)",
         "",
         f"> Every Arma 3 scripting command ({counts['command']}), function ({counts['function']}) and the core "
-        f"concept pages ({counts['topic']}: data types, locality, event handlers, ...) from the Bohemia Interactive "
+        f"topic pages ({counts['topic']}: data types, locality, event handlers, mission editing, configs, GUI, "
+        "multiplayer and server, tools, ...) from the Bohemia Interactive "
         "Community Wiki, updated daily and published for AI agents, bots and tools as Markdown and JSON at stable URLs.",
         "",
         "## How to use",
@@ -511,11 +544,14 @@ def _llms_txt(base: str, index: list[dict], groups, records) -> str:
         "- The same data with daily git history: https://github.com/a3ref/data",
         "- MCP server and Claude Code plugin (search, read pages, lint SQF): https://github.com/a3ref/mcp",
         "",
-        "## Topics",
+        "## Core topics",
         "",
     ]
-    out += [f"- [{e['name']}]({base}{e['md']}): {e['summary']}" for e in index if e["type"] == "topic"]
-    for kind in ("commands", "functions"):
+    # the scripting concepts in full; the other Arma 3 pages (editing, configs, tools, ...) through their groups
+    core = {"Data Types", "Event Handlers"}
+    out += [f"- [{e['name']}]({base}{e['md']}): {e['summary']}" for e in index
+            if e["type"] == "topic" and (core & set(e["groups"]) or e["name"] in TOPIC_TITLES)]
+    for kind in ("topics", "commands", "functions"):
         if kind not in groups:
             continue
         out += ["", f"## {KIND_LABEL[kind]} by group", ""]

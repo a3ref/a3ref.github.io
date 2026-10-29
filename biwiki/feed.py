@@ -40,15 +40,19 @@ def history(repo: Path, slug_of) -> list[dict]:
         parents = _git(repo, "log", "-n1", "--format=%P", commit).split()
         if not parents:
             continue  # the initial import is not a change
+        since = _when(_git(repo, "log", "-n1", "--format=%cI", parents[0]).strip())
         entry = {"commit": commit, "date": date, "added": [], "changed": [], "removed": []}
         for file, kind in FILES.items():
             new, old = _pages_at(repo, commit, file), _pages_at(repo, parents[0], file)
             if not old:
                 continue  # a bundle that appeared for the first time is an import, not a wiki edit
             for title, r in new.items():
-                item = {"name": r["name"], "type": r["type"], "path": f"{kind}/{slug_of(title, kind)}",
+                item = {"name": r["name"], "type": r["type"], "path": f"{kind}/{slug_of(title, kind, new)}",
                         "revid": r["revid"], "updated": r["updated"], "url": r["url"]}
                 if title not in old:
+                    # a page last edited before the previous sync was not new on the wiki: the mirror grew
+                    if r["updated"] and _when(r["updated"]) < since:
+                        continue
                     entry["added"].append(item)
                 elif old[title]["revid"] != r["revid"]:
                     entry["changed"].append(item)
@@ -58,6 +62,10 @@ def history(repo: Path, slug_of) -> list[dict]:
         if entry["added"] or entry["changed"] or entry["removed"]:
             out.append(entry)
     return out
+
+
+def _when(stamp: str) -> datetime:
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00"))
 
 
 def write(repo: Path, out_dir: Path, base_url: str, slug_of) -> None:

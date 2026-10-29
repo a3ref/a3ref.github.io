@@ -5,7 +5,10 @@
 A daily-updated mirror of every page in
 [Category:Arma 3: Scripting Commands](https://community.bistudio.com/wiki/Category:Arma_3:_Scripting_Commands),
 [Category:Arma 3: Functions](https://community.bistudio.com/wiki/Category:Arma_3:_Functions)
-and the concept pages they rely on (data types, `Position`, locality, scheduler, event handlers, `Description.ext`, ...)
+and the concept pages they rely on (data types, `Position`, locality, scheduler, event handlers, `Description.ext`, ...),
+plus every other Arma 3 page of
+[Category:Arma 3](https://community.bistudio.com/wiki/Category:Arma_3) (mission editing, configs, GUI controls,
+multiplayer and server, tools, file formats, reference lists, ...)
 from the Bohemia Interactive Community Wiki. The original wiki sits behind a bot challenge that blocks scripts and
 agents; this mirror serves the same content as **Markdown** and **JSON** at stable, predictable URLs, with no API key,
 no rate limit and open CORS. A readable **HTML** version is there for people too.
@@ -31,7 +34,7 @@ Without MCP, everything is a plain GET:
 | every name | [`names.txt`](https://a3ref.github.io/names.txt), one per line |
 | one group | `groups/commands/<group>.md`, `groups/functions/<group>.md`, listed in `llms.txt` |
 | to search | [`index.json`](https://a3ref.github.io/index.json) (2 MB): every entry with syntax, summary, groups, locality, status, operator symbol, paths |
-| everything | [`commands.json`](https://a3ref.github.io/commands.json) (7 MB), [`functions.json`](https://a3ref.github.io/functions.json) (4 MB), [`topics.json`](https://a3ref.github.io/topics.json) (1 MB): for programs; a model should read single pages instead |
+| everything | [`commands.json`](https://a3ref.github.io/commands.json) (7 MB), [`functions.json`](https://a3ref.github.io/functions.json) (4 MB), [`topics.json`](https://a3ref.github.io/topics.json) (27 MB): for programs; a model should read single pages instead |
 | a linter's data | [`syntax.json`](https://a3ref.github.io/syntax.json) (0.5 MB): forms (nullary/unary/binary), status, replacements and syntax of every name |
 | the record format | [`schema.json`](https://a3ref.github.io/schema.json) (JSON Schema 2020-12) |
 | what changed | [`changes.md`](https://a3ref.github.io/changes.md), [`changes.json`](https://a3ref.github.io/changes.json), Atom [`feed.xml`](https://a3ref.github.io/feed.xml) |
@@ -133,7 +136,9 @@ If Cloudflare ever blocks the GitHub runner, sync locally
 Every build writes `report.json` (also published at https://a3ref.github.io/report.json) and never stops on a single
 broken page: the page is left out, reported, and the rest of the site is built.
 
-After each deploy, `python -m biwiki report --issue` compares the report with `known-problems.json`, the accepted baseline:
+After each deploy, `python -m biwiki report --issue` compares the report with `known-problems.json`, the accepted baseline.
+Problems are compared by their key (kind, page, detail); where it can be found, each one also says where it is:
+`"md": "line:column"` in the page's `.md`, `"wiki": "line:column"` in the wikitext, and the text around it.
 
 - **new problems** open (or update, with a comment) the issue labelled `parser-report`, listing each page with links to
   the site and the wiki; GitHub notifies watchers of the repository;

@@ -417,7 +417,8 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
             main = f'<nav class="group-jump" aria-label="Groups"><ul>{jump}</ul></nav>' + "".join(
                 f'<section class="group"><h2 id="{_anchor(g)}">{html.escape(g)}</h2><ul class="entries">{rows(groups[g], "")}</ul></section>'
                 for g in ordered)
-            lede = f"{len(records)} concept pages: data types, locality and multiplayer, event handlers and more."
+            lede = (f"{len(records)} pages: data types, locality and multiplayer, event handlers, mission editing, "
+                    "configs, GUI, tools and more.")
         else:
             cards = "".join(
                 f'<li class="group-card"><h2><a href="../{group_path(kind, g)}">{html.escape(g)}</a></h2>'

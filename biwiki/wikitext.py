@@ -72,13 +72,30 @@ FEATURE_DEFAULT_TEXT = {
 
 # Maintenance/navigation templates that carry no reference content.
 DROP_TEMPLATES = {"wiki", "tabview/gametitle", "template:tabview/gametitle", "clear", "toc", "displaytitle",
-                  "table/rvscripting"}
+                  "table/rvscripting", "clarify", "topmenu"}
+
+# Infobox-style templates rendered as one "**Label:** value" line per parameter; labels for the names that
+# do not read well as written.
+FIELD_TEMPLATES = {"tool", "terrainprocessormanual"}
+FIELD_LABELS = {"seealso": "See also", "taskparameters": "Task parameters", "dll": "DLL", "heightmap": "Height map",
+                "objectprototypeparameters": "Object prototype parameters"}
+FIELD_SKIP = {"image", "gallery"}
+# {{TerrainProcessorManual|task|dll|geometry|heightMap|...}} also takes these four positionally
+TERRAIN_TASK_FIELDS = ["task", "dll", "geometry", "heightMap"]
+
+MAGIC_WORDS = re.compile(r"__(NOTOC|TOC|FORCETOC|NOEDITSECTION|NEWSECTIONLINK|NOGALLERY|HIDDENCAT|INDEX|NOINDEX)__")
 
 CODE_TAGS = {"sqf", "sqs", "syntaxhighlight", "source", "pre", "cpp", "hpp", "ext", "enforce"}
 INLINE_CODE_TAGS = {"code", "tt", "var", "t", "kbd", "samp"}
 DROP_TAGS = {"img", "gallery", "references", "imagemap", "wbr"}
 
 _SLOT = re.compile("(\\d+)")
+BR = ""  # <br>, a line break only after the preformatted-line pass: "<br> text" does not start a line on the wiki
+BLOCK = ""  # marks where a block element such as <div> was, until the preformatted-line pass is done
+# MediaWiki does not preformat a space-led line that opens or closes a block element
+BLOCK_TAGS = {"div", "table", "tr", "td", "th", "p", "pre", "blockquote", "ul", "ol", "li", "dl", "dt", "dd", "center",
+              *(f"h{i}" for i in range(1, 7))}
+_BLOCK_TAG = re.compile(rf"</?({'|'.join(BLOCK_TAGS)})\b|{BLOCK}", re.I)
 STAR = ""  # emphasis marker, hidden from the wiki-list pass and swapped for "*" at the very end
 _LIST_LINE = re.compile(r"^([*#:;]+)[ \t]*(.*)$")
 # The wiki's <sqf> highlighter turns piped [[target|text]] into links; plain [[x]] is valid SQF (nested arrays).
@@ -105,6 +122,10 @@ def _code_template(m: re.Match) -> str:
         return args[0]
     if name == "link":
         return args[-1]
+    if name == "cc":
+        return "// " + args[0]
+    if name == "color":
+        return args[-1]
     return m.group(0)
 
 
@@ -124,7 +145,45 @@ def parse_wikitext(text: str) -> mw.wikicode.Wikicode:
 def preprocess(wikitext: str) -> str:
     """Fix markup that mwparserfromhell reads differently from MediaWiki."""
     # tables indented with ':' are still tables
-    return re.sub(r"(?m)^:+[ \t]*(\{\||\{\{\{!\}\})", r"\1", wikitext)
+    wikitext = re.sub(r"(?m)^:+[ \t]*(\{\||\{\{\{!\}\})", r"\1", wikitext)
+    return _escape_unknown_tags(wikitext)
+
+
+# Tags the wiki (MediaWiki 1.39: Sanitizer's HTML tags, the parser's own, the extension tags listed by
+# meta=siteinfo) treats as markup; any other <name> is plain text there, e.g. "<string>", the XML of a config
+# format or Arma structured text, while mwparserfromhell would read it as a tag and lose it.
+KNOWN_TAGS = {
+    "abbr", "b", "bdi", "bdo", "big", "blockquote", "br", "caption", "center", "cite", "code", "data", "dd", "del",
+    "dfn", "div", "dl", "dt", "em", "font", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "ins", "kbd", "li", "mark",
+    "ol", "p", "pre", "q", "rb", "rp", "rt", "rtc", "ruby", "s", "samp", "small", "span", "strike", "strong", "sub",
+    "sup", "table", "td", "th", "time", "tr", "tt", "u", "ul", "var", "wbr",
+    "nowiki", "includeonly", "noinclude", "onlyinclude",
+    "gallery", "indicator", "langconvert", "dynamicpagelist", "templatedata", "source", "syntaxhighlight", "youtube",
+    "aovideo", "aoaudio", "wegame", "tangler", "gtrailer", "nicovideo", "sqf", "sqs", "enforce", "spoiler",
+    "categorytree", "charinsert", "section", "ref", "references", "math", "ce", "chem",
+}
+_RAW_REGIONS = re.compile(r"(?s)<!--.*?(?:-->|$)|<(nowiki|pre|sqf|sqs|syntaxhighlight|source|cpp|hpp|ext|enforce)\b.*?</\1\s*>")
+_TAG_START = re.compile(r"<(/?)([A-Za-z][\w:.-]*)")
+
+
+def _escape_unknown_tags(wikitext: str) -> str:
+    def escape(text: str) -> str:
+        return _TAG_START.sub(lambda m: m.group(0) if m.group(2).lower() in KNOWN_TAGS else "&lt;" + m.group(0)[1:], text)
+
+    out, pos = [], 0
+    for m in _RAW_REGIONS.finditer(wikitext):  # code and comments are left as they are
+        out += [escape(wikitext[pos:m.start()]), m.group(0)]
+        pos = m.end()
+    out.append(escape(wikitext[pos:]))
+    return "".join(out)
+
+
+def close_tables(wikitext: str) -> str:
+    """MediaWiki closes a table left open at the end of a page or template parameter; mwparserfromhell would
+    leave it as text."""
+    opened = len(re.findall(r"(?m)^[ \t:]*\{\|", wikitext))
+    closed = len(re.findall(r"(?m)^[ \t]*\|\}", wikitext))
+    return wikitext + "\n|}" * (opened - closed) if opened > closed else wikitext
 
 
 def game_name(code: str, short: bool = False) -> str:
@@ -141,9 +200,12 @@ def _norm(name) -> str:
 class Renderer:
     """Stateless-per-call converter; ``unknown`` collects templates/tags it had no rule for."""
 
-    def __init__(self, resolve: Optional[LinkResolver] = None, page_title: str = ""):
+    def __init__(self, resolve: Optional[LinkResolver] = None, page_title: str = "", preformat: bool = True,
+                 emphasis: bool = True):
         self.resolve = resolve or (lambda title, anchor: None)
         self.page_title = page_title
+        self.preformat = preformat  # off where the result is a single line or already code
+        self.emphasis = emphasis  # off for the text of inline code, where "**" would show as is
         self.unknown: Counter = Counter()
 
     # ---- public API -------------------------------------------------------------------------
@@ -153,7 +215,7 @@ class Renderer:
         src = str(wikitext)
         if "{{!}}" in src and _TABLE_ESCAPED.search(src):
             # Tables written with {{!}} so they survive inside template parameters.
-            code = parse_wikitext(src.strip().replace("{{!}}", "|"))
+            code = parse_wikitext(close_tables(src.strip().replace("{{!}}", "|")))
         else:
             code = wikitext if isinstance(wikitext, mw.wikicode.Wikicode) else parse_wikitext(src)
         slots: list[str] = []
@@ -166,7 +228,7 @@ class Renderer:
 
     def plain_lines(self, wikitext) -> str:
         """Like :meth:`plain` but keeps line breaks."""
-        r = Renderer(None, self.page_title)
+        r = Renderer(None, self.page_title, preformat=False)
         s = r.md(wikitext)
         s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
         s = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"\1", s)
@@ -180,8 +242,12 @@ class Renderer:
         return f"{len(slots) - 1}"
 
     def _finish(self, text: str, slots: list[str]) -> str:
+        text = MAGIC_WORDS.sub("", text)
+        text = self._preformatted(text, slots)
+        # lists and emphasis work on source lines: a <br> is no line start, and ''...<br>...'' is one span
         text = self._lists(text)
-        text = "\n".join(_styles(line) for line in text.split("\n")).replace(STAR, "*")
+        text = "\n".join(_styles(line) for line in text.split("\n")).replace(STAR, "*" if self.emphasis else "")
+        text = text.replace(BR, "\n").replace(BLOCK, "")
         # We never emit images, so "![" is always text such as SQF "!" before a link ("![[alive]]" -> "!alive").
         # Code is still in slots here, so it is not affected.
         text = text.replace("![", "\\![")
@@ -191,6 +257,52 @@ class Renderer:
             text = _SLOT.sub(lambda m: slots[int(m.group(1))], text)
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text.strip()
+
+    def _preformatted(self, text: str, slots: list[str]) -> str:
+        """Lines starting with a space are a preformatted block on the wiki, often config or console snippets.
+        The first line of a piece is not checked: it follows a template parameter's "=" or a table cell's "|"."""
+        if not self.preformat or "\n " not in text:
+            return text
+
+        def is_pre(line: str) -> bool:
+            body = line.lstrip(" ")
+            if not line.startswith(" ") or not body.strip() or _BLOCK_TAG.search(line):
+                return False
+            m = _SLOT.match(body)  # a line starting with a table, heading or note is not preformatted
+            return not (m and slots[int(m.group(1))].startswith("\n"))
+
+        lines = text.split("\n")
+        out, block = [lines[0]], []
+
+        def flush():
+            if block:
+                code = "\n".join(_pre_line(line, slots) for line in block)
+                fence = "````" if "```" in code else "```"
+                out.append(self._slot(slots, f"\n\n{fence}\n{_dedent(code)}\n{fence}\n\n"))
+                block.clear()
+
+        i = 1
+        while i < len(lines):
+            line = lines[i]
+            if is_pre(line):
+                block.append(line[1:])
+            elif block and not line.strip():
+                # a blank line only ends the block if no preformatted line follows
+                j = i + 1
+                while j < len(lines) and not lines[j].strip():
+                    j += 1
+                if j < len(lines) and is_pre(lines[j]):
+                    block.extend([""] * (j - i))
+                    i = j
+                    continue
+                flush()
+                out.append(line)
+            else:
+                flush()
+                out.append(line)
+            i += 1
+        flush()
+        return "\n".join(out)
 
     def _block(self, code, slots: list[str]) -> str:
         """Render a nested piece as an independent, finished Markdown block."""
@@ -235,8 +347,10 @@ class Renderer:
         else:
             text = target
         page, _, anchor = target.partition("#")
-        if not text:  # MediaWiki's pipe trick, [[Page#Section|]]: the link shows the page or section name
-            text = page.split(":")[-1].strip() or anchor or target
+        if not text:  # MediaWiki's pipe trick: [[Page (Game)|]] and [[Page, Detail|]] show "Page"
+            name = page.split(":")[-1].strip()
+            text = re.sub(r"\s*\([^()]*\)$", "", name) if name.endswith(")") else name.split(",")[0].strip()
+            text = text or anchor or target
         fallback = anchor.replace("_", " ") or page.split(":")[-1] or target
         if not page:
             page = self.page_title
@@ -258,7 +372,7 @@ class Renderer:
         src = str(code).strip()
         if "{{" not in src:
             return src
-        return Renderer(None, self.page_title).md(src).replace("`", "")
+        return Renderer(None, self.page_title, preformat=False).md(src).replace("`", "")
 
     def _heading(self, level: int, title: str, slots: list[str]) -> str:
         # In a slot, so the wiki-list pass does not read the leading "#" as a numbered list.
@@ -353,6 +467,37 @@ class Renderer:
             return "●"
         if key == "hatnote":
             return STAR + arg(0) + STAR
+        if key.startswith("navbox/"):
+            return ""
+        if key == "cn":  # "citation needed" mark, optionally around the doubted text
+            return arg(0)
+        if key == "#link":  # a typo of {{Link}} that the wiki still renders as a link
+            return self._link_to(self._expand(raw(0)), arg(1) or None)
+        if key == "youtube":
+            return self._link_to(f"https://www.youtube.com/watch?v={raw(0)}", arg(1) or "YouTube video")
+        if key == "messagebox/bi":
+            body = "\n\n".join(self._block(p.value, slots) for p in pos)
+            return self._slot(slots, "\n\n" + _quote(body) + "\n\n")
+        if key in FIELD_TEMPLATES or key.startswith("infobox/"):
+            return self._slot(slots, "\n\n" + self._fields(t, key) + "\n\n")
+        if key == "ct" or key.startswith("ct/"):
+            return self._control_type(t, key.partition("/")[2] or raw(0).lower(), slots)
+        if key == "tabview":
+            parts = []
+            for i in range(1, 100):
+                if not t.has(f"title{i}"):
+                    break
+                title = self._block(t.get(f"title{i}").value, slots)
+                content = self._block(t.get(f"content{i}").value, slots) if t.has(f"content{i}") else ""
+                parts.append(f"**{title}**\n\n{content}")
+            return self._slot(slots, "\n\n" + "\n\n".join(parts) + "\n\n")
+        if key == "timeline_item":  # {{Timeline_Item|game||year|date|content}}
+            when = ", ".join(x for x in (arg(2), arg(3)) if x)
+            return self._slot(slots, f"\n\n**{when}**\n\n" + (self._block(pos[4].value, slots) if len(pos) > 4 else "") + "\n\n")
+        if key == "keyboard":  # {{Keyboard|F1= action|colorF1= ...}}: what each key does
+            keys = [p for p in t.params if p.showkey and not _norm(p.name).startswith("color") and str(p.value).strip()]
+            lines = [f"- <kbd>{_norm(p.name)}</kbd>: {self._block(p.value, slots)}" for p in keys]
+            return self._slot(slots, "\n\n" + "\n".join(lines) + "\n\n")
         if name.startswith(":"):  # transcluded page, e.g. {{:Order of Precedence}}
             return "See " + self._link_to(name[1:], None) + "."
         self.unknown["template:" + name] += 1
@@ -360,7 +505,7 @@ class Renderer:
         return arg(0)
 
     def _plain_inner(self, code) -> str:
-        r = Renderer(None, self.page_title)
+        r = Renderer(None, self.page_title, preformat=False, emphasis=False)
         out = r.md(code)
         self.unknown.update(r.unknown)
         # Inline code must not contain Markdown wrapping from nested code spans.
@@ -393,6 +538,58 @@ class Renderer:
         label = GAME_NAMES.get(ftype, str(pos[0].value).strip() if pos else "")
         return _quote(body, "NOTE", label if body and not body.startswith("This ") else None)
 
+    def _fields(self, t: Template, key: str) -> str:
+        """Infobox-style templates such as {{Tool}}: one "**Label:** value" paragraph per filled parameter."""
+        params = [(_norm(p.name), p.value) for p in t.params if p.showkey]
+        if key == "terrainprocessormanual":
+            pos = [p.value for p in t.params if not p.showkey]
+            params = list(zip(TERRAIN_TASK_FIELDS, pos)) + params
+        out = []
+        for name, value in params:
+            text = self._block(value, []) if name.lower() not in FIELD_SKIP else ""
+            if text:
+                label = FIELD_LABELS.get(name.lower(), name.replace("_", " ").capitalize())
+                out.append(f"**{label}:**" + ("\n\n" + text if "\n" in text else " " + text))
+        return "\n\n".join(out)
+
+    def _control_type(self, t: Template, part: str, slots: list[str]) -> str:
+        """{{CT|intro|...}} and {{CT|attribute|...}} on the GUI control type pages, expanded as Template:CT does."""
+
+        def get(name: str) -> str:
+            return str(t.get(name).value).strip() if t.has(name) else ""
+
+        if part == "intro":
+            src = (f"== Introduction ==\n{get('description')}\n\n=== Related commands & functions ===\n"
+                   "* [[:Category:Command_Group:_GUI_Control|Commands: General]]\n"
+                   "* [[:Category:Command_Group:_GUI_Control_-_Event_Handlers|Commands: UI Eventhandlers]]\n"
+                   f"{get('commands')}\n\n=== Related User Interface Eventhandlers ===\n"
+                   f"* [[User_Interface_Event_Handlers#Generic_Events|Events: General]]\n{get('events')}\n\n"
+                   "== Alphabetical Order ==\n"
+                   "{{Feature|informative|TokenNames common to most controls, such as x, y, w, h, text, idc... can be "
+                   "found [[Arma:_GUI_Configuration#Common_Properties|'''here''']].}}\n"
+                   f"<syntaxhighlight lang=\"cpp\">#define {get('macro')} {get('value')}</syntaxhighlight>")
+        elif part == "attribute":
+            name = get("name")
+            types = [(get(f"type{i}"), get(f"value{i}")) for i in range(1, 5) if get(f"type{i}")]
+            src = f"==== {name} ====\n"
+            if get("mandatory"):
+                src += "{{Feature|important|This attribute is mandatory for the control to work!}}\n"
+            src += "; Type: " + ", ".join(f"[[TokenNameValueTypes|{ty}]]" for ty, _ in types) + "\n"
+            src += f"; Description: {get('description') or 'n/a'}\n"
+            for ty, value in types:
+                example = {"array": f"{name}[] = {value};", "class": value}.get(ty.lower(), f"{name} = {value};")
+                src += (f"{ty} example:\n" if len(types) > 1 else "") + f"<syntaxhighlight lang=\"cpp\">{example}</syntaxhighlight>\n"
+        elif part == "examples":
+            src = ("== Default Classes ==\n{{Feature|arma3|'''AddOns:''' Classes need to be initialised first with "
+                   "<syntaxhighlight lang=\"cpp\" inline>class SomeClass;</syntaxhighlight>\n----\n'''Missions:''' Since "
+                   "{{arma3}} v2.02 one can use <syntaxhighlight lang=\"cpp\" inline>import SomeClass;</syntaxhighlight> to "
+                   "initialise a class (see the [[import (Config)|import]] keyword).\nIn older versions, use <sqf inline>"
+                   "\"Default\" call BIS_fnc_exportGUIBaseClasses;</sqf> and paste the result into the "
+                   "[[Description.ext|description.ext]].}}")
+        else:  # abc start / abc end: layout only
+            return ""
+        return self._slot(slots, "\n\n" + self._block(parse_wikitext(src), []) + "\n\n")
+
     def note_md(self, note: dict) -> str:
         head = f"**{note['user'] or 'Anonymous'}**"
         if note.get("date"):
@@ -417,9 +614,11 @@ class Renderer:
         if name == "hr":
             return "\n\n---\n\n"
         if name == "br":
-            return "\n"
+            return BR
         if name == "nowiki":
-            return str(tag.contents) if tag.contents else ""
+            # in a slot, so no later pass reads its text as markup; even an empty one ends a run of quotes:
+            # ''a''<nowiki/>'s is "a" in italics, then "'s"
+            return self._slot(slots, html.unescape(str(tag.contents)) if tag.contents else "")
         if name == "table":
             return self._slot(slots, "\n\n" + self._table(tag) + "\n\n")
         if name in CODE_TAGS:
@@ -434,6 +633,18 @@ class Renderer:
             code = code.strip("\n").rstrip()
             fence = "````" if "```" in code else "```"
             return self._slot(slots, f"\n\n{fence}{lang}\n{_dedent(code)}\n{fence}\n\n")
+        if name == "code" and tag.has("style") and re.search(r"display:\s*block", str(tag.get("style").value)):
+            # a multi-line code block; unlike <sqf>, links and templates inside are wiki markup
+            code = str(tag.contents) if tag.contents else ""
+            code = re.sub(r"\[\[(?:[^\[\]|]*\|)?([^\[\]|]*)\]\]", r"\1", code)
+            code = re.sub(r"<br\s*/?>", "\n", code, flags=re.I)
+            code = re.sub(r"'{3}|</?(span|b|i|u|small)\b[^>]*>", "", code)
+            code = clean_code(html.unescape(code)).strip("\n").rstrip()
+            fence = "````" if "```" in code else "```"
+            return self._slot(slots, f"\n\n{fence}\n{_dedent(code)}\n{fence}\n\n") if code.strip() else ""
+        if re.fullmatch(r"h[1-6]", name):
+            inner = self._block(tag.contents, slots) if tag.contents else ""
+            return self._heading(int(name[1]), inner, slots)
         if name in INLINE_CODE_TAGS:
             inner = html.unescape(self._plain_inner(tag.contents)) if tag.contents else ""
             return self._slot(slots, _inline_code(clean_code(inner)))
@@ -460,12 +671,13 @@ class Renderer:
             # Stray table parts outside a <table>; keep the text.
             return (self._nodes(tag.contents.nodes, slots) if tag.contents else "") + " "
         if name not in ("span", "div", "small", "big", "sup", "sub", "u", "font", "center", "spoiler", "p",
-                        "blockquote", "abbr", "includeonly", "onlyinclude", "noinclude", "execute",
+                        "blockquote", "abbr", "includeonly", "onlyinclude", "noinclude", "execute", "ins", "a",
                         "executeclose", "log", "marker"):
             self.unknown["tag:" + name] += 1
         if name == "noinclude":
             return ""
-        return self._nodes(tag.contents.nodes, slots) if tag.contents else ""
+        inner = self._nodes(tag.contents.nodes, slots) if tag.contents else ""
+        return BLOCK + inner + BLOCK if name in BLOCK_TAGS else inner
 
     def _table(self, table: Tag) -> str:
         rows: list[list[tuple[str, bool]]] = []
@@ -528,7 +740,11 @@ class Renderer:
                 out.append("   " * (depth - 1) + "1. " + rest)
             elif last == ";":
                 term, sep, definition = rest.partition(" : ")
-                out.append(f"**{term.strip()}**" + (f"\n{definition.strip()}" if sep else ""))
+                short = None if sep else re.match(r"([^:\[\]()`{}<]+?):\s+(\S.*)$", rest)
+                if short:  # "; Type: String" on the config references: only the term is bold
+                    out.append(f"**{short.group(1).strip()}:** {short.group(2)}\n")  # own paragraph, not run on
+                else:
+                    out.append(f"**{term.strip()}**" + (f"\n{definition.strip()}" if sep else ""))
             else:  # ':' indentation / list continuation
                 listish = any(c in "*#" for c in prefix)
                 out.append(("  " * (depth - 1) if listish else "") + rest)
@@ -580,23 +796,97 @@ def parse_note(t: Template, r: Renderer) -> dict:
     return {"user": get("user"), "date": date, "text": r.md(t.get("text").value) if t.has("text") else ""}
 
 
+_I_OPEN, _I_CLOSE, _B_OPEN, _B_CLOSE = "", "", "", ""
+_EMPHASIS = {_I_OPEN: (_I_CLOSE, STAR), _B_OPEN: (_B_CLOSE, STAR * 2)}
+
+
 def _styles(line: str) -> str:
-    """MediaWiki ''italic'' / '''bold''' / '''''both''''' -> Markdown; emphasis never spans lines."""
+    """MediaWiki ''italic'' / '''bold''' / '''''both''''' -> Markdown, by MediaWiki's own rules (Parser::doQuotes):
+    with an odd number of both '' and ''', one ''' is read as an apostrophe plus ''; whatever is still open is
+    closed at the end of the line, so "'''DO NOT'' use" is "'*DO NOT* use", not a markup error."""
     if "''" not in line:
         return line
+    parts = re.split(r"('{2,})", line)
+    italics = bold = 0
+    for i in range(1, len(parts), 2):
+        n = len(parts[i])
+        if n == 4:  # an apostrophe, then bold
+            parts[i - 1] += "'"
+            parts[i] = "'''"
+        elif n > 5:  # apostrophes, then bold italic
+            parts[i - 1] += "'" * (n - 5)
+            parts[i] = "'''''"
+        n = len(parts[i])
+        italics += n in (2, 5)
+        bold += n in (3, 5)
+    if italics % 2 and bold % 2:
+        single = multi = space = None
+        for i in range(1, len(parts), 2):
+            if len(parts[i]) != 3:
+                continue
+            before = parts[i - 1]
+            x1, x2 = before[-1:], (before[-2] if len(before) > 1 else before[:1])
+            if x1 == " ":
+                space = i if space is None else space
+            elif x2 == " ":  # after a one-letter word
+                single = i
+                break
+            elif multi is None:
+                multi = i
+        pick = next((i for i in (single, multi, space) if i is not None), None)
+        if pick is not None:
+            parts[pick - 1] += "'"
+            parts[pick] = "''"
 
-    def wrap(mark: str):
-        def sub(m: re.Match) -> str:
-            lead, core, trail = _split_ws(m.group(1))
-            return f"{lead}{mark}{core}{mark}{trail}" if core else m.group(1)
+    i_, b_, ic, bc = _I_OPEN, _B_OPEN, _I_CLOSE, _B_CLOSE
+    out, state, buffer = [], "", ""
+    for i, part in enumerate(parts):
+        if i % 2 == 0:
+            if state == "both":
+                buffer += part
+            else:
+                out.append(part)
+            continue
+        n = len(part)
+        if n == 2:
+            out.append({"i": ic, "bi": ic, "ib": bc + ic + b_, "both": b_ + i_ + buffer + ic}.get(state, i_))
+            state = {"i": "", "bi": "b", "ib": "b", "both": "b"}.get(state, state + "i")
+        elif n == 3:
+            out.append({"b": bc, "bi": ic + bc + i_, "ib": bc, "both": i_ + b_ + buffer + bc}.get(state, b_))
+            state = {"b": "", "bi": "i", "ib": "i", "both": "i"}.get(state, state + "b")
+        else:  # 5
+            out.append({"b": bc + i_, "i": ic + b_, "bi": ic + bc, "ib": bc + ic,
+                        "both": i_ + b_ + buffer + bc + ic}.get(state, ""))
+            state = {"b": "i", "i": "b", "bi": "", "ib": "", "both": ""}.get(state, "both")
+            buffer = ""
+    if state in ("b", "ib"):
+        out.append(bc)
+    if state in ("i", "bi", "ib"):
+        out.append(ic)
+    if state == "bi":
+        out.append(bc)
+    if state == "both" and buffer:
+        out.append(b_ + i_ + buffer + ic + bc)
+    return _emphasis("".join(out))
 
-        return sub
 
-    line = re.sub(r"'{5}(.+?)'{5}", wrap(STAR * 3), line)
-    line = re.sub(r"'{3}(.+?)'{3}", wrap(STAR * 2), line)
-    line = re.sub(r"(?<!')''(?!')(.+?)''", wrap(STAR), line)
-    # an unclosed ''/''' at the end of a line styles nothing in MediaWiki (a common typo); drop it
-    return re.sub(r"(?<!')'{2,5}\s*$", "", line)
+def _emphasis(text: str) -> str:
+    """Opening/closing marks from _styles -> Markdown, innermost first, whitespace kept outside the marks."""
+    marks = "".join(_EMPHASIS) + "".join(c for c, _ in _EMPHASIS.values())
+    inner = re.compile(f"([{_I_OPEN}{_B_OPEN}])([^{marks}]*)([{_I_CLOSE}{_B_CLOSE}])")
+
+    def sub(m: re.Match) -> str:
+        close, mark = _EMPHASIS[m.group(1)]
+        if m.group(3) != close:  # not a pair (cannot happen with doQuotes' output); keep the text
+            return m.group(2)
+        lead, core, trail = _split_ws(m.group(2))
+        return f"{lead}{mark}{core}{mark}{trail}" if core else m.group(2)
+
+    while True:
+        new = inner.sub(sub, text)
+        if new == text:
+            return re.sub(f"[{marks}]", "", new)
+        text = new
 
 
 def _quote(body: str, alert: Optional[str] = None, label: Optional[str] = None) -> str:
@@ -616,6 +906,17 @@ def _inline_code(code: str) -> str:
     ticks = "``" if "`" in code else "`"
     pad = " " if code.startswith("`") or code.endswith("`") else ""
     return f"{ticks}{pad}{code}{pad}{ticks}"
+
+
+_MD_LINK = re.compile(r"\[((?:\\.|[^\]\\])*)\]\([^)\s]*\)")
+
+
+def _pre_line(line: str, slots: list[str]) -> str:
+    """One line of a preformatted block: wiki markup still applies there, so links keep only their text and
+    inline code and emphasis lose their marks."""
+    line = _SLOT.sub(lambda m: re.sub(r"^(`+) ?(.*?) ?\1$", r"\2", slots[int(m.group(1))], flags=re.S), line)
+    line = _MD_LINK.sub(lambda m: re.sub(r"\\([\[\]])", r"\1", m.group(1)), line)
+    return re.sub(r"'{2,5}", "", line).replace(STAR, "").replace(BR, "\n")
 
 
 def _dedent(code: str) -> str:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from pathlib import Path
 
@@ -20,8 +21,18 @@ CATEGORIES = {
     "topics": "Category:Data Types",
 }
 
-# Topics: the concept pages that command pages link to most (data types, locality, event handlers, ...).
+# Topics: every Arma 3 page that is not a command or function (editing, multiplayer and server, configs,
+# GUI, tools, reference lists, ...), plus the engine-wide concept pages that command pages link to most.
 # Agents cannot follow links to the wiki itself, so these are mirrored too.
+TOPIC_ROOT = "Category:Arma 3"
+TOPIC_PREFIX = "Arma 3:"
+# Subcategories not walked: commands and functions are their own kinds; the rest is other games' material
+# reached through shared categories (Reference Lists, Tutorials) and player or Creator DLC content.
+TOPIC_SKIP_CATEGORY = re.compile(
+    r"Scripting Commands|Functions|Function Group|Command Group|Introduced with"
+    r"|Operation Flashpoint|ArmA:|Arma 2|Take On|CDLC|Field Manual|DLCs & Expansions"
+)
+TOPIC_SKIP_TITLE = re.compile(r"^(Operation Flashpoint|ArmA:|Arma: Armed Assault|Arma 2|Take On)|Visitor 3|Field Manual")
 TOPIC_CATEGORIES = ["Category:Data Types", "Category:Magic Types", "Category:Syntactical Helper Types"]
 TOPIC_TITLES = [
     "SQF Syntax", "Variables", "Operators", "Order of Precedence", "Control Structures", "Magic Variables", "Identifier", "Expression",
@@ -104,6 +115,36 @@ class WikiSession:
                 pages[p["pageid"]] = {"title": p["title"], "revid": p["lastrevid"], "touched": p["touched"]}
         return pages
 
+    async def list_category_tree(self, root: str, skip: re.Pattern, skip_title: re.Pattern) -> dict[int, dict]:
+        """Like list_category, for ``root`` and all its subcategories except those matching ``skip``."""
+        pages: dict[int, dict] = {}
+        seen, queue = {root}, [root]
+        while queue:
+            category = queue.pop(0)
+            async for q in self.query_all(
+                generator="categorymembers", gcmtitle=category, gcmnamespace="0|14", gcmlimit=500, prop="info"
+            ):
+                for p in q.get("pages", []):
+                    if p["ns"] == 14:
+                        if p["title"] not in seen and not skip.search(p["title"]):
+                            seen.add(p["title"])
+                            queue.append(p["title"])
+                    elif not skip_title.search(p["title"]):
+                        pages[p["pageid"]] = {"title": p["title"], "revid": p["lastrevid"], "touched": p["touched"]}
+        return pages
+
+    async def list_prefix(self, prefix: str, skip_title: re.Pattern) -> dict[int, dict]:
+        """Like list_category, for the main-namespace pages (not redirects) whose title starts with ``prefix``."""
+        pages: dict[int, dict] = {}
+        async for q in self.query_all(
+            generator="allpages", gapprefix=prefix, gapnamespace=0, gapfilterredir="nonredirects", gaplimit=500,
+            prop="info",
+        ):
+            for p in q.get("pages", []):
+                if not skip_title.search(p["title"]):
+                    pages[p["pageid"]] = {"title": p["title"], "revid": p["lastrevid"], "touched": p["touched"]}
+        return pages
+
     async def list_titles(self, titles: list[str]) -> dict[int, dict]:
         """Like list_category, for explicit titles (redirects followed); missing titles are reported."""
         pages: dict[int, dict] = {}
@@ -181,6 +222,12 @@ async def sync(raw_dir: Path, profile_dir: Path, kinds: list[str], hidden: bool 
                 members = await wiki.list_titles(TOPIC_TITLES)
                 for category in TOPIC_CATEGORIES:
                     members.update(await wiki.list_category(category))
+                members.update(await wiki.list_category_tree(TOPIC_ROOT, TOPIC_SKIP_CATEGORY, TOPIC_SKIP_TITLE))
+                members.update(await wiki.list_prefix(TOPIC_PREFIX, TOPIC_SKIP_TITLE))
+                # a page in both a topic category and the command or function category is mirrored once
+                for other in ("commands", "functions"):
+                    for pid in load_cache(raw_dir / f"{other}.json"):
+                        members.pop(pid, None)
             else:
                 members = await wiki.list_category(CATEGORIES[kind])
             stale = [pid for pid, m in members.items() if cache.get(pid, {}).get("revid") != m["revid"]]

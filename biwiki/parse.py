@@ -197,6 +197,16 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
         params = []
         for pn, pv in _numbered(p, "p"):
             if (n - 1) * PARAMS_PER_SYNTAX < pn <= n * PARAMS_PER_SYNTAX:
+                source = re.sub(r"<!--.*?-->|<nowiki\s*/>", "", str(pv), flags=re.S).strip()
+                if not source:  # "|p3= <!-- unused -->"
+                    continue
+                # a table before the parameter's own line (forEach: game versions per argument type) is no part
+                # of its name and type; it goes after the description
+                table = re.match(r"(?s)(\{\||\{\{\{!\}\}).*?^(\|\}|\{\{!\}\}\})[ \t]*\n?", source, re.M)
+                if table:
+                    pv = parse_wikitext(source[table.end():])
+                    if not str(pv).strip():
+                        continue
                 plain = r.plain_lines(pv)
                 if _NO_PARAM.fullmatch(plain):  # "|p1= -" on pages of functions without parameters
                     continue
@@ -207,9 +217,13 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
                 item["type_expr"] = typeexpr.of_wikitext(head)
                 type_md = r.md(head).strip() if _type_after_dash(item, r.plain(head)) else None
                 if not item["types"] and not item["type"]:
-                    item["type_expr"] = _listed_types(pv) or _table_types(plain)
+                    item["type_expr"] = _listed_types(pv) or _table_types(plain) or _trailing_types(pv)
                     item["types"] = typeexpr.names(item["type_expr"])
                 item["description"] = _md_desc(md, item, type_md)
+                if table:
+                    table_md = r.md(source[: table.end()])
+                    item["description"] = ((item["description"] or "") + "\n\n" + table_md).strip()
+                    md += "\n\n" + table_md
                 item["since"] = _text(p, f"p{pn}since") or None
                 item["text"] = md
                 params.append(item)
@@ -552,6 +566,23 @@ def _table_types(plain: str) -> Optional[str]:
     else:
         cells = next((r[1:] for r in rows if r and label.fullmatch(r[0])), [])
     return typeexpr.union([c for c in cells if c and re.fullmatch(r"[A-Z][\w ]*", c)])
+
+
+_TRAILING_TYPES = re.compile(
+    r",\s*((?:\[\[[^\[\]|]+(?:\|[^\[\]]+)?\]\])(?:\s*(?:'''or'''|''or''|or|,|/)\s*\[\[[^\[\]|]+(?:\|[^\[\]]+)?\]\])*)\s*\.?\s*$")
+
+
+def _trailing_types(code) -> Optional[str]:
+    """Types after the description: ``param1 - vector starting point, [[Position]] '''or''' [[Object]]``.
+    Only when every link there is a data type."""
+    first = str(code).strip().split("\n", 1)[0]
+    m = _TRAILING_TYPES.search(first)
+    if not m:
+        return None
+    links = parse_wikitext(m.group(1)).filter_wikilinks()
+    if not links or not all(typeexpr.link_type(link) for link in links):
+        return None
+    return typeexpr.of_wikitext(m.group(1).replace("'''", "").replace("''", ""))
 
 
 def _type_after_dash(item: dict, head_plain: str) -> bool:

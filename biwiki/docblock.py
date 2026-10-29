@@ -81,6 +81,7 @@ def parse(body: str) -> dict:
     current = "intro"
     sections[current] = []
     meta: dict[str, str] = {}
+    on_label: set[str] = set()  # sections whose first line stood on the label line ("Parameters: 0: ...")
     for line in text.split("\n"):
         if re.fullmatch(r"\s*[\w\-]+\.sqf\s*", line):  # "fn_EXP_camp_lobby_clearVars.sqf"
             meta["file"] = line.strip()
@@ -95,6 +96,8 @@ def parse(body: str) -> dict:
             current = key
             sections.setdefault(current, [])
             if m.group(2).strip():
+                if not sections[current]:
+                    on_label.add(current)
                 sections[current].append(m.group(2))
         elif bare in BARE and line.strip() and not line.strip().endswith((".", ",")):
             current = LABELS[bare]
@@ -124,7 +127,7 @@ def parse(body: str) -> dict:
     return {
         "author": re.sub(r"\s+", " ", author.replace("\n-", ",").lstrip("- ")).strip() or None,
         "description": _prose(description) or None,
-        "params": parse_params(body_of("params")),
+        "params": parse_params(body_of("params"), "params" in on_label),
         "returns": {"types": types_in(ret_head) or (["Boolean"] if boolean else []),
                     # "_priority:SCALAR - the priority": a named return value
                     "type_expr": typeexpr.of_text(ret_head) or typeexpr.of_text(ret_head.split(":", 1)[-1])
@@ -163,14 +166,16 @@ def types_in(head: str) -> list[str]:
     return out
 
 
-def parse_params(text: str) -> list[dict]:
+def parse_params(text: str, first_on_label: bool = True) -> list[dict]:
+    """``first_on_label``: the first line stood on the label line ("Parameters: 0: ..."), so its indentation
+    says nothing about the rest; the base indentation is taken from the other parameter lines then. Without
+    it, the first line is a parameter like any other and values listed below it ("0 - all options") are not."""
     if not text.strip() or _NO_PARAMS.match(text):
         return []
     lines = text.split("\n")
     matching = [i for i, l in enumerate(lines) if _PARAM.match(l.strip())]
-    # The first parameter may sit on the label line ("Parameters: 0: ..."), whose indentation says nothing
-    # about the rest; take the base indentation from the other parameter lines then.
-    others = [i for i in matching if i != 0] if matching and matching[0] == 0 else matching
+    on_label = first_on_label and matching and matching[0] == 0
+    others = [i for i in matching if i != 0] if on_label else matching
     indents = [len(lines[i]) - len(lines[i].lstrip()) for i in others]
     base = min(indents) if indents else (0 if matching else None)
     params: list[dict] = []
@@ -178,7 +183,7 @@ def parse_params(text: str) -> list[dict]:
         s = line.strip()
         indent = len(line) - len(line.lstrip())
         m = _PARAM.match(s) if s else None
-        if m and (indent == base or (i == 0 and matching and matching[0] == 0)):
+        if m and (indent == base or (i == 0 and on_label)):
             params.append({"index": int(m.group(1)), "lines": [m.group(2)]})
         elif not params and s and base is None:
             params.append({"index": None, "lines": [s]})  # a single unnumbered parameter
