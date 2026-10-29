@@ -170,6 +170,9 @@ code { font: 400 .875em/1.4 var(--f-code); background: var(--surface); padding: 
 pre.code { margin: 1rem 0; padding: .9rem 1.05rem; background: var(--surface); border: 1px solid var(--rule);
   border-radius: 8px; overflow-x: auto; font-size: .875rem; line-height: 1.6; tab-size: 4; }
 pre.code code { background: none; padding: 0; border: 0; font-size: inherit; line-height: inherit; }
+/* code blocks in table cells: compact, and never the full-bleed blocks of small screens */
+.table-wrap pre.code { margin: .2rem 0; padding: .45rem .65rem; border: 1px solid var(--rule); border-radius: 6px;
+  font-size: .82rem; line-height: 1.5; }
 .copy { position: absolute; top: .45rem; right: .45rem; font: 500 .78rem/1 var(--f-text); color: var(--muted);
   background: var(--bg); border: 1px solid var(--rule); border-radius: 5px; padding: .32rem .55rem; cursor: pointer; opacity: 0; }
 .code-wrap { position: relative; }

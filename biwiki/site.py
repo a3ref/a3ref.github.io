@@ -50,6 +50,10 @@ CURRENT = ' aria-current="page"'
 _KEEP = {"<br>": "", "<kbd>": "", "</kbd>": ""}
 
 
+# a code block inside a table cell: ```lang<br>code<br>``` (see Site.html)
+_CELL_CODE = re.compile(r"(`{3,})([A-Za-z+-]*)<br>(.*?)(?:<br>)?\1(?!`)")
+
+
 class CodeLinker:
     """Syntax-highlights SQF and links every known command/function to its page."""
 
@@ -126,11 +130,22 @@ class Site:
     # ---- markdown -> html -------------------------------------------------------------------
 
     def html(self, md: str) -> str:
+        # A Markdown table cell holds no code block, so the converter writes one as ```lang<br>...<br>``` on the
+        # cell's line; markdown-it would make it inline code with "lang" as text. Render those blocks here.
+        blocks: list[str] = []
+
+        def cell_code(m: re.Match) -> str:
+            code = m.group(3).replace("<br>", "\n").replace("\\|", "|")
+            blocks.append(self.linker(code, m.group(2), None).strip())
+            return f"{len(blocks) - 1}"
+
+        md = re.sub(r"(?m)^[ \t>]*\|.*$", lambda line: _CELL_CODE.sub(cell_code, line.group(0)), md)
         for tag, mark in _KEEP.items():
             md = md.replace(tag, mark)
         out = self.md.render(md)
         for tag, mark in _KEEP.items():
             out = out.replace(mark, tag)
+        out = re.sub("(\\d+)", lambda m: blocks[int(m.group(1))], out)
         out = re.sub(
             r"<blockquote>\s*<p>\[!(\w+)\]\s*",
             lambda m: f'<blockquote class="alert alert-{m.group(1).lower()}">'
