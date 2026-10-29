@@ -55,6 +55,7 @@ Attribute test: unquoted but illegal value (hash)
 Attribute test: unquoted value
 Bare pipe character (T54363)
 Bare pipe character from a template (T54363)
+Basic section headings
 Blank input
 Bold conversion test
 Bracketed external links with template-generated invalid target
@@ -118,6 +119,7 @@ Definition list with no space
 Definition list with wikilink containing colon
 Definition lists: colon in HTML attribute
 Definition lists: colon in external link text
+Disable TOC
 Disabled subpages
 Do not trim whitespace in links and quotes
 Don't Allow tabindex > 0
@@ -192,12 +194,16 @@ External links: with entity
 External links: with no contents
 External links: www.jpeg.org (T2554)
 Extra new lines before and after lists are preserved
+Extra newlines between heading and content are swallowed (Parsoid does not)
+Extra newlines followed by heading
 Extra newlines: More paragraphs with indented comment
 Fuzz testing: Parser25 (T8055)
 Fuzz testing: URL adjacent extension (no space, dirty; nowiki)
 Fuzz testing: URL adjacent extension (with space, clean)
 Fuzz testing: encoded newline in generated HTML replacements (T8577)
 Fuzz testing: encoded newline in generated HTML replacements, html2wt (T8577)
+HHP2.1: Heuristics for headings in preprocessor parenthetical structures
+HHP2.2: Heuristics for headings in preprocessor parenthetical structures
 HTML bullet list, closed tags (T7497)
 HTML multiple attributes correction
 HTML nested bullet list, closed tags (T7497)
@@ -217,8 +223,11 @@ Handle interwiki links pointing to the current wiki as plain wiki links (T47209)
 Handle title parsing for subpages
 Handling of %0A in URLs
 Handling of &#x0A; in URLs
+Heading with line break in nowiki
 Headings: 4b. No escaping needed (inside p-tags)
 Headings: 4c. Short headings (1)
+Headings: 4d. Short headings (2)
+Headings: Used as horizontal rule
 Horizontal ruler -- 4+ dashes render hr
 Horizontal ruler -- <4 dashes render as plain text
 Horizontal ruler -- does not collapse dashes on consecutive lines
@@ -236,6 +245,8 @@ ISBN with space-delimited number
 ISBN with trailing year (T9110)
 Ident preformatting with inline content
 Implicit newline insertion/sol when expanding templates (T241150/T14974/T2529)
+Includes and comments at SOL
+Inclusion of !userCanEdit() content
 Indent pre with leading colon
 Indent-Pre regression test: Trailing whitespace after sol-transparent content
 Indent-Pre: Newlines in comments shouldn't affect sol state
@@ -301,6 +312,7 @@ Link containing double quotes and spaces
 Link containing double-single-quotes '' in text (T6598 check)
 Link containing double-single-quotes '' in text embedded in italics (T6598 check)
 Link containing }
+Link inside a section heading
 Link prefix/suffixes aren't applied to category links
 Link prefix/suffixes aren't applied to language links
 Link scenarios with escaped fragments
@@ -326,6 +338,7 @@ Links 3. WikiLinks: No escapes needed
 Links 4. ExtLinks: Escapes needed
 Links 5. ExtLinks: No escapes needed
 Links 7a. Don't add spurious <nowiki/>s between text-nodes and url-links (T66300)
+List interrupted by empty line or heading
 List items are not parsed correctly following a <pre> block (T2785)
 List items from template
 Local interwiki link
@@ -355,6 +368,7 @@ Malformed definition list with colon
 Media link to nonexistent file (T3702)
 Mixed list
 Mixing markup for italics and bold
+Morwen/13: Unclosed link followed by heading
 Multibyte character in padleft
 Multibyte character in padright
 Multiple colons escaping interlanguage links
@@ -475,6 +489,7 @@ Preformatted text
 Preprocessor precedence 11: found during visual diff testing
 Preprocessor precedence 13: broken language converter in external link
 Preprocessor precedence 14: broken language converter in comment
+Preprocessor precedence 15: broken brace markup in headings
 Preprocessor precedence 17: template w/o target shouldn't prevent closing
 Preprocessor precedence 18: another rightmost wins scenario
 Preprocessor precedence 19: break syntax
@@ -502,6 +517,8 @@ Relative subpage noslash link
 Render invalid page names as plain text (T53090)
 Render paragraphs when indent-pre is suppressed in blocklevels
 Replacing whitespace with tabs still doesn't break the list (gerrit 78327)
+Resolving duplicate section names
+Resolving duplicate section names with differing case (T12721)
 Ruby markup (W3C-style)
 Sanitizer: Avoid unnecessary percent encoded characters in interwiki links
 Sanitizer: Escaping of spaces, multibyte characters, colons & other stuff in id=""
@@ -515,12 +532,15 @@ Self-link to section should not be bold
 Serialization of purely hash wikilink
 Serialize wikitext list items as HTML list items when embedded in a HTML list
 Serializing indent pre at sol
+Short headings with trailing space should match behavior of Parser::doHeadings (T21910)
 Simple definition
 Simple list
 Simple paragraph
 Simple template
 Single-comment whitespace lines dont break lists, and neither do multi-comment whitespace lines
+Single-line or multiline-comments can follow headings
 Space and question mark encoding in interlanguage links (T95473)
+Spacing of numbers in formatted dates
 Special page link with fragment
 Special parser function
 Special:Search page linking.
@@ -566,6 +586,7 @@ T33098 Template which includes system messages which includes the template
 T33490 Turkish: lcfirst 'BLAH'
 T33490 Turkish: ucfirst 'blah'
 T33490 ucfırst (with a dotless i) with English language
+T34057: Title needed when expanding <h> nodes.
 T36939 - Case insensitive link parsing (HttP://)
 T36939 - Case insensitive link parsing ([HttP:// title])
 T36939 - Case insensitive link parsing ([HttP://])
@@ -604,6 +625,8 @@ T72875: Test for brackets in attributes of elements in internal link texts
 T7918: autonumbering
 T8200: blockquotes and paragraph formatting
 T8200: paragraphs inside blockquotes (extra line break on open and close)
+T8563: Edit link generation for section shown by <includeonly>
+T8563: Edit link generation for section suppressed by <includeonly>
 Table wikitext syntax outside wiki-tables
 Tables: Digest broken attributes on table and tr tag
 Tabs don't trigger preformatted text
@@ -707,6 +730,7 @@ Wikilinks with embedded newlines are not broken
 Wikitext lists can be nested inside HTML lists
 Wrong option for formatNum (T58199)
 [Before] HTML without raw HTML enabled ($wgRawHtml==false)
+__NOEDITSECTION__ keyword
 __proto__ is treated as normal wikitext (T105997)
 anchorencode
 anchorencode (legacy)
@@ -724,13 +748,19 @@ div with no attributes
 div with single-quoted attribute
 div with unquoted attribute
 formatdate parser function
+formatdate parser function, with default format
+formatdate parser function, with default format and on a page of which the content language is always English and different from the wiki content language
+formatdate uses correct capitalisation in English
 formatdate with invalid month
+includeonly / noinclude / onlyinclude and headers
+int keyword
 int keyword - non-existing message
 max template depth being reached
 msgnw keyword
 multiple templates that are redirects
 new support for bdi element (T33817)
 nowiki 3
+nowiki inside link inside heading (T20295)
 post-expand include size being exceeded
 subst: does not work during normal parse
 text with entity-escaped character entity-like string: eacute

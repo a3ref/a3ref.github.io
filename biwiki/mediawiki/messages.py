@@ -23,6 +23,31 @@ MESSAGES = {
     "editsection": "edit",
     "editsectionhint": "Edit section: $1",
     "pipe-separator": "&#32;|&#32;",
+    # Language: month and weekday names, formatNum (coreparserfunctions.py)
+    "january": "January", "february": "February", "march": "March", "april": "April", "may_long": "May",
+    "june": "June", "july": "July", "august": "August", "september": "September", "october": "October",
+    "november": "November", "december": "December",
+    "january-gen": "January", "february-gen": "February", "march-gen": "March", "april-gen": "April",
+    "may-gen": "May", "june-gen": "June", "july-gen": "July", "august-gen": "August", "september-gen": "September",
+    "october-gen": "October", "november-gen": "November", "december-gen": "December",
+    "jan": "Jan", "feb": "Feb", "mar": "Mar", "apr": "Apr", "may": "May", "jun": "Jun", "jul": "Jul", "aug": "Aug",
+    "sep": "Sep", "oct": "Oct", "nov": "Nov", "dec": "Dec",
+    "sunday": "Sunday", "monday": "Monday", "tuesday": "Tuesday", "wednesday": "Wednesday", "thursday": "Thursday",
+    "friday": "Friday", "saturday": "Saturday",
+    "formatnum-nan": "Not a Number",
+    # CoreParserFunctions
+    "duplicate-displaytitle":
+        "<strong>Warning:</strong> Display title \"$2\" overrides earlier display title \"$1\".",
+    "duplicate-defaultsort":
+        "<strong>Warning:</strong> Default sort key \"$2\" overrides earlier default sort key \"$1\".",
+    "restricted-displaytitle":
+        "<strong>Warning:</strong> Display title \"$1\" was ignored since it is not equivalent to the page's actual "
+        "title.",
+    "nonnumeric-formatnum": "Pages with non-numeric formatnum arguments",
+    "restricted-displaytitle-ignored": "Pages with ignored display titles",
+    # used by MediaWiki's parser tests through {{int:}}
+    "youhavenewmessages": "{{PLURAL:$3|You have}} $1 ($2).",
+    "ok": "OK",
 }
 
 

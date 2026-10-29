@@ -1,6 +1,8 @@
 # Ported from MediaWiki 1.39 includes/Linker.php (https://www.mediawiki.org/), (C) MediaWiki contributors:
-# Linker::makeExternalLink(), makeExternalImage(), fnamePart(), splitTrail(); and from includes/utils/UrlUtils.php:
-# validProtocols(), validAbsoluteProtocols(), matchesDomainList().
+# Linker::makeExternalLink(), makeExternalImage(), fnamePart(), splitTrail(), makeSelfLinkObj(), getUploadUrl(),
+# makeMediaLinkFile(), normalizeSubpageLink(), normaliseSpecialPage(), tocIndent(), tocUnindent(), tocLine(),
+# tocLineEnd(), tocList(), generateTOC(), makeHeadline(); and from includes/utils/UrlUtils.php: validProtocols(),
+# validAbsoluteProtocols(), matchesDomainList().
 # Changed by a3ref contributors on 2026-10-30: translated to Python; no hooks; the content language is English
 # (its link trail is MessagesEn's $linkTrail); UrlUtils::parse() uses Python's urllib instead of PHP's parse_url().
 #

@@ -25,6 +25,7 @@ from .blocklevel import do_block_levels
 from .config import DEFAULT, Config
 from .linker import make_external_image, make_external_link, matches_domain_list, split_trail, valid_absolute_protocols, valid_protocols
 from .messages import msg
+from .parser_headings import HeadingsMixin
 from .parser_links import LinksMixin
 from .parser_preprocess import OT_HTML, PreprocessingMixin
 from .magicword import FACTORY, MagicWordFactory
@@ -68,6 +69,12 @@ class ParserOutput:
     interwiki_links: dict[str, dict[str, int]] = field(default_factory=dict)  # prefix -> DB key -> 1
     language_links: list[str] = field(default_factory=list)
     images: dict[str, int] = field(default_factory=dict)
+    toc_html: str = ""
+    show_toc: bool = False  # the SHOW_TOC flag
+    sections: list[dict] = field(default_factory=list)  # toclevel, level, line, number, index, fromtitle, ...
+    new_section: bool = False
+    hide_new_section: bool = False
+    wrapper_div_classes: list[str] = field(default_factory=list)
 
     def add_warning_msg(self, key: str, *params) -> None:
         self.warnings.append((key, *params))
@@ -81,7 +88,7 @@ class ParserOutput:
             self.templates.append(title)
 
 
-class Parser(LinksMixin, PreprocessingMixin):
+class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
     def __init__(self, pages: Optional[Mapping[str, str]] = None, config: Config = DEFAULT, site=None,
                  magic_words: MagicWordFactory = FACTORY):
         from .site import Site
@@ -113,6 +120,8 @@ class Parser(LinksMixin, PreprocessingMixin):
         self.autonumber = 0
         self.clear_link_state()
         self._init_preprocessing(OT_HTML, text=text)
+        # ParserOptions wrapclass default
+        self.output.wrapper_div_classes.append("mw-parser-output")
         text = self.internal_parse(text)
         text = self.internal_parse_half_parsed(text, True, True)
         self.finish_preprocessing()
@@ -123,6 +132,7 @@ class Parser(LinksMixin, PreprocessingMixin):
         from .sanitizer import internal_remove_html_tags
         from .tables import handle_tables
 
+        orig_text = text
         # if frame is provided, then use frame for replacing any variables, else the old-style replaceVariables
         text = self.replace_variables_for_internal_parse(text, frame)
 
@@ -146,7 +156,7 @@ class Parser(LinksMixin, PreprocessingMixin):
         # handleExternalLinks
         text = text.replace(MARKER_PREFIX + "NOPARSE", "")
         text = self.handle_magic_links(text)
-        # TODO: finalizeHeadings
+        text = self.finalize_headings(text, orig_text, is_main)
         return text
 
     def internal_parse_half_parsed(self, text: str, is_main: bool = True, linestart: bool = True) -> str:
@@ -441,11 +451,16 @@ class Parser(LinksMixin, PreprocessingMixin):
 
 
 def parse(text: str, title: str = "Main Page", pages: Optional[Mapping[str, str]] = None,
-          config: Config = DEFAULT, site=None) -> str:
+          config: Config = DEFAULT, site=None, **get_text_options) -> str:
     """The HTML MediaWiki renders for ``text`` on the page ``title``; ``pages`` holds the wikitext of the other
     pages (templates, pages that links may point to), by title; ``config`` the wiki's settings and ``site`` its
-    namespaces and interwikis (biwiki.mediawiki.site)."""
-    return Parser(pages, config, site).parse(text, title)
+    namespaces and interwikis (biwiki.mediawiki.site). The result is ParserOutput::getText()'s, with
+    ``get_text_options`` (allow_toc, unwrap, enable_section_edit_links, ...)."""
+    from .parseroutput import get_text
+
+    parser = Parser(pages, config, site)
+    html = parser.parse(text, title)
+    return get_text(html, parser.output, parser.site, **get_text_options)
 
 
 __all__ = ["Parser", "ParserOutput", "parse", "TOC_PLACEHOLDER", "MARKER_PREFIX", "MARKER_SUFFIX"]

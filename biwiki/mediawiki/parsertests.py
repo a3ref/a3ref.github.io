@@ -230,8 +230,10 @@ def run_test(test: ParserTest, articles: dict[str, str]) -> Result:
     title = test.options.get("title", DEFAULT_TITLE)
     config = test_config(test)
     try:
+        # getText( [ 'allowTOC' => !isset( $opts['notoc'] ), 'unwrap' => !isset( $opts['wrap'] ) ] )
         actual = parse(test.wikitext or "", title=title if isinstance(title, str) else DEFAULT_TITLE, pages=articles,
-                       config=config, site=test_site(subpages="subpage" in test.options, config=config))
+                       config=config, site=test_site(subpages="subpage" in test.options, config=config),
+                       allow_toc="notoc" not in test.options, unwrap="wrap" not in test.options)
     except Exception as e:  # noqa: BLE001 - a crash is a failed test, reported with the rest
         return Result(test, False, error=f"{type(e).__name__}: {e}")
     actual = re.sub(r"\s+$", "", actual)  # as ParserTestRunner does
