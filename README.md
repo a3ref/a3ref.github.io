@@ -121,8 +121,10 @@ Three repositories, no secrets:
 - **this repository** holds only the code. `.github/workflows/site.yml` builds the site from the latest
   `a3ref/data` and deploys it to GitHub Pages:
   - on every push to `main` (parser or design changes);
-  - **every 6 hours**, but only if the data commit differs from `data-version.txt` on the live site; the same run
-    fails (and GitHub emails) if the data sync has not succeeded for 26 hours, since GitHub may drop scheduled runs;
+  - **every hour**, but only if the data commit differs from `data-version.txt` on the live site, so the site
+    follows every data sync, scheduled or run by hand, within the hour;
+  - every 6 hours a watchdog run fails (and GitHub emails) if the data sync has not succeeded for 26 hours, since
+    GitHub may drop scheduled runs;
   - manually (Actions → Deploy site → Run workflow).
 - **[a3ref/mcp](https://github.com/a3ref/mcp)** is the MCP server and Claude Code plugin; it reads the live site.
 

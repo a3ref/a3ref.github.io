@@ -57,11 +57,20 @@ def history(repo: Path, slug_of) -> list[dict]:
                 elif old[title]["revid"] != r["revid"]:
                     entry["changed"].append(item)
             for title, r in old.items():
-                if title not in new:
+                if title not in new and not (kind == "topics" and _left_out(title, r)):
                     entry["removed"].append({"name": r["name"], "type": r["type"], "url": r["url"]})
         if entry["added"] or entry["changed"] or entry["removed"]:
             out.append(entry)
     return out
+
+
+def _left_out(title: str, record: dict) -> bool:
+    """A topic the mirror now leaves out (its title, or every one of its categories, is skipped, e.g. Multiplayer
+    Squads): it was not removed from the wiki, so it is no change on the wiki either."""
+    from .fetch import TOPIC_SKIP_CATEGORY, TOPIC_SKIP_TITLE
+
+    categories = record.get("categories", [])
+    return bool(TOPIC_SKIP_TITLE.search(title)) or bool(categories) and all(TOPIC_SKIP_CATEGORY.search(c) for c in categories)
 
 
 def _when(stamp: str) -> datetime:

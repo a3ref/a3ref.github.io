@@ -1,12 +1,14 @@
 # Builds the site from the latest a3ref/data and deploys it to GitHub Pages.
-# Runs on every push here, and every 6 hours, deploying only if the data changed. Scheduled runs are
-# best-effort on GitHub (they can be delayed or dropped), so the check runs often and costs seconds.
-# The watchdog fails, and GitHub emails, when the data sync has not run for more than 26 hours.
+# Runs on every push here, and every hour, deploying only if the data changed: the site follows a data sync
+# (scheduled or run by hand) within the hour, as a3ref/data cannot start this workflow without a token.
+# Scheduled runs are best-effort on GitHub (they can be delayed or dropped); the check costs seconds.
+# The watchdog (every 6 hours) fails, and GitHub emails, when the data sync has not run for more than 26 hours.
 name: Deploy site
 
 on:
   schedule:
-    - cron: "47 */6 * * *"
+    - cron: "47 * * * *"
+    - cron: "53 */6 * * *"  # watchdog
   push:
     branches: [main]
   workflow_dispatch:
@@ -17,7 +19,7 @@ concurrency:
 
 jobs:
   watchdog:
-    if: github.event_name == 'schedule'
+    if: github.event.schedule == '53 */6 * * *'
     runs-on: ubuntu-latest
     steps:
       - env:
@@ -32,6 +34,7 @@ jobs:
           fi
 
   check:
+    if: github.event.schedule != '53 */6 * * *'
     runs-on: ubuntu-latest
     outputs:
       deploy: ${{ steps.compare.outputs.deploy }}

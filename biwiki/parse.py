@@ -228,9 +228,15 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
                 item["text"] = md
                 params.append(item)
         ret = p.get(f"r{n}")
-        syntax = r.plain(s)
+        # a note placed in the syntax field ({{Feature|obsolete|...}}) is no part of the syntax line
+        s_code = parse_wikitext(str(s))
+        features = [t for t in s_code.filter_templates(recursive=False) if _name(t) == "Feature"]
+        for t in features:
+            s_code.remove(t)
+        syntax = r.plain(s_code)
         entry = {
             "syntax": syntax,
+            **({"note": "\n\n".join(r.md(str(t)) for t in features)} if features else {}),
             "since": _text(p, f"s{n}since") or None,
             "effect": _text(p, f"s{n}effect") or None,
             "exec": _text(p, f"s{n}exec") or None,

@@ -119,7 +119,7 @@ def _code_template(m: re.Match) -> str:
     if name == "gvi":
         return game_name(args[0]) + (f" v{args[1].strip()}" if len(args) > 1 else "")
     if name == "hl":
-        return args[0]
+        return re.sub(r"^\s*c\s*=\s*", "", args[0])  # {{hl|c= a = 1}}
     if name == "link":
         return args[-1]
     if name == "cc":
@@ -201,12 +201,16 @@ class Renderer:
     """Stateless-per-call converter; ``unknown`` collects templates/tags it had no rule for."""
 
     def __init__(self, resolve: Optional[LinkResolver] = None, page_title: str = "", preformat: bool = True,
-                 emphasis: bool = True, inline: bool = False):
+                 emphasis: bool = True, inline: bool = False, hard_breaks: bool = True, code_links: bool = False):
         self.resolve = resolve or (lambda title, anchor: None)
         self.page_title = page_title
         self.preformat = preformat  # off where the result is a single line or already code
         self.emphasis = emphasis  # off for the text of inline code, where "**" would show as is
         self.inline = inline  # the text continues a line (see _finish)
+        # <br> as a Markdown hard break; off for plain text (JSON fields, syntax lines), where it is a newline
+        self.hard_breaks = hard_breaks
+        # links in preformatted lines kept as CODE_LINK marks for the site (Markdown code cannot hold links)
+        self.code_links = code_links
         self.unknown: Counter = Counter()
 
     # ---- public API -------------------------------------------------------------------------
@@ -229,7 +233,7 @@ class Renderer:
 
     def plain_lines(self, wikitext) -> str:
         """Like :meth:`plain` but keeps line breaks."""
-        r = Renderer(None, self.page_title, preformat=False)
+        r = Renderer(None, self.page_title, preformat=False, hard_breaks=False)
         s = r.md(wikitext)
         s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
         s = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"\1", s)
@@ -250,7 +254,7 @@ class Renderer:
         # lists and emphasis work on source lines: a <br> is no line start, and ''...<br>...'' is one span
         text = self._lists(text, skip_first=inline or self.inline)
         text = "\n".join(_styles(line) for line in text.split("\n")).replace(STAR, "*" if self.emphasis else "")
-        text = text.replace(BR, "\n").replace(BLOCK, "")
+        text = self._breaks(text, slots, hard=self.hard_breaks and not (inline or self.inline)).replace(BLOCK, "")
         # We never emit images, so "![" is always text such as SQF "!" before a link ("![[alive]]" -> "!alive").
         # Code is still in slots here, so it is not affected.
         text = text.replace("![", "\\![")
@@ -260,6 +264,33 @@ class Renderer:
             text = _SLOT.sub(lambda m: slots[int(m.group(1))], text)
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text.strip()
+
+    def _breaks(self, text: str, slots: list[str], hard: bool) -> str:
+        """<br> -> Markdown. A plain newline in Markdown is only a space, so one <br> is a hard break (a "\\" at the
+        end of the line), several are a new paragraph, and one at the end of a paragraph shows nothing. Text right
+        after it does not start a line on the wiki: "<br>* note" is no list there, so the mark is escaped."""
+        if not hard or BR not in text:
+            return text.replace(BR, "\n")
+
+        def block_follows(rest: str) -> bool:
+            m = _SLOT.match(rest.lstrip(" \t"))
+            return bool(_MD_BLOCK.match(rest)) or bool(m and slots[int(m.group(1))].startswith("\n"))
+
+        def sub(m: re.Match) -> str:
+            newline, indent, mark = m.group(1), m.group(2), m.group(3) or ""
+            rest = text[m.end(2):].replace(BLOCK, "")  # the mark of a closing </div> is no text
+            if not rest.strip() or rest.startswith("\n"):  # the end of the text or of a paragraph
+                return newline + indent + mark
+            if m.group(0).count(BR) > 1:
+                return "\n\n" + indent + mark
+            if newline:  # <br> at the end of a source line: a list, heading or table on the next line stays one
+                return newline + indent + mark if block_follows(rest) else "\\\n" + indent + mark
+            if block_follows(rest[len(mark):]) and not mark:
+                return "\n\n"
+            return "\\\n" + indent + (re.sub(r"[.)]", r"\\\g<0>", mark, count=1) if mark[:1].isdigit() else
+                                      ("\\" + mark if mark else ""))
+
+        return _BREAK_RUN.sub(sub, text)
 
     def _preformatted(self, text: str, slots: list[str]) -> str:
         """Lines starting with a space are a preformatted block on the wiki, often config or console snippets.
@@ -279,7 +310,7 @@ class Renderer:
 
         def flush():
             if block:
-                code = "\n".join(_pre_line(line, slots) for line in block)
+                code = "\n".join(_pre_line(line, slots, self.code_links) for line in block)
                 fence = "````" if "```" in code else "```"
                 out.append(self._slot(slots, f"\n\n{fence}\n{_dedent(code)}\n{fence}\n\n"))
                 block.clear()
@@ -318,7 +349,9 @@ class Renderer:
 
     def _node(self, node, slots: list[str]) -> str:
         if isinstance(node, Text):
-            return node.value
+            # a backslash of the wiki text ("P:\", "\Steam\") is literal; Markdown would read it as an escape or,
+            # at the end of a line, as a line break. Not in code or plain text, where it already is literal.
+            return _MD_BACKSLASH.sub(r"\\\\", node.value) if self.hard_breaks and self.emphasis else node.value
         if isinstance(node, Comment):
             return ""
         if isinstance(node, HTMLEntity):
@@ -331,7 +364,7 @@ class Renderer:
                 return url if node.brackets is False else f"<{url}>"
             return f"[{self._nodes(node.title.nodes, slots).strip()}]({url})"
         if isinstance(node, Heading):
-            return self._heading(node.level, self._block(node.title, slots), slots)
+            return self._heading(node.level, self._block(node.title, slots, inline=True), slots)
         if isinstance(node, Template):
             return self._template(node, slots)
         if isinstance(node, Tag):
@@ -376,7 +409,7 @@ class Renderer:
         src = str(code).strip()
         if "{{" not in src:
             return src
-        return Renderer(None, self.page_title, preformat=False).md(src).replace("`", "")
+        return Renderer(None, self.page_title, preformat=False, hard_breaks=False).md(src).replace("`", "")
 
     def _heading(self, level: int, title: str, slots: list[str]) -> str:
         # In a slot, so the wiki-list pass does not read the leading "#" as a numbered list.
@@ -388,6 +421,7 @@ class Renderer:
 
     def _link_to(self, target: str, text: Optional[str]) -> str:
         if re.match(r"^(https?:)?//", target):
+            target = target.split()[0]  # {{Link|http://site.com feedback|text}}: a URL ends at a space
             return f"[{text}]({target})" if text else f"<{target}>"
         target = target.lstrip(":")
         if target.lower().startswith("category:") and not text:
@@ -414,8 +448,10 @@ class Renderer:
         if key == "=":
             return "="
         if key in ("hl", "cc"):
-            code = html.unescape(self._plain_inner(pos[0].value) if pos else "")
-            if not code and pos and str(pos[0].value).strip():  # {{hl|&nbsp;}}: the rendering trimmed the space
+            # the code is the first argument, or c= when it contains "=": {{hl|c= a = 1}}
+            value = t.get("c").value if t.has("c") else (pos[0].value if pos else None)
+            code = html.unescape(self._plain_inner(value) if value is not None else "")
+            if not code and value is not None and str(value).strip():  # {{hl|&nbsp;}}: the rendering trimmed the space
                 code = " "
             if key == "cc":
                 code = "// " + code
@@ -479,8 +515,9 @@ class Renderer:
             return arg(0)
         if key == "#link":  # a typo of {{Link}} that the wiki still renders as a link
             return self._link_to(self._expand(raw(0)), arg(1) or None)
-        if key == "youtube":
-            return self._link_to(f"https://www.youtube.com/watch?v={raw(0)}", arg(1) or "YouTube video")
+        if key == "youtube":  # the title may itself be a link to the video: keep its text only
+            title = _MD_LINK.sub(lambda m: m.group(1), arg(1)).strip()
+            return self._link_to(f"https://www.youtube.com/watch?v={raw(0)}", title or "YouTube video")
         if key == "messagebox/bi":
             body = "\n\n".join(self._block(p.value, slots) for p in pos)
             return self._slot(slots, "\n\n" + _quote(body) + "\n\n")
@@ -900,7 +937,10 @@ def _quote(body: str, alert: Optional[str] = None, label: Optional[str] = None) 
     if alert:
         lines.append(f"[!{alert}]")
     if label:
-        body = f"**{label}:** {body}" if body else f"**{label}**"
+        if _MD_BLOCK.match(body):  # a code block, table or list cannot continue the label's line
+            body = f"**{label}:**\n\n{body}"
+        else:
+            body = f"**{label}:** {body}" if body else f"**{label}**"
     lines += body.split("\n")
     return "\n".join(("> " + l) if l.strip() else ">" for l in lines)
 
@@ -917,13 +957,31 @@ def _inline_code(code: str) -> str:
 
 
 _MD_LINK = re.compile(r"\[((?:\\.|[^\]\\])*)\]\([^)\s]*\)")
+# a run of <br>, then what starts the next line: a mark that Markdown would read as a list, heading or quote
+_BREAK_RUN = re.compile(BR + r"(?:[ \t]*\n?[ \t]*" + BR + r")*[ \t]*(\n?)([ \t]*)((?:[*+-](?=[ \t])|#{1,6}(?=[ \t]|$)|>|\d{1,9}[.)](?=[ \t]|$)))?")
+# a backslash that Markdown would not show as is: before ASCII punctuation or at the end of a line
+_MD_BACKSLASH = re.compile(r"\\(?=[!-/:-@\[-`{-~]|\n|$)")
+# a line Markdown reads as a block of its own
+_MD_BLOCK = re.compile(r"[ \t]*(?:[*+-][ \t]|\d+[.)][ \t]|#{1,6}[ \t]|>|\||`{3,}|~{3,})")
 
 
-def _pre_line(line: str, slots: list[str]) -> str:
-    """One line of a preformatted block: wiki markup still applies there, so links keep only their text and
-    inline code and emphasis lose their marks."""
+# A link inside a code block, for the site only: CODE_LINK[0] text CODE_LINK[1] url CODE_LINK[2]
+CODE_LINK = ("\ue030", "\ue031", "\ue032")
+
+
+def _pre_line(line: str, slots: list[str], keep_links: bool = False) -> str:
+    """One line of a preformatted block: wiki markup still applies there, so links keep only their text (or
+    become CODE_LINK marks, ``keep_links``) and inline code and emphasis lose their marks."""
+    # code shows backslashes as they are: undo _MD_BACKSLASH of the wiki text (before the slots come back)
+    line = re.sub(r"\\([!-/:-@\[-`{-~])", r"\1", line)
     line = _SLOT.sub(lambda m: re.sub(r"^(`+) ?(.*?) ?\1$", r"\2", slots[int(m.group(1))], flags=re.S), line)
-    line = _MD_LINK.sub(lambda m: re.sub(r"\\([\[\]])", r"\1", m.group(1)), line)
+
+    def link(m: re.Match) -> str:
+        text = re.sub(r"\\([\[\]])", r"\1", m.group(1))
+        url = re.search(r"\]\(([^)\s]*)\)$", m.group(0)).group(1)
+        return CODE_LINK[0] + text + CODE_LINK[1] + url + CODE_LINK[2] if keep_links else text
+
+    line = _MD_LINK.sub(link, line)
     return re.sub(r"'{2,5}", "", line).replace(STAR, "").replace(BR, "\n")
 
 

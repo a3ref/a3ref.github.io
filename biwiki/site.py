@@ -52,6 +52,53 @@ _KEEP = {"<br>": "", "<kbd>": "", "</kbd>": ""}
 
 # a code block inside a table cell: ```lang<br>code<br>``` (see Site.html)
 _CELL_CODE = re.compile(r"(`{3,})([A-Za-z+-]*)<br>(.*?)(?:<br>)?\1(?!`)")
+_NESTED_SEPARATOR = re.compile(r"^\s*\\\|(?:\s*:?-{3,}:?\s*\\\|)+\s*$")
+
+
+def _fit_title(title: str, limit: int = 70) -> str:
+    """Page titles longer than search results show (and html-validate allows): the " – Arma 3 ..." suffix goes
+    first, then the name is cut."""
+    if len(title) <= limit:
+        return title
+    name = title.rsplit(" – ", 1)[0]
+    return name if len(name) <= limit else name[: limit - 1].rstrip() + "…"
+
+
+def _nested_tables(line: str, render) -> str:
+    """A table or a note (blockquote) inside a table cell: Markdown has neither, so the converter writes their lines
+    into the cell, separated by <br>, with escaped pipes. ``render`` gets the lines of each one and returns what
+    replaces them."""
+    cells = re.split(r"(?<!\\)\|", line)
+    for k, cell in enumerate(cells):
+        if "\\|" not in cell and ">" not in cell:
+            continue
+        parts, out, i = cell.split("<br>"), [], 0
+        while i < len(parts):
+            run = 0
+            while i + run < len(parts) and parts[i + run].lstrip().startswith(">"):
+                run += 1
+                if i + run < len(parts) and parts[i + run].lstrip().startswith("> [!"):
+                    break  # the next note
+            # a note: lines that all start with ">", from "> [!NOTE]" or of more than one line ("> 0 s" is text)
+            if run > 1 or (run and parts[i].lstrip().startswith("> [!")):
+                out.append(render(parts[i : i + run]))
+                i += run
+            elif parts[i].strip().startswith("\\|") and i + 1 < len(parts) and _NESTED_SEPARATOR.match(parts[i + 1]):
+                rows, i = parts[i : i + 2], i + 2
+                while i < len(parts):
+                    if parts[i].strip().startswith("\\|"):
+                        rows.append(parts[i])
+                    elif not rows[-1].rstrip().endswith("\\|"):  # a line break inside a cell of the inner table
+                        rows[-1] += "<br>" + parts[i]
+                    else:
+                        break
+                    i += 1
+                out.append(render(rows))
+            else:
+                out.append(parts[i])
+                i += 1
+        cells[k] = "<br>".join(out)
+    return "|".join(cells)
 
 
 class CodeLinker:
@@ -82,6 +129,8 @@ class CodeLinker:
             body = self.config(code)
         else:
             body = html.escape(code)
+        # links the wiki shows inside preformatted lines (see wikitext.CODE_LINK); text and URL are escaped above
+        body = re.sub("(.*?)(.*?)", r'<a href="\2">\1</a>', body)
         cls = f' class="language-{lang}"' if lang else ""
         # tabindex: long lines scroll sideways, and keyboard users need to be able to focus the block to scroll it
         return f'<pre class="code" tabindex="0"><code{cls}>{body}</code></pre>\n'
@@ -139,10 +188,23 @@ class Site:
             blocks.append(self.linker(code, m.group(2), None).strip())
             return f"{len(blocks) - 1}"
 
-        md = re.sub(r"(?m)^[ \t>]*\|.*$", lambda line: _CELL_CODE.sub(cell_code, line.group(0)), md)
+        def cell_table(rows: list[str]) -> str:
+            inner = self.html("\n".join(r.strip().replace("\\|", "|") for r in rows)).strip()
+            # without its scroll wrapper: the outer pass below wraps every <table>, this one included
+            blocks.append(inner.replace('<div class="table-wrap"><table>', "<table>").replace("</table></div>", "</table>"))
+            return "%d" % (len(blocks) - 1)
+
+        def table_line(line: str) -> str:
+            # tables nested in a cell come first: their own cells may hold code blocks, rendered by the inner call
+            return _CELL_CODE.sub(cell_code, _nested_tables(line, cell_table))
+
+        md = re.sub(r"(?m)^[ \t>]*\|.*$", lambda line: table_line(line.group(0)), md)
+        # A <br> stands for a Unicode space while Markdown is rendered (U+205F, not used by the wiki), so that
+        # emphasis next to it pairs as next to a space: "**???**<br>" in a table cell is bold, not a stray "**".
+        md = md.replace("<br>", " ")
         for tag, mark in _KEEP.items():
             md = md.replace(tag, mark)
-        out = self.md.render(md)
+        out = self.md.render(md).replace(" ", "<br>")
         for tag, mark in _KEEP.items():
             out = out.replace(mark, tag)
         out = re.sub("(\\d+)", lambda m: blocks[int(m.group(1))], out)
@@ -157,6 +219,8 @@ class Site:
         # wiki tables without a header row get an empty one in Markdown; empty <th> cells confuse screen readers
         out = re.sub(r"<thead>\s*<tr>(?:\s*<th[^>]*>\s*</th>)+\s*</tr>\s*</thead>\s*", "", out)
         out = out.replace("<table>", '<div class="table-wrap"><table>').replace("</table>", "</table></div>")
+        # Markdown table headers are column headers; say so, as tables nested in a cell need it (WCAG H63)
+        out = re.sub(r"<th(?=[\s>])(?![^>]*\bscope=)", '<th scope="col"', out)
         return out
 
     @staticmethod
@@ -238,6 +302,7 @@ class Site:
               toc: str = "", side: str = "", jsonld: list | None = None, extra_head: str = "", footer: str = "",
               page_class: str = "", og_type: str = "article", root: str | None = None) -> str:
         root = root if root is not None else "../" * path.count("/")
+        title = _fit_title(title)
         jsonld = list(jsonld or [])
         if len(crumbs) > 1:
             jsonld.append(_breadcrumb_ld(self.base, crumbs))

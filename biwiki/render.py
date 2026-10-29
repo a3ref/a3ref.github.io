@@ -24,14 +24,22 @@ TYPE_OF = {"commands": "command", "functions": "function", "topics": "topic"}
 KIND_OF = {v: k for k, v in TYPE_OF.items()}
 DATA_TYPE_CATEGORIES = {"Data Types", "Magic Types", "Syntactical Helper Types"}
 # Topic groups by words in the wiki categories, first match wins; anything else is "General".
+# A group's title pattern catches pages that only have the broad "Arma 3: Editing" category, or none.
 TOPIC_GROUPS = [
-    ("GUI", ["Control Types", "GUI", "Dialog"]),
-    ("Scripting", ["Scripting", "Syntax", "Arrays", "Example Code"]),
-    ("Multiplayer and Server", ["Multiplayer", "Startup Parameters", "Server", "MP Modes"]),
-    ("Mission Editing", ["Mission Editing", "Eden Editor", "2D Editor", "Briefing", "Editor Modules"]),
-    ("Tools and File Formats", ["Official Tools", "File Formats", "File extensions", "Terrain", "Modelling", "Texturing"]),
-    ("Reference Lists", ["Reference Lists", "CfgWeapons", "CfgVehicles", "Moves"]),
-    ("Configuration", ["Configuration", "Config", "Assets", "Sound", "Particle", "AI"]),
+    ("GUI", ["Control Types", "GUI", "Dialog"], None),
+    ("Scripting", ["Scripting", "Syntax", "Arrays", "Example Code"], r"Regular Expressions|SQF|Scripting Tags|Simple Expression|Extensions"),
+    ("Multiplayer and Server", ["Multiplayer", "Startup Parameters", "Server", "MP Modes"], None),
+    ("Mission Editing", ["Mission Editing", "Eden Editor", "2D Editor", "Briefing", "Editor Modules"], r"\bModules\b"),
+    ("Tools and File Formats", ["Official Tools", "File Formats", "File extensions", "Terrain", "Modelling", "Texturing"], r"Viewer|Splendid|Utilities"),
+    ("Reference Lists", ["Reference Lists", "CfgWeapons", "CfgVehicles", "Moves"], r"CfgVehicles (?!.*[Cc]onfig)|Airport IDs|inputAction|Input Actions"),
+    ("Configuration", ["Configuration", "Config", "Assets", "Sound", "Particle", "AI"], r"\bCfg|[Cc]onfig|Named Properties|UserActions"),
+    ("Change Logs", ["Change Logs"], r"Change Log"),
+    ("Modding", [], r"Addon|\bMod\b|Mod (Handling|Presentation)|P3D|RVMAT|[Tt]exture|Terrain|Vegetation|Trees|UVAnimations|"
+                    r"Firegeometry|Porting|Encoding|Lighting|Lights|Occluders|camo|destroyable|Tutorial|DevelopmentSetup"),
+    ("Game and Troubleshooting", ["Troubleshooting", "Hints & Tips", "Easter Eggs", "Points of Interest"],
+     r"Getting Started|Cheats|Play on|Steam|Crash|Unusual Process Exit|OneDrive|TrackIR|Performance|Difficulty|"
+     r"Main Menu|Loading Screens|Soundtrack|Launcher|Experimental Ports|Main Updates|Alternate Reality|Artwork|"
+     r"Invaders|Profile|userconfig|Objects\.sav|DLC"),
 ]
 _RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(10)), *(f"LPT{i}" for i in range(10))}
 
@@ -60,10 +68,13 @@ def page_slug(title: str, kind: str, topics: Collection[str] = ()) -> str:
 def summary(md: str, limit: int = 220) -> str:
     """First sentence(s) of a Markdown description as plain text."""
     paragraphs = [p for p in md.split("\n\n") if p.strip() and not p.lstrip().startswith(("#", ">", "```", "|", "-"))]
-    text = paragraphs[0] if paragraphs else md.split("\n\n")[0]
+    # without prose, the first block that reads as text (a heading or a list); never a table or code
+    rest = [p for p in md.split("\n\n") if p.strip() and not p.lstrip().startswith(("|", "```"))]
+    text = paragraphs[0] if paragraphs else (rest[0] if rest else "")
     text = re.sub(r"```.*?```", "", text, flags=re.S)
     text = re.sub(r"\\?!?\[([^\]]+)\]\([^)]*\)", r"\1", text)
     text = re.sub(r"^>.*$", "", text, flags=re.M)
+    text = re.sub(r"(?m)^(#+|[-*]|\d+\.)\s+", "", text)  # heading and list marks
     text = re.sub(r"\s+", " ", text.replace("**", "")).strip()
     if len(text) <= limit:
         return text
@@ -176,6 +187,8 @@ def body_markdown(rec: dict, resolve) -> str:
                 out += ["*" + " · ".join(notes) + "*", ""]
             if s["syntax"]:
                 out += ["```sqf", s["syntax"], "```", ""]
+            if s.get("note"):
+                out += [s["note"], ""]
             if s["params"]:
                 out += ["**Parameters:**", ""]
                 for p in s["params"]:
@@ -189,7 +202,11 @@ def body_markdown(rec: dict, resolve) -> str:
                     out.append("- " + _indent_continuation(text))
                 out.append("")
             if s["returns"]:
-                out += ["**Returns:** " + _indent_continuation(s["returns"]["text"], ""), ""]
+                text = s["returns"]["text"]
+                if text.startswith((">", "|", "```")):  # a note, table or code block cannot continue the label's line
+                    out += ["**Returns:**", "", text, ""]
+                else:
+                    out += ["**Returns:** " + _indent_continuation(text, ""), ""]
 
     if rec["examples"]:
         out += ["## Examples", ""]
@@ -403,8 +420,8 @@ def _reference(raw, kind, md_r, pages: Pages, resolve_md, resolve_html, site: Si
     rec_md = parse_page(raw, kind, md_r)
     if rec_md is None:
         return None, "", "", ""
-    rec = parse_page(raw, kind, Renderer(None))
-    rec_html = parse_page(raw, kind, Renderer(resolve_html))
+    rec = parse_page(raw, kind, Renderer(None, hard_breaks=False))  # JSON: plain newlines
+    rec_html = parse_page(raw, kind, Renderer(resolve_html, code_links=True))
     for r in (rec, rec_md, rec_html):
         _fix_references(r, pages)
     short = summary(rec["description"])
@@ -414,8 +431,8 @@ def _reference(raw, kind, md_r, pages: Pages, resolve_md, resolve_html, site: Si
 
 
 def topic_group(raw: dict) -> str:
-    """The first group whose words occur in one of the page's wiki categories; the concept pages picked by hand
-    (TOPIC_TITLES) stay under Scripting."""
+    """The first group whose words occur in one of the page's wiki categories or whose pattern matches its title;
+    the concept pages picked by hand (TOPIC_TITLES) stay under Scripting."""
     categories = raw.get("categories", [])
     if DATA_TYPE_CATEGORIES & set(categories):
         return "Data Types"
@@ -423,16 +440,16 @@ def topic_group(raw: dict) -> str:
         return "Event Handlers"
     if raw["title"] in TOPIC_TITLES:
         return "Scripting"
-    for group, words in TOPIC_GROUPS:
-        if any(w in c for c in categories for w in words):
+    for group, words, title in TOPIC_GROUPS:
+        if any(w in c for c in categories for w in words) or (title and re.search(title, raw["title"])):
             return group
     return "General"
 
 
 def _topic(raw, md_r, resolve_html, site: Site, s: str):
     rec_md = parse_topic(raw, md_r)
-    rec = parse_topic(raw, Renderer(None))
-    rec_html = parse_topic(raw, Renderer(resolve_html))
+    rec = parse_topic(raw, Renderer(None, hard_breaks=False))  # JSON: plain newlines
+    rec_html = parse_topic(raw, Renderer(resolve_html, code_links=True))
     group = topic_group(raw)
     for r in (rec, rec_md, rec_html):
         r["groups"] = [group]

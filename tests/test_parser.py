@@ -7,8 +7,9 @@ from pathlib import Path
 from biwiki import docblock, typeexpr
 from biwiki.fetch import load_cache
 from biwiki.parse import parse_page, split_param, syntax_form
-from biwiki.render import page_slug, slug, summary
+from biwiki.render import page_slug, slug, summary, topic_group
 from biwiki.report import leftover_markup, load_known, position, save_known
+from biwiki.site import Site
 from biwiki.wikitext import Renderer
 
 RAW = Path(__file__).parent / "fixtures" / "raw"
@@ -60,7 +61,22 @@ class WikitextTest(unittest.TestCase):
         self.assertEqual(self.md("when ''layer is a [[String]]"), "when *layer is a String*")
         self.assertEqual(self.md("''a'''s type"), "*a'*s type")
         self.assertEqual(self.md("''a''<nowiki/>'s type"), "*a*'s type")  # <nowiki/> ends the run of quotes
-        self.assertEqual(self.md("''Caliber<br />Rounds''"), "*Caliber\nRounds*")  # <br> is no line end here
+        self.assertEqual(self.md("''Caliber<br />Rounds''"), "*Caliber\\\nRounds*")  # <br> is no line end here
+
+    def test_line_breaks(self):
+        self.assertEqual(self.md("a<br>b"), "a\\\nb")  # a hard break: a plain newline would be a space
+        self.assertEqual(self.md("a<br><br>b"), "a\n\nb")
+        self.assertEqual(self.md("a<br>\n\nb<br>"), "a\n\nb")  # at the end of a paragraph it shows nothing
+        self.assertEqual(self.md("lowest*:<br><small>* not true</small>"), "lowest*:\\\n\\* not true")  # no list
+        self.assertEqual(self.md("Options:<br>\n* one\n* two"), "Options:\n- one\n- two")  # a real list stays one
+        self.assertEqual(Renderer(None, hard_breaks=False).md("a<br>b"), "a\nb")  # plain text: a newline
+        self.assertEqual(self.md("see [[x]] command.<br>\n<br>\n{{Feature|informative|n}}"), "see x command.\n\n> [!NOTE]\n> n")
+
+    def test_literal_backslashes(self):
+        self.assertEqual(self.md("Copy it to P:\\\nthen \\*.pbo"), "Copy it to P:\\\\\nthen \\\\*.pbo")
+        self.assertEqual(self.md("{{hl|P:\\}}"), "`P:\\`")  # code shows it as is
+        self.assertEqual(self.md("{{hl|c= a = 1}}"), "`a = 1`")  # c= when the code holds "="
+        self.assertEqual(self.md("x\n C:\\Arma 3\\\n"), "x\n\n```\nC:\\Arma 3\\\n```")
         self.assertEqual(self.md("{{hl|'''name''' {{=}} 1}}"), "`name = 1`")
 
     def test_list_marks_that_do_not_start_a_line(self):
@@ -266,6 +282,49 @@ class ReportTest(unittest.TestCase):
             self.assertEqual(load_known(path), {"markup|topics/X|''"})
             path.write_text('["markup|topics/Y|{{"]', encoding="utf-8")  # the older format: keys only
             self.assertEqual(load_known(path), {"markup|topics/Y|{{"})
+
+
+class SiteHtmlTest(unittest.TestCase):
+    def setUp(self):
+        self.site = Site(Path("unused"), {}, {})
+
+    def test_code_and_tables_inside_table_cells(self):
+        md = ("| A | B |\n|---|---|\n"
+              "| ```cpp<br>x[] = {<br>    1<br>};<br>``` | \\| P \\| D \\|<br>\\|---\\|---\\|<br>\\| t \\| one<br>two \\|<br>after |\n")
+        out = self.site.html(md)
+        self.assertIn('<td><pre class="code" tabindex="0"><code class="language-cpp">x[] = {\n    '
+                      '<span class="t-number">1</span>\n};</code></pre></td>', out)
+        self.assertIn("<td>t</td>\n<td>one<br>two</td>", out)  # the inner table is a table
+        self.assertEqual(out.count('<div class="table-wrap">'), 2)  # each table wrapped once
+        self.assertNotIn("\\|", out)
+
+    def test_notes_inside_table_cells(self):
+        out = self.site.html("| A | B |\n|---|---|\n| text<br>> [!NOTE]<br>> - one<br>> - two | > 0 seconds |\n")
+        self.assertIn('<blockquote class="alert alert-note">', out)
+        self.assertIn("<li>one</li>", out)
+        self.assertIn("<td>&gt; 0 seconds</td>", out)  # a comparison, not a note
+        two = self.site.html("| A |\n|---|\n| > [!NOTE]<br>> one<br>> [!WARNING]<br>> two |\n")
+        self.assertEqual(two.count("<blockquote"), 2)
+
+    def test_links_in_code_blocks(self):
+        md = Renderer(lambda t, a: f"../commands/{t}.html", code_links=True).md("x\n [[player]] setDamage 1")
+        self.assertIn('<code><a href="../commands/player.html">player</a> setDamage 1', self.site.html(md))
+        self.assertEqual(Renderer(lambda t, a: f"{t}.md").md("x\n [[player]] setDamage 1"), "x\n\n```\nplayer setDamage 1\n```")
+
+
+class TopicGroupTest(unittest.TestCase):
+    def test_groups(self):
+        def group(title, *categories):
+            return topic_group({"title": title, "categories": list(categories)})
+
+        self.assertEqual(group("Number", "Data Types"), "Data Types")
+        self.assertEqual(group("CT LISTBOX", "Control Types"), "GUI")
+        # only the broad category, or none: the title decides
+        self.assertEqual(group("Arma 3: CfgVehicles WEST"), "Reference Lists")
+        self.assertEqual(group("Arma 3: CfgVehicles Plane class config reference", "Arma 3: Editing"), "Configuration")
+        self.assertEqual(group("Arma 3: Prof-Branch Change Log v2.22", "Arma 3: Editing"), "Change Logs")
+        self.assertEqual(group("Arma 3: Play on Linux", "Arma 3"), "Game and Troubleshooting")
+        self.assertEqual(group("Arma 3: Stamina", "Arma 3: Editing"), "General")
 
 
 class SlugTest(unittest.TestCase):
