@@ -1,0 +1,3 @@
+# As in html5lib-tests: the test data contains carriage returns that must not be converted
+*.dat		-text diff
+*.test		-text diff

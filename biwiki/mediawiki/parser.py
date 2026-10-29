@@ -181,7 +181,10 @@ class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
         # the language converter is a no-op for English
         text = self.strip_state.unstrip_no_wiki(text)
         text = self.strip_state.unstrip_general(text)
-        # TODO: tidy (RemexHtml) with Sanitizer::armorFrenchSpaces
+        from .sanitizer import armor_french_spaces
+        from .tidy import tidy
+
+        text = tidy(text, armor_french_spaces)
         return text
 
     def get_variable_value(self, index: str, frame=None):
@@ -478,9 +481,11 @@ def parse(text: str, title: str = "Main Page", pages: Optional[Mapping[str, str]
     namespaces and interwikis (biwiki.mediawiki.site). The result is ParserOutput::getText()'s, with
     ``get_text_options`` (allow_toc, unwrap, enable_section_edit_links, ...)."""
     from .parseroutput import get_text
+    from .tidy import tidy
 
     parser = Parser(pages, config, site, **(parser_options or {}))
     html = parser.parse(text, title)
+    get_text_options.setdefault("tidy", tidy)  # getText() tidies the table of contents it injects
     return get_text(html, parser.output, parser.site, **get_text_options)
 
 

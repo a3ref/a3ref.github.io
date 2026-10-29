@@ -30,6 +30,11 @@ does not apply to them. As the rest of this repository uses that code, the
 program as a whole is distributed under the terms of the GNU General Public
 License, version 2 or later; the MIT license is compatible with it.
 
+Within these, biwiki/mediawiki/remex/ is a translation of RemexHtml (https://github.com/wikimedia/remex-html),
+copyright Wikimedia Foundation, and remains under the MIT license in biwiki/mediawiki/remex/LICENSE, and
+tests/mediawiki/html5lib-tests/ holds test data from html5lib-tests and RemexHtml under the MIT licenses given in
+that directory.
+
 The generated mirror (Markdown, JSON and HTML published at a3ref.github.io and
 in a3ref/data) is not covered by either license: it is content from the
 Bohemia Interactive Community Wiki, under that wiki's terms.
