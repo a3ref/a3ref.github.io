@@ -39,6 +39,8 @@ def valid_absolute_protocols(config: Config) -> str:
 
 def matches_domain_list(url: str, domains, config: Config) -> bool:
     """Check whether a given URL has a domain that occurs in a given set of domains"""
+    if isinstance(domains, str):  # wfMatchesDomainList(): (array)$domains
+        domains = (domains,)
     host = _url_host(url, config)
     if host is None:
         return False

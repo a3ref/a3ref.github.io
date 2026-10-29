@@ -124,6 +124,11 @@ class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
 
     def parse(self, text: str, title: str = "Main Page") -> str:
         """The HTML of ``text`` rendered on the page ``title``."""
+        # We use U+007F DELETE to construct strip markers, so we have to make
+        # sure that this character does not occur in the input text.
+        text = text.replace("\x7f", "?")
+        # Strip U+0000 NULL (T159174)
+        text = text.replace("\0", "")
         self.title = title
         self.strip_state = StripState(self)
         self.output = ParserOutput()

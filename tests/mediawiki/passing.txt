@@ -310,6 +310,7 @@ External links: encoded ampersand
 External links: encoded equals (T8102)
 External links: html2html with trailing dot (T263203)
 External links: intervening separator
+External links: invalid character NUL (stripped)
 External links: invalid character backspace (preserved)
 External links: link text with spaces
 External links: multiple legal whitespace is fine, Magnus. Don't break it please. (T7081)
@@ -379,6 +380,7 @@ Gallery in nolines mode
 Gallery in packed mode
 Gallery in packed-hover mode
 Gallery in packed-overlay mode
+Gallery in slideshow mode
 Gallery override link with absolute external link (T36852)
 Gallery override link with absolute external link with LanguageConverter
 Gallery override link with malicious javascript (T36852)
@@ -479,6 +481,7 @@ Image with link parameter, URL target
 Image with link parameter, protocol-less URL target
 Image with link parameter, wgExternalLinkTarget
 Image with link parameter, wgExternalLinkTarget, unnamed parameter
+Image with link parameter, wgNoFollowDomainExceptions
 Image with link parameter, wgNoFollowLinks set to false
 Image with link parameter, wiki target
 Image with link tails
@@ -658,6 +661,7 @@ Magic Word: {{PAGENAMEE}} with metacharacters (T28781)
 Magic Word: {{PAGENAME}} with metacharacters
 Magic Word: {{PAGENAME}} with metacharacters (T28781)
 Magic Words LOCAL (UTC)
+Magic link: invalid character NUL (stripped)
 Magic link: invalid character backspace (preserved)
 Magic links inside image captions (autolinked)
 Magic links inside links (not autolinked)
@@ -931,6 +935,7 @@ Special characters in embedded file links (T29679)
 Special page link with fragment
 Special parser function
 Special:Search page linking.
+Stray carriage return in text
 Strip marker in anchorencode
 Strip marker in formatNum
 Strip marker in lc

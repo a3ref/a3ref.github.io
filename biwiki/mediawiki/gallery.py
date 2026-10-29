@@ -1,10 +1,10 @@
 # Ported from MediaWiki 1.39 includes/gallery/ImageGalleryBase.php, TraditionalImageGallery.php,
-# NolinesImageGallery.php, PackedImageGallery.php, PackedHoverImageGallery.php and PackedOverlayImageGallery.php,
-# and Parser::renderImageGallery() of includes/parser/Parser.php (https://www.mediawiki.org/),
-# (C) MediaWiki contributors.
+# NolinesImageGallery.php, PackedImageGallery.php, PackedHoverImageGallery.php, PackedOverlayImageGallery.php and
+# SlideshowImageGallery.php, and Parser::renderImageGallery() of includes/parser/Parser.php
+# (https://www.mediawiki.org/), (C) MediaWiki contributors.
 # Changed by a3ref contributors on 2026-10-30: translated to Python; the galleries always render through the parser
-# (files, link renderer, bad image list); no hooks, no ResourceLoader modules; the slideshow mode, which only adds
-# client-side script, renders as the traditional gallery its PHP class extends.
+# (files, link renderer, bad image list); no hooks, no ResourceLoader modules (so the slideshow's client-side
+# script is not added).
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -429,14 +429,27 @@ class PackedHoverImageGallery(PackedOverlayImageGallery):
     """Same as Packed except different CSS is applied to make the caption only show up on hover."""
 
 
-# ImageGalleryBase::loadModes(); SlideshowImageGallery only adds client-side script to the traditional gallery
+class SlideshowImageGallery(TraditionalImageGallery):
+    """The traditional gallery with a data-showthumbnails attribute; its interface comes from client-side script
+    (the ResourceLoader module of getModules(), not ported)."""
+
+    def __init__(self, mode: str = "traditional", options: Optional[dict] = None):
+        super().__init__(mode, options)
+        # Does not support per row option.
+        self.per_row = 0
+
+    def set_additional_options(self, params: dict) -> None:
+        self.attribs["data-showthumbnails"] = "showthumbnails" in params
+
+
+# ImageGalleryBase::loadModes()
 MODE_MAPPING = {
     "traditional": TraditionalImageGallery,
     "nolines": NolinesImageGallery,
     "packed": PackedImageGallery,
     "packed-hover": PackedHoverImageGallery,
     "packed-overlay": PackedOverlayImageGallery,
-    "slideshow": TraditionalImageGallery,
+    "slideshow": SlideshowImageGallery,
 }
 
 

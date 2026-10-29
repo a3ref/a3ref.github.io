@@ -75,7 +75,8 @@ def read(path: Path = TEST_FILE) -> TestFile:
     """The articles (pages the tests may use: templates and pages that exist) and the tests of a file."""
     articles: dict[str, str] = {}
     tests: list[ParserTest] = []
-    lines = path.read_text(encoding="utf-8").split("\n")
+    # Bytes, not read_text: universal newlines would turn a lone "\r" (Stray carriage return in text) into "\n".
+    lines = path.read_bytes().decode("utf-8").split("\n")
     i = 0
 
     def section_body(start: int) -> tuple[list[str], int]:
@@ -172,6 +173,7 @@ _SETTINGS = {
     "wglinkholderbatchsize": "link_holder_batch_size", "wgenableuploads": "enable_uploads",
     "wgallowexternalimagesfrom": "allow_external_images_from", "wgenableimagewhitelist": "enable_image_whitelist",
     "wgexternallinktarget": "external_link_target", "wgnofollowlinks": "no_follow_links",
+    "wgnofollowdomainexceptions": "no_follow_domain_exceptions", "wgnofollownsexceptions": "no_follow_ns_exceptions",
     "wgfragmentmode": "fragment_mode", "wgallowimagetag": "allow_image_tag", "wgcapitallinks": "capital_links",
     "wgmaxtemplatedepth": "max_template_depth", "wgmaxppnodecount": "max_pp_node_count",
     "wgmaxppexpanddepth": "max_pp_expand_depth", "wgexpensiveparserfunctionlimit": "expensive_parser_function_limit",
