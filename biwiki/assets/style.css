@@ -277,3 +277,9 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
 }
 
 .note-author { margin: 0; font-size: 1rem; font-weight: 600; }
+
+/* Code shows the characters as typed: JetBrains Mono and Cascadia Code would draw >= as ≥ and != as ≠.
+   Last in the file because each `font:` shorthand above resets the ligature setting. */
+code, kbd, .name, .search-key, .results .r-name, .side-list a, .group-sample, .entry-name, .recent a, .data-list a {
+  font-variant-ligatures: none;
+}
