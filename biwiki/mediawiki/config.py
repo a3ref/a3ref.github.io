@@ -84,9 +84,11 @@ TEST = Config(
     max_toc_level=999,
 )
 
-# The Bohemia Interactive Community wiki (meta=siteinfo, 2026-10-29): titles are case sensitive ($wgCapitalLinks
-# false), magic links are off
+# The Bohemia Interactive Community wiki (meta=siteinfo, 2026-10-29/30, saved in biki_siteinfo.json): titles are case
+# sensitive ($wgCapitalLinks false), magic links are off, and only these URL protocols are links
 BIKI = Config(
+    url_protocols=("http://", "https://", "ftp://", "ftps://", "sftp://", "steam://", "armareforger://", "enfusion://",
+                   "mailto:"),
     sitename="Bohemia Interactive Community",
     meta_namespace="Bohemia Interactive Community",
     server="https://community.bistudio.com",
