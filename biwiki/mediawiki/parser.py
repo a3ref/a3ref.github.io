@@ -75,10 +75,13 @@ class ParserOutput:
 
 
 class Parser:
-    def __init__(self, pages: Optional[Mapping[str, str]] = None, config: Config = DEFAULT,
+    def __init__(self, pages: Optional[Mapping[str, str]] = None, config: Config = DEFAULT, site=None,
                  magic_words: MagicWordFactory = FACTORY):
+        from .site import Site
+
         self.pages = pages or {}
         self.config = config
+        self.site = site if site is not None else Site(config)
         self.magic_words = magic_words
         self.title = ""
         self.strip_state = StripState(self)
@@ -418,10 +421,11 @@ class Parser:
 
 
 def parse(text: str, title: str = "Main Page", pages: Optional[Mapping[str, str]] = None,
-          config: Config = DEFAULT) -> str:
+          config: Config = DEFAULT, site=None) -> str:
     """The HTML MediaWiki renders for ``text`` on the page ``title``; ``pages`` holds the wikitext of the other
-    pages (templates, pages that links may point to), by title; ``config`` the wiki's settings."""
-    return Parser(pages, config).parse(text, title)
+    pages (templates, pages that links may point to), by title; ``config`` the wiki's settings and ``site`` its
+    namespaces and interwikis (biwiki.mediawiki.site)."""
+    return Parser(pages, config, site).parse(text, title)
 
 
 __all__ = ["Parser", "ParserOutput", "parse", "TOC_PLACEHOLDER", "MARKER_PREFIX", "MARKER_SUFFIX"]
