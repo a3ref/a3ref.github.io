@@ -26,6 +26,9 @@ from typing import Optional
 ROOT = Path(__file__).resolve().parent.parent.parent
 TEST_FILE = ROOT / "tests" / "mediawiki" / "parserTests.txt"
 PASSING_FILE = ROOT / "tests" / "mediawiki" / "passing.txt"
+# The core test files of ParserTestRunner (MediaWiki 1.39 $wgParserTestFiles), each with its own articles
+TEST_FILES = [TEST_FILE] + [TEST_FILE.with_name(n) for n in (
+    "extraParserTests.txt", "legacyMediaParserTests.txt", "mediaParserTests.txt", "pfeqParserTests.txt")]
 
 # Modes other than parsing a page (ParserTestRunner::runLegacyTest); not what the port is for
 OTHER_MODES = {"pst", "msg", "section", "replace", "comment", "preload"}
@@ -247,18 +250,34 @@ def run_test(test: ParserTest, articles: dict[str, str], extensions=()) -> Resul
     return Result(test, actual == test.legacy_html, actual)
 
 
-def run(path: Path = TEST_FILE, name_filter: str = "") -> tuple[list[Result], dict[str, int]]:
-    data = read(path)
+def read_all(paths=None) -> list[TestFile]:
+    """All core test files, parserTests.txt first.
+
+    Names must be unique (passing.txt is keyed by name): a test whose name an earlier file already has gets
+    " [<file>]" appended, e.g. " [media]" for mediaParserTests.txt; the first file keeps its names."""
+    files, seen = [], set()
+    for path in (TEST_FILES if paths is None else paths):
+        data = read(path)
+        for test in data.tests:
+            if test.name in seen:
+                test.name += f" [{path.name.removesuffix('ParserTests.txt').removesuffix('.txt')}]"
+        seen.update(t.name for t in data.tests)
+        files.append(data)
+    return files
+
+
+def run(paths=None, name_filter: str = "") -> tuple[list[Result], dict[str, int]]:
     results, skipped = [], {}
-    for test in data.tests:
-        reason = test.skip_reason()
-        if reason:
-            key = reason.split(",")[0]
-            skipped[key] = skipped.get(key, 0) + 1
-            continue
-        if name_filter and name_filter.lower() not in test.name.lower():
-            continue
-        results.append(run_test(test, data.articles))
+    for data in read_all(paths):
+        for test in data.tests:
+            reason = test.skip_reason()
+            if reason:
+                key = reason.split(",")[0]
+                skipped[key] = skipped.get(key, 0) + 1
+                continue
+            if name_filter and name_filter.lower() not in test.name.lower():
+                continue
+            results.append(run_test(test, data.articles))
     return results, skipped
 
 

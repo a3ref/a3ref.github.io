@@ -16,13 +16,13 @@ class MediaWikiParserTests(unittest.TestCase):
     def test_passing_tests_still_pass(self):
         known = parsertests.load_passing()
         self.assertTrue(known, "tests/mediawiki/passing.txt is missing or empty")
-        data = parsertests.read()
         failed = []
-        for test in data.tests:
-            if test.name in known:
-                result = parsertests.run_test(test, data.articles)
-                if not result.passed:
-                    failed.append(test.name)
+        for data in parsertests.read_all():
+            for test in data.tests:
+                if test.name in known:
+                    result = parsertests.run_test(test, data.articles)
+                    if not result.passed:
+                        failed.append(test.name)
         self.assertEqual(failed, [], f"{len(failed)} MediaWiki parser tests regressed")
 
     def test_reader(self):
