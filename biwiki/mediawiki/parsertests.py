@@ -223,7 +223,9 @@ def test_config(test: ParserTest):
     return TEST.with_(**changes) if changes else TEST
 
 
-def run_test(test: ParserTest, articles: dict[str, str]) -> Result:
+def run_test(test: ParserTest, articles: dict[str, str], extensions=()) -> Result:
+    """``extensions``: the extensions to register (names of biwiki.mediawiki.ext.register_all), for the parser
+    tests of an extension."""
     from .coreparserfunctions import TEST_SITE_STATS
     from .parser import parse
     from .site import test_site
@@ -236,7 +238,8 @@ def run_test(test: ParserTest, articles: dict[str, str]) -> Result:
                        config=config, site=test_site(subpages="subpage" in test.options, config=config),
                        allow_toc="notoc" not in test.options, unwrap="wrap" not in test.options,
                        # ParserTestRunner: the fake time 123 (Unix), revision 1337, 7 uploaded files
-                       parser_options={"timestamp": 123, "revision_id": 1337, "site_stats": TEST_SITE_STATS})
+                       parser_options={"timestamp": 123, "revision_id": 1337, "site_stats": TEST_SITE_STATS,
+                                       "extensions": extensions})
     except Exception as e:  # noqa: BLE001 - a crash is a failed test, reported with the rest
         return Result(test, False, error=f"{type(e).__name__}: {e}")
     actual = re.sub(r"\s+$", "", actual)  # as ParserTestRunner does

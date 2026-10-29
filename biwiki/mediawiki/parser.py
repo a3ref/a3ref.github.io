@@ -91,9 +91,12 @@ class ParserOutput:
 class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
     def __init__(self, pages: Optional[Mapping[str, str]] = None, config: Config = DEFAULT, site=None,
                  magic_words: MagicWordFactory = FACTORY, *, timestamp=None, revision_id: Optional[int] = None,
-                 site_stats=None):
+                 site_stats=None, extensions=()):
         from .site import Site
 
+        # the extensions the wiki runs (names as in biwiki.mediawiki.ext.register_all), registered on first parse
+        self.extensions = set(extensions)
+        self._extensions_registered = False
         # the time of the parse (a datetime, a Unix timestamp or a TS_MW string; None: now), the revision being
         # parsed, and the wiki's statistics ({{NUMBEROFPAGES}} ...), as ParserOptions/the database give them
         self.timestamp = timestamp
@@ -127,6 +130,11 @@ class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
         self.autonumber = 0
         self.clear_link_state()
         self._init_preprocessing(OT_HTML, text=text)
+        if self.extensions and not self._extensions_registered:
+            from .ext import register_all
+
+            register_all(self, self.extensions)
+            self._extensions_registered = True
         # ParserOptions wrapclass default
         self.output.wrapper_div_classes.append("mw-parser-output")
         text = self.internal_parse(text)
