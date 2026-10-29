@@ -44,6 +44,23 @@ Every file in this directory starts with:
 # GNU General Public License for more details: biwiki/mediawiki/COPYING.
 ```
 
+## Status and plan
+
+Ported (with tests): doQuotes, BlockLevelPass, StripState, magic words, Sanitizer, StringUtils, the preprocessor
+(Preprocessor_Hash, nodes, frames), tables, headings, double-underscore words, external and magic links, Html,
+Title/MediaWikiTitleCodec, namespaces and interwikis (Site, with the BI wiki's own settings in `biki_siteinfo.json`).
+
+In progress: the template half of Parser.php and CoreTagHooks; CoreParserFunctions and CoreMagicVariables; internal
+links, LinkHolderArray and LinkRenderer; RemexHtml 3.0.3 (MIT, `remex/`) and MediaWiki's tidy layer.
+
+Still to do: finalizeHeadings/formatHeadings (TOC, edit-section links, ParserOutput::getText), images and galleries
+(Parser::makeImage, Linker::makeImageLink, File), then the wiki's extensions: ParserFunctions (incl. string
+functions), RegexFunctions, LabeledSectionTransclusion, Cite, SyntaxHighlight, TemplateData, CharInsert, YouTube,
+FontAwesome, Math, CategoryTree, DynamicPageList; and Bohemia Interactive's own, which are not public and follow
+the HTML the wiki produces (`action=parse`): SQF Highlighter (`<sqf>`, `<sqs>`), Enforce Script Highlighter
+(`<enforce>`), BIKI Spoiler (`<spoiler>`), BIKI Helper (`#biki-date`). Last: switching a3ref's renderer to the port
+(wikitext -> HTML -> Markdown/JSON/site), compared page by page with the current output.
+
 ## Tests
 
 `python -m biwiki.mediawiki.parsertests` runs MediaWiki's own parser tests (`tests/mediawiki/parserTests.txt`) and

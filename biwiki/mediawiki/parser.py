@@ -25,6 +25,7 @@ from .blocklevel import do_block_levels
 from .config import DEFAULT, Config
 from .linker import make_external_image, make_external_link, matches_domain_list, split_trail, valid_absolute_protocols, valid_protocols
 from .messages import msg
+from .parser_preprocess import OT_HTML, PreprocessingMixin
 from .magicword import FACTORY, MagicWordFactory
 from .quotes import handle_all_quotes
 from .stripstate import MARKER_PREFIX, MARKER_SUFFIX, StripState
@@ -74,7 +75,7 @@ class ParserOutput:
             self.templates.append(title)
 
 
-class Parser:
+class Parser(PreprocessingMixin):
     def __init__(self, pages: Optional[Mapping[str, str]] = None, config: Config = DEFAULT, site=None,
                  magic_words: MagicWordFactory = FACTORY):
         from .site import Site
@@ -104,16 +105,27 @@ class Parser:
         self.double_underscores = {}
         self.show_toc, self.force_toc_position = True, False
         self.autonumber = 0
+        self._init_preprocessing(OT_HTML, text=text)
         text = self.internal_parse(text)
-        return self.internal_parse_half_parsed(text, True, True)
+        text = self.internal_parse_half_parsed(text, True, True)
+        self.finish_preprocessing()
+        return text
 
-    def internal_parse(self, text: str, is_main: bool = True) -> str:
+    def internal_parse(self, text: str, is_main: bool = True, frame=None) -> str:
         """Transforms wiki markup into half-parsed HTML."""
         from .sanitizer import internal_remove_html_tags
         from .tables import handle_tables
 
-        # TODO: the preprocessor (replaceVariables / frame expansion) comes first
-        text = internal_remove_html_tags(text, config=self.config)
+        # if frame is provided, then use frame for replacing any variables, else the old-style replaceVariables
+        text = self.replace_variables_for_internal_parse(text, frame)
+
+        def expand_attribute_value(value: str, frame_=None) -> str:
+            # Callback from the Sanitizer for expanding items found in HTML attribute values, so they can be safely
+            # tested and escaped.
+            value = self.replace_variables(value, frame_ or None)
+            return self.strip_state.unstrip_both(value)
+
+        text = internal_remove_html_tags(text, expand_attribute_value, False, [], [], config=self.config)
         # Tables need to come after variable replacement for things to work properly; putting them before other
         # transformations should keep exciting things like link expansions from showing up in surprising places.
         text = handle_tables(text, self.strip_state)

@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from typing import Optional
 
 # $wgUrlProtocols (MainConfigSchema default)
 URL_PROTOCOLS = (
@@ -54,11 +55,17 @@ class Config:
     max_template_depth: int = 100
     expensive_parser_function_limit: int = 100
     max_article_size: int = 2048  # kibibytes
+    max_include_size: Optional[int] = None  # ParserOptions maxIncludeSize in bytes; None: max_article_size * 1024
+    remove_comments: bool = True  # ParserOptions removeComments
     link_holder_batch_size: int = 1000
     localtimezone: str = "UTC"
 
     def with_(self, **changes) -> "Config":
         return replace(self, **changes)
+
+    def get_max_include_size(self) -> int:
+        """ParserOptions::getMaxIncludeSize(): bytes"""
+        return self.max_article_size * 1024 if self.max_include_size is None else self.max_include_size
 
 
 DEFAULT = Config()

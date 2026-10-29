@@ -201,7 +201,8 @@ def test_config(test: ParserTest):
     from .config import TEST
 
     changes: dict[str, object] = {}
-    settings = {k: v for k, v in test.options.items() if k.startswith("wg") or k == "thumbsize"}
+    settings = {k: v for k, v in test.options.items()
+                if k.startswith("wg") or k in ("thumbsize", "maxincludesize", "maxtemplatedepth")}
     for line in test.sections.get("config", "").split("\n"):
         if "=" in line:
             name, _, value = line.partition("=")
@@ -213,6 +214,8 @@ def test_config(test: ParserTest):
             changes["enable_magic_links"] = {"ISBN": True, "PMID": True, "RFC": True, **(value or {})}
         elif name == "thumbsize":
             changes["thumb_limits"] = (0, 0, 0, 0, 0, int(value))
+        elif name in ("maxincludesize", "maxtemplatedepth"):  # ParserOptions set by ParserTestRunner
+            changes["max_include_size" if name == "maxincludesize" else "max_template_depth"] = int(value)
         elif name in _SETTINGS:
             if isinstance(value, list):
                 value = tuple(value)

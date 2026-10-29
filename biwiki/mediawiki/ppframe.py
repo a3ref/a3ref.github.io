@@ -51,11 +51,20 @@ def _php_trim(s: str) -> str:
 
 def _pdbk(title) -> Union[str, bool]:
     """$title->getPrefixedDBkey(), or false for no title. A plain string title is taken as the prefixed text."""
-    if title is None or title is False or title == "":
+    if title is None or title is False or (isinstance(title, str) and title == ""):
         return False
-    if hasattr(title, "get_prefixed_db_key"):
-        return title.get_prefixed_db_key()
+    if hasattr(title, "prefixed_db_key"):  # title.Title
+        return title.prefixed_db_key
     return str(title).replace(" ", "_")
+
+
+def _php_strval(value) -> str:
+    """$out .= $value: null and false append nothing"""
+    if value is None or value is False:
+        return ""
+    if value is True:
+        return "1"
+    return str(value)
 
 
 def _title_text(title) -> str:
@@ -232,7 +241,7 @@ class Frame:
                     if ret.get("object") is not None:
                         new_iterator = ret["object"]
                     else:
-                        out_stack[level] += ret["text"]
+                        out_stack[level] += _php_strval(ret.get("text"))
             elif context_name == "tplarg":
                 # Triple-brace expansion
                 bits = PPNode_Hash_Tree.split_raw_template(context_children)
@@ -243,13 +252,13 @@ class Frame:
                     if ret.get("object") is not None:
                         new_iterator = ret["object"]
                     else:
-                        out_stack[level] += ret["text"]
+                        out_stack[level] += _php_strval(ret.get("text"))
             elif context_name == "comment":
                 # HTML-style comment
                 # Remove it in HTML, pre+remove and STRIP_COMMENTS modes
                 # Not in RECOVER_COMMENTS mode (msgnw) though.
                 # ParserOptions::getRemoveComments() (default true) is read from the config as remove_comments
-                if ((parser.ot["html"] or (parser.ot["pre"] and getattr(parser.config, "remove_comments", True))
+                if ((parser.ot["html"] or (parser.ot["pre"] and parser.config.remove_comments)
                         or flags & STRIP_COMMENTS) and not flags & RECOVER_COMMENTS):
                     out_stack[level] += ""
                 elif parser.ot["wiki"] and not flags & RECOVER_COMMENTS:

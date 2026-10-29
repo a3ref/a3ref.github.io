@@ -1,17 +1,34 @@
+(confirming safety of fix for subst T3936)
+0. includeonly around the entire attribute
+1. Entities and nowikis inside templated attributes should be handled correctly
 1. Leading whitespace in SOL context should be stripped
 1. Lists with start-of-line-transparent tokens before bullets: Comments
 1. Nested mixed wikitext and html list
+1. SOL-sensitive wikitext tokens as template-args
+1. includeonly in html attr key
 1a. Indent-Pre and Comments
 1b. Indent-Pre and Comments
 1c. Indent-Pre and Comments
 1d. Indent-Pre and Comments (Pre-handler currently cannot distinguish between comment/ws order and normalizes them to [comment,ws] order)
+2. Lists with start-of-line-transparent tokens before bullets: Template close
+2. Nested mixed wikitext and html list (incompatible)
+2. includeonly in html attr value
 2e. Indent-Pre and table-line syntax
 2f. Indent-pre started by table-line syntax
+3. includeonly in part of an attr value
 5 quotes, code coverage +1 line
 5. Indent-Pre and html pre
 5b. White-space in indent-pre
 5c. White-space in indent-pre
 6. Pre-blocks should extend across lines with leading WS even when there is no wrappable content
+</pre> inside nowiki
+<includeonly> and <noinclude> being included
+<includeonly> and <noinclude> on a page
+<nowiki> spacing
+<nowiki> unordered list
+<onlyinclude> and <includeonly> being included
+<onlyinclude> being included
+<onlyinclude> on a page
 <pre> with attributes (T5202)
 <pre> with forbidden attribute (T5202)
 <pre> with forbidden attribute values (T5202)
@@ -26,17 +43,24 @@ Attribute test: no value (T54330)
 Attribute test: unquoted but illegal value (hash)
 Attribute test: unquoted value
 Bare pipe character (T54363)
+Bare pipe character from a template (T54363)
 Blank input
 Bold conversion test
+Bracketed external links with template-generated invalid target
 Brackets in urls
+Broken wikilinks (but not external links) prevent templates from closing
 CSS line continuation 1
 CSS line continuation 2
 CSS safety test (all browsers): vertical tab (T57332 / CVE-2013-4567)
+Comment in template title
+Comment on its own line post-expand
+Comment on its own line post-expand with non-significant whitespace
 Comment semantics and delimiters
 Comment semantics and delimiters, redux
 Comment semantics and delimiters: directors cut
 Comment semantics: nesting
 Comment semantics: normalize comments to play nice with XML and browsers
+Comment semantics: unclosed comment at end
 Comment spacing
 Comment test 2a
 Comment test 2b
@@ -80,18 +104,24 @@ Don't Allow tabindex > 0
 Don't allow tabindex -1
 Don't fall for the self-closing div
 Don't paragraph-wrap empty newlines between HTML list items
+Don't parse <nowiki><span class="error"></nowiki> (T149622)
 Double ISBN
 Double RFC
 Element with broken attribute syntax
 Elements with solidus in various attribute positions
+Empty <noinclude>
 Empty TR followed by mixed-ws-comment line should RT correctly
 Empty attribute crash test (T4067)
 Empty attribute crash test single-quotes (T4067)
+Empty templates should be handled properly without being redlinked
 Ensure that HTML adoption agency algorithm is properly implemented.
 Ensure that transclusion titles are not url-decoded
+Entities inside <nowiki>
 Entities inside <pre>
 Expansion of multi-line templates in attribute values (T8255 check 2)
 Expansion of multi-line templates in attribute values (T8255 check)
+Expansion of multi-line templates in attribute values (T8255)
+Extension tag in attribute value
 External image (when not allowed)
 External link containing a period in the anchor. (T65947)
 External link containing double-single-quotes in text '' (T6598 check)
@@ -119,6 +149,7 @@ External links: multiple legal whitespace is fine, Magnus. Don't break it please
 External links: newline forbidden in text (T8230 regression check)
 External links: nofollow domain exception
 External links: non-bracketed
+External links: nowiki in URL link text (T8230)
 External links: numbered
 External links: old URL-in-URL bug, mixed protocols
 External links: old bug with URL in query
@@ -138,6 +169,9 @@ External links: with entity
 External links: www.jpeg.org (T2554)
 Extra new lines before and after lists are preserved
 Extra newlines: More paragraphs with indented comment
+Fuzz testing: Parser25 (T8055)
+Fuzz testing: URL adjacent extension (no space, dirty; nowiki)
+Fuzz testing: URL adjacent extension (with space, clean)
 Fuzz testing: encoded newline in generated HTML replacements (T8577)
 Fuzz testing: encoded newline in generated HTML replacements, html2wt (T8577)
 HTML bullet list, closed tags (T7497)
@@ -151,6 +185,7 @@ HTML tag with 'unnecessary' entity encoding in attributes
 HTML tag with broken attribute value quoting
 HTML tag with leading space is parsed as text
 HTML tag with necessary entities in attributes
+HTML with raw HTML ($wgRawHtml==true)
 HTML-pre: big spaces
 HTML5 data attributes
 HTML5 tags
@@ -158,6 +193,7 @@ Handle title parsing for subpages
 Handling of %0A in URLs
 Handling of &#x0A; in URLs
 Headings: 4b. No escaping needed (inside p-tags)
+Headings: 4c. Short headings (1)
 Horizontal ruler -- 4+ dashes render hr
 Horizontal ruler -- <4 dashes render as plain text
 Horizontal ruler -- does not collapse dashes on consecutive lines
@@ -174,36 +210,50 @@ ISBN with multiple spaces, no number
 ISBN with space-delimited number
 ISBN with trailing year (T9110)
 Ident preformatting with inline content
+Implicit newline insertion/sol when expanding templates (T241150/T14974/T2529)
 Indent pre with leading colon
 Indent-Pre: Newlines in comments shouldn't affect sol state
 Inline wiki vs wiki block nesting
 Invalid header with following text
 Italics and bold
 Italics and bold: 2-quote opening sequence: (2,2)
+Italics and bold: 2-quote opening sequence: (2,4) w/ nowiki
 Italics and bold: 2-quote opening sequence: (2,5)
 Italics and bold: 3-quote opening sequence: (3,2)
 Italics and bold: 3-quote opening sequence: (3,3)
 Italics and bold: 3-quote opening sequence: (3,4)
 Italics and bold: 3-quote opening sequence: (3,5)
+Italics and bold: 4-quote opening sequence: (4,2) w/ nowiki
+Italics and bold: 4-quote opening sequence: (4,4) w/ nowiki
 Italics and bold: 4-quote opening sequence: (4,5)
 Italics and bold: 5-quote opening sequence: (5,3+2)
 Italics and bold: 5-quote opening sequence: (5,5)
 Italics and bold: multiple quote sequences: (2,4,2)
+Italics and bold: multiple quote sequences: (2,4,2+3) w/ nowiki
+Italics and bold: multiple quote sequences: (2,4,3+2) w/ nowiki
+Italics and bold: multiple quote sequences: (2,4,4+2) w/ nowiki
 Italics and bold: multiple quote sequences: (3,4,2)
 Italics and bold: multiple quote sequences: (3,4,3)
 Italics and bold: other quote tests: (2,(3,3),2)
 Italics and bold: other quote tests: (2,3,5)
 Italics and bold: other quote tests: (3,(2,2),3)
+Italics and bold: other quote tests: (3,2,3+2+2,2)
 Italics and possessives (2)
+Langconvert tag: sr-el to sr-ec (should fail)
+Language converter over extlink
+Language converter tricky html2wt cases (2)
 Link containing "<#" and ">#" as a hex sequences
 Link containing % as a double hex sequence interpreted to hex sequence
 Link containing }
 Link to non-http image, no img tag
 Link with 3 brackets
 Links 13. Don't add spurious <nowiki/>s between text-nodes and ISBN-links (T66300)
+Links 4. ExtLinks: Escapes needed
 Links 5. ExtLinks: No escapes needed
 Links 7a. Don't add spurious <nowiki/>s between text-nodes and url-links (T66300)
 List items are not parsed correctly following a <pre> block (T2785)
+List items from template
+MSGNW magic word
 MSIE CSS safety test: hex code
 MSIE CSS safety test: spurious slash
 Magic Word: case-insensitive (all-lowercase)
@@ -225,12 +275,14 @@ Multiple comments should still parse as SOL-transparent
 Multiple newlines in between HTML list items don't induce paragraph wrapping
 Namespaced link must have a title
 Namespaced link must have a title (bad fragment version)
+Nested <noinclude>s
 Nested definition lists using html syntax
 Nested lists 1
 Nested lists 2
 Nested lists 3 (first element empty)
 Nested lists 7 (skip initial nesting levels)
 Nested lists 8 (multiple nesting transitions)
+Nested template calls
 Nesting of <bdo>
 Nesting of <em>
 Nesting of <kbd>
@@ -239,12 +291,15 @@ Nesting of <ruby>
 Nesting of <strong>
 No block tags
 Non-ASCII pseudo-tags are rendered as text
+Non-extlinks in brackets
 Non-html5 tags should be accepted
 Non-transclusion because of too many up levels
 Normalize empty paragraphs to HTML form that html2wt expects
+Nowiki with newlines in list
 Numbered list
 Opera -o-link CSS
 P-wrapping should not break after <td>s separated by newlines are converted back to pipes
+Page status indicators: Empty name is invalid
 Paragraph wrapping suppressed in html p
 Paragraphs inside blockquotes/divs (extra line break on close)
 Paragraphs inside blockquotes/divs (extra line break on open and close)
@@ -259,28 +314,41 @@ Paragraphs with newline spacing with comment lines in between
 Paragraphs with newline spacing with non-empty mixed comment and white-space lines in between
 Paragraphs with newline spacing with non-empty white-space lines in between
 Parenthesis in external links, especially URL links
+Parenthesis in external links, w/ transclusion or comment
 Parents of subpages, two levels up, without trailing slash or name.
 Parser hook: Don't allow unclosed extension tags
 Parsing an URL
 Parsing crashing regression (fr:JavaScript)
 Parsoid: Make sure nested lists are serialized on their own line even if HTML contains no newlines
+Parsoid: Pipe in external link target and content in template parameter
+Parsoid: Pipes in external links in template parameter
+Parsoid: Recognize nowiki with odd capitalization
+Parsoid: Recognize nowiki with trailing space in tags
 Parsoid: backwards pipe trick
 Parsoid: dot-slash prefixed wikilinks
 Parsoid: handle pre with space after attribute
+Parsoid: pipe in transclusion parameter
 Percent encoding in external links
 Piped link to URL
 Piped link with 3 brackets
 Piped link with no link text
+Plain link in template argument
 Plain link to URL
 Plain link to URL containing special characters, with link text (see T213950).
 Plain link to URL with link text
 Plain link to protocol-relative URL
 Plain link to protocol-relative URL with link text
 Preprocessor precedence 13: broken language converter in external link
+Preprocessor precedence 14: broken language converter in comment
+Preprocessor precedence 17: template w/o target shouldn't prevent closing
+Preprocessor precedence 18: another rightmost wins scenario
 Preprocessor precedence 19: break syntax
+Preprocessor precedence 2: template is rightmost opening
 Preprocessor precedence 4: left-most angle bracket
+Preprocessor precedence 5: tplarg takes precedence over template
 Preprocessor precedence 6: broken link is rightmost opening
 Preprocessor precedence 8: broken language converter is rightmost opening
+Preprocessor precedence 9: groups of braces
 Pres with newline attributes
 Preserving leading whitespace in indent-pre suppressing contexts
 Pseudo-tag with URL 'name' renders as url link
@@ -291,15 +359,20 @@ Quotes
 RFC code coverage
 RT-ed inter-element separators should be valid separators
 Regression with preformatted in <center>
+Render invalid page names as plain text (T53090)
 Render paragraphs when indent-pre is suppressed in blocklevels
+Replacing whitespace with tabs still doesn't break the list (gerrit 78327)
 Ruby markup (W3C-style)
 Sanitizer: Strip comments from CSS attributes
 Sanitizer: angle brackets are invalid, even in interwiki links (T182338)
+Self-closed noinclude, includeonly, onlyinclude tags
+Self-closed pre
 Serialize wikitext list items as HTML list items when embedded in a HTML list
 Serializing indent pre at sol
 Simple definition
 Simple list
 Simple paragraph
+Simple template
 Single-comment whitespace lines dont break lists, and neither do multi-comment whitespace lines
 Strip reserved data attributes
 Subpage with namespaces
@@ -317,7 +390,11 @@ T2289: literal double quote at end of URL
 T2289: literal double quote in bracketed URL
 T2361: URL inside bracketed URL
 T2361: URL within URL, not bracketed
+T24297: safesubst: works during normal parse
 T24905: <abbr> followed by ISBN followed by </a>
+T2529: Uncovered bullet
+T2529: Uncovered bullet in a deeply nested list
+T255007: French spacing in raw text elements
 T2787: Links with one slash after the url protocol are invalid
 T3186 news: in the middle of text
 T36939 - Case insensitive link parsing (HttP://)
@@ -326,10 +403,19 @@ T36939 - Case insensitive link parsing ([HttP://])
 T4304: HTML attribute safety (ISBN)
 T4304: HTML attribute safety (PMID)
 T4304: HTML attribute safety (RFC)
+T4304: HTML attribute safety (dangerous style template; 2309)
+T4304: HTML attribute safety (dangerous template; 2309)
 T4304: HTML attribute safety (link)
 T4304: HTML attribute safety (named web link)
+T4304: HTML attribute safety (safe parameter; 2309)
+T4304: HTML attribute safety (safe template; regression T4309)
+T4304: HTML attribute safety (unsafe breakout parameter 2; 2309)
+T4304: HTML attribute safety (unsafe breakout parameter; 2309)
+T4304: HTML attribute safety (unsafe parameter; 2309)
 T4304: HTML attribute safety (web link)
 T51672: Test for brackets in attributes of elements in external link texts
+T5244: HTML attribute safety (extension; safe)
+T5244: HTML attribute safety (extension; unsafe)
 T53086: Double newlines in blockquotes should be turned into paragraphs
 T6781, T7267: %25 in URL
 T6781, T7267: %25 in bracketed URL
@@ -349,12 +435,83 @@ Tables: Digest broken attributes on table and tr tag
 Tabs don't trigger preformatted text
 Tag-like HTML structures are passed through as text
 Tags which are hidden from tidiers cannot pass through the Sanitizer
+Template caching
+Template from main namespace
+Template named safesubst - T309405
+Template parameter
+Template passing argument to another template
+Template redirect
+Template with argument in separate line
+Template with complex template as argument
+Template with default value
+Template with default value (value set)
+Template with explicit namespace
+Template with invalid target containing tags
+Template with just whitespace (bad template brace matching)
+Template with just whitespace in it, T70421
+Template with template name as argument
+Template with template name as argument (2)
+Template with template name as unnamed argument
+Templates in extension attributes are not expanded
+Templates with invalid templated targets
+Templates with templated name
 Templates with templated name and top level template args
+Templates: '=' char in nested transclusions should not trigger nowiki escapes or conversion to named param
+Templates: 1. Simple use
+Templates: Block Tags: 1. Multiple template uses
+Templates: Block Tags: 2. Back-to-back template uses
+Templates: Don't escape already nowiki-escaped text in template parameters
 Templates: Don't recognize targets split by newlines
+Templates: Don't strip whitespace from positional-param values
+Templates: Double quotes as template target
+Templates: HTML Tag: 1. Generation of HTML attr. key
+Templates: HTML Tag: 2. Generation of HTML attr. value
+Templates: HTML Tag: 3. Generation of HTML attr key and value
+Templates: HTML Tag: 4. Generation of starting piece of HTML attr value
+Templates: HTML Tag: 5. Generation of middle piece of HTML attr value
+Templates: HTML Tag: 6. Generation of end piece of HTML attr value
+Templates: HTML Tag: 7. Generation of partial attribute key string
+Templates: HTML Tag: 8. Template-generated attribute (k=v)
+Templates: HTML Tag: 9. Multiple template-generated attributes
+Templates: Handle comments in parameter names (T69657)
+Templates: Handle comments in the target
+Templates: Handle empty comment-and-ws-only lines correctly
+Templates: Indent-Pre: 1a. Templates that break a line should suppress <pre>
+Templates: Indent-Pre: 1b. Templates that break a line should suppress <pre>
+Templates: Indent-Pre: 1c: Wrapping should be based on expanded content
+Templates: Indent-Pre: 1d: Wrapping should be based on expanded content
+Templates: Indent-Pre: 1e. Wrapping should be based on expanded content
+Templates: Indent-Pre: 1f: Wrapping should be based on expanded content
+Templates: Inline Text: 1. Multiple template uses
+Templates: Inline Text: 2. Back-to-back template uses
+Templates: Other wikitext in parameter names (T69657)
+Templates: P-wrapping: 1a. Templates on consecutive lines
+Templates: P-wrapping: 1b. Templates on consecutive lines
+Templates: P-wrapping: 1d. Template preceded by comment-only line
+Templates: Parameters substituted at the top-level
+Templates: Parsoid parameter escaping test 1
+Templates: Preserve blank parameter names
+Templates: Preserve blank parameter names in other positions
+Templates: Recognize targets when newlines and comments don't split the target
+Templates: Strip leading and trailing whitespace from named-param values
+Templates: Target with an extension tag
+Templates: Template Name/Arg clash: 1. Use of positional param
+Templates: Template Name/Arg clash: 2. Use of named param
+Templates: Ugly nesting: 1. Quotes opened/closed across templates (1x)
+Templates: Ugly templates: 3. newline-only template parameter
+Templates: Ugly templates: 4. newline-only template parameter inconsistency
+Templates: With colons
 Things that look like <pre> tags aren't treated as such
+Transclusion of a child page
+Transclusion of a sibling page (one level up)
+Un-closed <includeonly>
+Un-closed <noinclude>
+Un-closed <onlyinclude>
 Unclosed and unmatched quotes
 Unclosed language converter markup "-{"
 Use url link syntax for links where the content is equal the link target
+Using {{=}} when it expands to "=" should not create a tracking category
+Wikilinks with embedded newlines are not broken
 Wikitext lists can be nested inside HTML lists
 [Before] HTML without raw HTML enabled ($wgRawHtml==false)
 __proto__ is treated as normal wikitext (T105997)
@@ -368,5 +525,10 @@ div with multiple empty attribute values
 div with no attributes
 div with single-quoted attribute
 div with unquoted attribute
+max template depth being reached
+msgnw keyword
+multiple templates that are redirects
 new support for bdi element (T33817)
+nowiki 3
+subst: does not work during normal parse
 text with entity-escaped character entity-like string: eacute
