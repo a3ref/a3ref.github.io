@@ -27,10 +27,11 @@ CATEGORIES = {
 TOPIC_ROOT = "Category:Arma 3"
 TOPIC_PREFIX = "Arma 3:"
 # Subcategories not walked: commands and functions are their own kinds; the rest is other games' material
-# reached through shared categories (Reference Lists, Tutorials) and player or Creator DLC content.
+# reached through shared categories (Reference Lists, Tutorials), player or Creator DLC content, and the
+# pages of player communities (Multiplayer Squads).
 TOPIC_SKIP_CATEGORY = re.compile(
     r"Scripting Commands|Functions|Function Group|Command Group|Introduced with"
-    r"|Operation Flashpoint|ArmA:|Arma 2|Take On|CDLC|Field Manual|DLCs & Expansions"
+    r"|Operation Flashpoint|ArmA:|Arma 2|Take On|CDLC|Field Manual|DLCs & Expansions|Multiplayer Squads"
 )
 TOPIC_SKIP_TITLE = re.compile(r"^(Operation Flashpoint|ArmA:|Arma: Armed Assault|Arma 2|Take On)|Visitor 3|Field Manual")
 TOPIC_CATEGORIES = ["Category:Data Types", "Category:Magic Types", "Category:Syntactical Helper Types"]
