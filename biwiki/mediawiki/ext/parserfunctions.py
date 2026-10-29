@@ -3,9 +3,11 @@
 # ParserFunctions.i18n.magic.php and extension.json (https://www.mediawiki.org/wiki/Extension:ParserFunctions),
 # (C) Tim Starling, Robert Rohde, Ross McClure, Juraj Simlovic and other ParserFunctions contributors.
 # Changed by a3ref contributors on 2026-10-30: translated to Python; English only (#time's language argument is
-# ignored); no Scribunto library, no language variants; the time cache and #time counter are per parse; the
-# string functions follow PHP's mb_* functions on Python strings; #explode with a non-numeric negative position
-# returns '' (as the later fix T403241) instead of raising PHP's TypeError.
+# ignored); no Scribunto library, no language variants; the time cache and #time counter are per parse, relative
+# dates ("+1 day") count from the parse's timestamp (PHP's DateTime: from the clock), and year 0 is out of range;
+# LinkCache is the titles #ifexist looked up in the parse; the string functions follow PHP's mb_* functions on
+# Python strings; #explode with a non-numeric negative position returns '' (as the later fix T403241) and #pos with
+# a negative offset before the start of the string returns '' instead of raising PHP's TypeError/ValueError.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -14,13 +16,14 @@
 # GNU General Public License for more details: biwiki/mediawiki/COPYING.
 """ParserFunctions: {{#if:}}, {{#ifeq:}}, {{#switch:}}, {{#expr:}}, {{#time:}}, ... and the string functions.
 
-Settings (MediaWiki's $wgPF... globals), read from the parser's Config if it has them:
-  - pf_enable_string_functions ($wgPFEnableStringFunctions): default False (MediaWiki), True on the BI wiki and in
-    the extension's parser tests (its ParserTestGlobals hook);
+Settings (MediaWiki's $wgPF... globals), fields of the parser's Config:
+  - pf_enable_string_functions ($wgPFEnableStringFunctions): default False (MediaWiki), True on the BI wiki
+    (config.BIKI) and in the parser tests (the extension's ParserTestGlobals hook, parsertests.EXT_TEST_GLOBALS);
   - pf_string_length_limit ($wgPFStringLengthLimit): default 1000.
 """
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime, timezone
 from typing import Optional, Union
@@ -99,11 +102,47 @@ def _numeric_value(s: str) -> Union[int, float]:
     return float(s.strip())
 
 
+def _numeric_string(s: str) -> Optional[tuple[bool, Union[int, float], int]]:
+    """is_numeric_string_ex() of PHP 8: None for a non-numeric string, else (is_double, value, oflow), where oflow
+    is 1 or -1 for an integer string beyond PHP_INT_MAX/PHP_INT_MIN (then a double), else 0."""
+    if _NUMERIC.match(s) is None:
+        return None
+    if _INTEGER.match(s):
+        v = int(s.strip(" \t\n\r\x0b\f"))
+        if -PHP_INT_MAX - 1 <= v <= PHP_INT_MAX:
+            return False, v, 0
+        return True, float(v), 1 if v > 0 else -1
+    return True, float(s.strip(" \t\n\r\x0b\f")), 0
+
+
 def php_loose_equals(a: str, b: str) -> bool:
-    """$a == $b on two strings in PHP 8: numeric strings compare as numbers ("01" == "1"), others as strings."""
-    if php_is_numeric(a) and php_is_numeric(b):
-        return _numeric_value(a) == _numeric_value(b)
-    return a == b
+    """$a == $b on two strings in PHP 8 (zendi_smart_str_equals()): numeric strings compare as numbers
+    ("01" == "1", "1e3" == "1000"), others as strings."""
+    n1 = _numeric_string(a)
+    n2 = _numeric_string(b) if n1 is not None else None
+    if n1 is None or n2 is None:
+        return a == b
+    (double1, v1, oflow1), (double2, v2, oflow2) = n1, n2
+    if oflow1 != 0 and oflow1 == oflow2 and v1 - v2 == 0.0:
+        # both values are integers overflown to the same side, both are double comparison may have resulted in
+        # crucial accuracy lost
+        return a == b
+    if double1 or double2:
+        if not double1:
+            if oflow2:
+                # 2nd operand is integer > LONG_MAX (oflow2==1) or < LONG_MIN (-1)
+                return False
+            v1 = float(v1)
+        elif not double2:
+            if oflow1:
+                return False
+            v2 = float(v2)
+        elif v1 == v2 and not math.isfinite(v1):
+            # Both values overflowed and have the same sign, so a numeric comparison would be inaccurate
+            return a == b
+        return v1 == v2
+    # they both have to be long's
+    return v1 == v2
 
 
 def php_intval(s) -> int:
@@ -122,6 +161,21 @@ def php_intval(s) -> int:
         return max(min(int(num), PHP_INT_MAX), -PHP_INT_MAX - 1)
     f = float(num)
     return int(f) if abs(f) < 2 ** 63 else (PHP_INT_MAX if f > 0 else -PHP_INT_MAX - 1)
+
+
+def _php_number(s) -> Union[int, float]:
+    """The number a string is in PHP arithmetic: a numeric or leading-numeric string's int or float ("-1.5abc" is
+    -1.5, with a warning in PHP); 0 for one without a number (PHP 8 throws a TypeError there)."""
+    if isinstance(s, (int, float)):
+        return s
+    m = _LEADING_NUMERIC.match(s or "")
+    if not m:
+        return 0
+    num = m.group(1)
+    if re.fullmatch(r"[+-]?\d+", num):
+        v = int(num)
+        return v if -PHP_INT_MAX - 1 <= v <= PHP_INT_MAX else float(v)
+    return float(num)
 
 
 def php_truthy(value) -> bool:
@@ -360,26 +414,6 @@ def rel2abs(parser, to: str = "", from_: str = "") -> str:
     return "/".join(new_exploded)
 
 
-def _add_link(parser, title: Title, id_: int) -> None:
-    """ParserOutput::addLink()"""
-    output = parser.get_output()
-    add = getattr(output, "add_link", None)
-    if add is not None:
-        add(title, id_)
-    else:
-        output.links.setdefault(title.namespace, {})[title.db_key] = id_
-
-
-def _add_image(parser, name: str) -> None:
-    """ParserOutput::addImage()"""
-    output = parser.get_output()
-    add = getattr(output, "add_image", None)
-    if add is not None:
-        add(name)
-    else:
-        output.images[name] = 1
-
-
 def _ifexist_internal(parser, frame, titletext: str = "", then=None, else_=None):
     title = Title.new_from_text(titletext, site=_site(parser))
     # (LanguageConverter::findVariantLink(): no variants)
@@ -390,11 +424,13 @@ def _ifexist_internal(parser, frame, titletext: str = "", then=None, else_=None)
             # page.
             if not parser.increment_expensive_function_count():
                 return else_
-            if not link_cache.file_exists(title):
-                _add_image(parser, title.db_key)
+            # (RepoGroup::findFile() follows a redirect of the file page, as for bug 32031)
+            file = link_cache.find_file(title)
+            if not file:
+                parser.output_add_image(title.db_key)
                 return else_
-            _add_image(parser, title.db_key)
-            return then
+            parser.output_add_image(file.get_name())
+            return then if file.exists() else else_
         elif title.is_special_page():
             # Don't bother with the count for special pages, since their existence can be checked without accessing
             # the database.
@@ -405,19 +441,22 @@ def _ifexist_internal(parser, frame, titletext: str = "", then=None, else_=None)
             return else_
         else:
             pdbk = title.prefixed_db_key
+            # (LinkCache::getGoodLinkID() / isBadLink(): the titles looked up so far in this parse)
             checked = _parse_state(parser)["checked_links"]
-            if pdbk in checked:
-                # LinkCache: already looked up in this request
-                _add_link(parser, title, checked[pdbk])
-                return then if checked[pdbk] else else_
+            if pdbk in checked and checked[pdbk] != 0:
+                parser.output_add_link(title, checked[pdbk])
+                return then
+            elif pdbk in checked:
+                parser.output_add_link(title, 0)
+                return else_
             if not parser.increment_expensive_function_count():
                 return else_
-            id_ = 1 if link_cache.exists(title) else 0
+            id_ = 1 if link_cache.exists(title) else 0  # $title->getArticleID(): pages have no IDs here
             checked[pdbk] = id_
-            _add_link(parser, title, id_)
+            parser.output_add_link(title, id_)
 
             # bug 70495: don't just check whether the ID != 0
-            if id_:
+            if link_cache.exists(title):
                 return then
     return else_
 
@@ -451,7 +490,8 @@ def _time_common(parser, frame=None, format_: str = "", date: str = "", language
     now = _now(parser)
     if date == "":
         cache_key = php_date(now, "YmdHis")
-        date = now.strftime("%Y-%m-%dT%H:%M:%SZ")  # TS_ISO_8601
+        u = now.astimezone(timezone.utc)
+        date = f"{u.year:04d}-{u.month:02d}-{u.day:02d}T{u.hour:02d}:{u.minute:02d}:{u.second:02d}Z"  # TS_ISO_8601
     else:
         cache_key = date
     key = (format_, cache_key, language, bool(local))
@@ -477,10 +517,19 @@ def _time_common(parser, frame=None, format_: str = "", date: str = "", language
 
         # Set output timezone.
         tz = local_zone(parser) if local else utc
-        date_object = date_object.astimezone(tz)
-        # Generate timestamp
-        ts = date_object.strftime("%Y%m%d%H%M%S").rjust(14, "0")
+        try:
+            date_object = date_object.astimezone(tz)
+        except OverflowError:
+            # the zone moves the date out of the years Python holds: after 9999 ($ts >= 100000000000000) or, from
+            # 0001-01-01, into year 0 (PHP formats year 0; Python cannot, so it is reported as too small)
+            raise YearOutOfRange(10000 if date_object.year == 9999 else 0) from None
+        # Generate timestamp (format( 'YmdHis' ))
+        d = date_object
+        ts = f"{d.year:04d}{d.month:02d}{d.day:02d}{d.hour:02d}{d.minute:02d}{d.second:02d}"
     except YearOutOfRange as e:
+        # PHP holds the year and the checks of $ts below reject it: "-0001..." < 0 is too small, a fifteen-digit
+        # year 10000 or later too big. (Year 0, which PHP accepts, is reported as too small: Python's datetime
+        # cannot hold it.)
         if e.year < 1:
             too_small = True
         else:
@@ -702,7 +751,10 @@ def run_explode(parser, in_str: str = "", in_div: str = "", in_pos="0", in_lim=N
             return matches[key]
         return ""
     if _compare_with_zero(in_pos, "<"):
-        index = len(matches) + php_intval(in_pos)
+        # count( $matches ) + $inPos: an int, or a float for "-1.5" (truncated as an array key: -0.5 is key 0)
+        index = len(matches) + _php_number(in_pos)
+        if isinstance(index, float):
+            index = int(index) if math.isfinite(index) else 0
         if 0 <= index < len(matches):
             return matches[index]
     return ""

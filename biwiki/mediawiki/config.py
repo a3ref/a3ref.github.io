@@ -67,6 +67,11 @@ class Config:
     local_tz_offset: Optional[int] = None  # $wgLocalTZoffset in minutes; None: from localtimezone
     link_holder_batch_size: int = 1000
     localtimezone: str = "UTC"
+    # Settings of the extensions (biwiki.mediawiki.ext; their extension.json defaults)
+    pf_enable_string_functions: bool = False  # ParserFunctions $wgPFEnableStringFunctions
+    pf_string_length_limit: int = 1000  # ParserFunctions $wgPFStringLengthLimit
+    cite_book_referencing: bool = False  # Cite $wgCiteBookReferencing
+    cite_responsive_references: bool = True  # Cite $wgCiteResponsiveReferences
 
     def with_(self, **changes) -> "Config":
         return replace(self, **changes)
@@ -102,8 +107,10 @@ TEST = Config(
 )
 
 # The Bohemia Interactive Community wiki (meta=siteinfo, 2026-10-29/30, saved in biki_siteinfo.json): titles are case
-# sensitive ($wgCapitalLinks false), magic links are off, and only these URL protocols are links
+# sensitive ($wgCapitalLinks false), magic links are off, only these URL protocols are links, and ParserFunctions'
+# string functions are enabled (Special:Version lists #len, #pos, #sub, ...)
 BIKI = Config(
+    pf_enable_string_functions=True,
     url_protocols=("http://", "https://", "ftp://", "ftps://", "sftp://", "steam://", "armareforger://", "enfusion://",
                    "mailto:"),
     sitename="Bohemia Interactive Community",

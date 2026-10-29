@@ -2,6 +2,19 @@
 ! and || in td attributes should not be parsed as <th>/<td>
 "Extra" interlanguage links (T34189 / gerrit 111390)
 "border", "frameless" and "class" attributes on an image.
+#if
+#ifeq
+#ifeq entities
+#iferror
+#ifexpr
+#len
+#pos
+#pos with too large offset (T209600)
+#switch
+#switch #default should match next and not last named parameter
+#switch Test php truthy
+#switch should not match #default as a prefix
+#urldecode
 (T21451) Links should refer to the normalized form.
 (confirming safety of fix for subst T3936)
 0. includeonly around the entire attribute
@@ -93,6 +106,11 @@
 <pre> with forbidden attribute (T5202)
 <pre> with forbidden attribute values (T5202)
 <pre> with width attribute (T5202)
+<ref> in a <!--comment-->
+<ref> in a <nowiki>
+<ref> with an empty-string name parameter and no content.
+<ref> with no name and no content.
+<ref> with whitespace only name parameter and no content.
 <s> or <strike> for strikethrough
 <wbr> is valid wikitext (T54468)
 A table with caption with default-spaced attributes and a table row
@@ -154,12 +172,15 @@ Broken link
 Broken link with fragment
 Broken templates
 Broken wikilinks (but not external links) prevent templates from closing
+Bug 19093: Default values don't fall through in switch
+Bug 22866: #ifexpr should evaluate "-0" as false
 Build table with pipe as data
 Build table with wikilink
 Build table with {{!}}
 CSS line continuation 1
 CSS line continuation 2
 CSS safety test (all browsers): vertical tab (T57332 / CVE-2013-4567)
+Can't have name="…" and follow="…" the same time
 Case-insensitive magic words should still work with weird casing.
 Case-sensitive magic words, when cased differently, should just be template transclusions
 Category / paragraph interactions
@@ -185,6 +206,8 @@ Comments and Indent-Pre
 Common list
 Compound transclusion with template and top level templatearg
 Confirm that 'apos' named character reference doesn't make it to output (not legal in HTML 4)
+Conflicting name="…" and follow="…" still invalid when a third parameter is present
+Confusing error
 Content after <tr> like wikitext should get fully processed
 Corner case: french spaces in definition list
 Correct handling of <td>, <tr> (T8171)
@@ -279,6 +302,9 @@ Escaping of interlanguage links (T129218, T156308)
 Expansion of multi-line templates in attribute values (T8255 check 2)
 Expansion of multi-line templates in attribute values (T8255 check)
 Expansion of multi-line templates in attribute values (T8255)
+Explicitly specified timezone: America/New_York (UTC-5)
+Explicitly specified timezone: Europe/Paris (UTC+1)
+Explicitly specified timezone: UTC
 Extension tag in attribute value
 Extension tag in templated tag attribute
 External image
@@ -524,6 +550,7 @@ Inline HTML vs wiki block nesting
 Inline interwiki link
 Inline interwiki link with empty title (T4372)
 Inline wiki vs wiki block nesting
+Input times are UTC, not local time
 Interlanguage link
 Interlanguage link variations
 Interlanguage link with preceding local interwiki link (T70085)
@@ -868,6 +895,7 @@ Preprocessor precedence 7: broken template is rightmost opening
 Preprocessor precedence 8: broken language converter is rightmost opening
 Preprocessor precedence 9: groups of braces
 Pres with newline attributes
+Preserve tags in #switch default value
 Preserving leading whitespace in indent-pre suppressing contexts
 Pseudo-tag with URL 'name' renders as url link
 Punctuation: CSS ! important (T13874; with space after)
@@ -950,6 +978,7 @@ Subpage with namespaces
 T10293: Use of center tag ruins paragraph formatting
 T13748: Literal closing tags
 T153135: Unclosed markup in definition list (code coverage)
+T15673: <ref> with direction "nonsense" and "" (empty), strip invalid dir attribute and shows error
 T17491: <ins>/<del> in blockquote
 T17491: <ins>/<del> in blockquote (2)
 T179544: {{anchorencode:}} output should be always usable in links
@@ -971,6 +1000,7 @@ T2289: literal double quote in bracketed URL
 T2337: Escaped self-links should be bold
 T2361: URL inside bracketed URL
 T2361: URL within URL, not bracketed
+T242437 - Blank ref name in #tag regression
 T24297: safesubst: works during normal parse
 T24905: <abbr> followed by ISBN followed by </a>
 T2499: Alt text should have &#1234;, not &amp;1234;
@@ -1184,6 +1214,7 @@ Templates: P-wrapping: 1b. Templates on consecutive lines
 Templates: P-wrapping: 1c. Templates on consecutive lines
 Templates: P-wrapping: 1d. Template preceded by comment-only line
 Templates: Parameters substituted at the top-level
+Templates: Parser functions don't strip whitespace from positional parameters
 Templates: Parsoid parameter escaping test 1
 Templates: Preserve blank parameter names
 Templates: Preserve blank parameter names in other positions
@@ -1216,6 +1247,9 @@ Thumbnail image caption with a free URL
 Thumbnail image caption with a free URL and explicit alt
 Thumbnail image with link parameter
 Thumbnail output
+Time test after the 2038 32-bit Apocalype
+Time test in traditional range...
+Time test prior to 1970 Unix creation myth
 Title needed when expanding templates.
 Titles in unlinked images (T23454)
 Transclusion of a child page
@@ -1244,7 +1278,9 @@ Using {{!}} in template arguments, part 2 (T290526)
 Using {{!}} in wikilinks (T290526)
 Using {{=}} when it expands to "=" should not create a tracking category
 Using {{Template:=}} doesn't invoke the parser function
+Valid parameters become invalid when a third is present
 Various link types in alt and link options
+Verify invalid use of a numeric character in a ref name and follow
 Width + Height sized image (using px) (height is ignored)
 Width-sized image (using px, no following whitespace)
 Width-sized image (using px, with following whitespace - test regression from r39467)
@@ -1302,3 +1338,6 @@ text with entity-escaped character entity-like string: eacute
 text with undefined character entity: xacute
 unclosed internal link XSS (T137264)
 {{!}} is a magic word
+{{#ifexist:}} media redirect (bug 32031)
+{{#ifexist}}
+{{REVISIONID}} on page without <ref> (bug 6299 sanity check)

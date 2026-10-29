@@ -7,11 +7,13 @@
 # option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY
 # WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details: biwiki/mediawiki/COPYING.
-"""MediaWiki's own parser tests, run against the port.
+"""MediaWiki's own parser tests, and those of the ported extensions (with the extension registered), run against
+the port.
 
     python -m biwiki.mediawiki.parsertests             # summary
     python -m biwiki.mediawiki.parsertests --show 5    # and the first failures, expected vs actual
     python -m biwiki.mediawiki.parsertests --filter quote --show 20
+    python -m biwiki.mediawiki.parsertests --file ParserFunctions --show 5
     python -m biwiki.mediawiki.parsertests --accept    # store the passing tests in tests/mediawiki/passing.txt
 """
 from __future__ import annotations
@@ -29,6 +31,21 @@ PASSING_FILE = ROOT / "tests" / "mediawiki" / "passing.txt"
 # The core test files of ParserTestRunner (MediaWiki 1.39 $wgParserTestFiles), each with its own articles
 TEST_FILES = [TEST_FILE] + [TEST_FILE.with_name(n) for n in (
     "extraParserTests.txt", "legacyMediaParserTests.txt", "mediaParserTests.txt", "pfeqParserTests.txt")]
+# The parser test files of the ported extensions (their tests/parser/, in tests/mediawiki/ext/<extension>/), each
+# run with the extensions it needs registered (names of biwiki.mediawiki.ext.register_all)
+EXT_DIR = TEST_FILE.parent / "ext"
+EXT_TEST_FILES: dict[Path, tuple[str, ...]] = {
+    **{EXT_DIR / "ParserFunctions" / n: ("ParserFunctions",) for n in (
+        "funcsParserTests.txt", "stringFunctionTests.txt")},
+    **{EXT_DIR / "Cite" / n: ("Cite",) for n in (
+        "citeParserTests.txt", "citeSmokeTests.txt", "citeSmokeTests2.txt", "bookReferencing.txt",
+        "fragementModes.txt", "responsiveReferences.txt", "1000References.txt")},
+}
+# What an extension's ParserTestGlobals hook sets for all parser tests while it is loaded (Config fields)
+EXT_TEST_GLOBALS: dict[str, dict[str, object]] = {
+    # ParserFunctions Hooks::onParserTestGlobals(): "Enables string functions during parser tests."
+    "ParserFunctions": {"pf_enable_string_functions": True},
+}
 
 # Modes other than parsing a page (ParserTestRunner::runLegacyTest); not what the port is for
 OTHER_MODES = {"pst", "msg", "section", "replace", "comment", "preload"}
@@ -66,6 +83,9 @@ class ParserTest:
 class TestFile:
     articles: dict[str, str]
     tests: list[ParserTest]
+    path: Optional[Path] = None
+    # the extensions the file's tests run with (names of biwiki.mediawiki.ext.register_all)
+    extensions: tuple[str, ...] = ()
 
 
 _HEADER = re.compile(r"^!!\s*(\S*)\s*$")
@@ -118,7 +138,7 @@ def read(path: Path = TEST_FILE) -> TestFile:
             _, i = section_body(i + 1)
             if i < len(lines) and _HEADER.match(lines[i]).group(1).lower() in ("end", "endhooks", "endfunctionhooks"):
                 i += 1
-    return TestFile(articles, tests)
+    return TestFile(articles, tests, path, EXT_TEST_FILES.get(Path(path).resolve(), ()))
 
 
 _OPTION = re.compile(
@@ -165,6 +185,7 @@ class Result:
     passed: bool
     actual: str = ""
     error: str = ""
+    file: Optional[Path] = None  # the test file, set by run()
 
 
 # Test options and !! config settings -> Config fields (ParserTestRunner::perTestSetup())
@@ -177,6 +198,9 @@ _SETTINGS = {
     "wgfragmentmode": "fragment_mode", "wgallowimagetag": "allow_image_tag", "wgcapitallinks": "capital_links",
     "wgmaxtemplatedepth": "max_template_depth", "wgmaxppnodecount": "max_pp_node_count",
     "wgmaxppexpanddepth": "max_pp_expand_depth", "wgexpensiveparserfunctionlimit": "expensive_parser_function_limit",
+    # extensions
+    "wgpfenablestringfunctions": "pf_enable_string_functions", "wgpfstringlengthlimit": "pf_string_length_limit",
+    "wgcitebookreferencing": "cite_book_referencing", "wgciteresponsivereferences": "cite_responsive_references",
 }
 
 
@@ -201,11 +225,14 @@ def _php_value(text: str):
     return text
 
 
-def test_config(test: ParserTest):
-    """The settings a test runs with: the parser-test defaults, its options and its !! config section."""
+def test_config(test: ParserTest, extensions=()):
+    """The settings a test runs with: the parser-test defaults, what the ParserTestGlobals hooks of ``extensions``
+    set, the test's options and its !! config section."""
     from .config import TEST
 
     changes: dict[str, object] = {}
+    for name in sorted(extensions):
+        changes.update(EXT_TEST_GLOBALS.get(name, {}))
     settings = {k: v for k, v in test.options.items()
                 if k.startswith("wg") or k in ("thumbsize", "maxincludesize", "maxtemplatedepth")}
     for line in test.sections.get("config", "").split("\n"):
@@ -237,7 +264,7 @@ def run_test(test: ParserTest, articles: dict[str, str], extensions=()) -> Resul
     from .site import test_site
 
     title = test.options.get("title", DEFAULT_TITLE)
-    config = test_config(test)
+    config = test_config(test, extensions)
     try:
         # getText( [ 'allowTOC' => !isset( $opts['notoc'] ), 'unwrap' => !isset( $opts['wrap'] ) ] )
         actual = parse(test.wikitext or "", title=title if isinstance(title, str) else DEFAULT_TITLE, pages=articles,
@@ -253,12 +280,13 @@ def run_test(test: ParserTest, articles: dict[str, str], extensions=()) -> Resul
 
 
 def read_all(paths=None) -> list[TestFile]:
-    """All core test files, parserTests.txt first.
+    """All test files: the core ones, parserTests.txt first, then those of the extensions (EXT_TEST_FILES).
 
     Names must be unique (passing.txt is keyed by name): a test whose name an earlier file already has gets
-    " [<file>]" appended, e.g. " [media]" for mediaParserTests.txt; the first file keeps its names."""
+    " [<file>]" appended, e.g. " [media]" for mediaParserTests.txt or " [funcs]" for ParserFunctions'
+    funcsParserTests.txt; the first file keeps its names."""
     files, seen = [], set()
-    for path in (TEST_FILES if paths is None else paths):
+    for path in (TEST_FILES + list(EXT_TEST_FILES) if paths is None else paths):
         data = read(path)
         for test in data.tests:
             if test.name in seen:
@@ -268,9 +296,11 @@ def read_all(paths=None) -> list[TestFile]:
     return files
 
 
-def run(paths=None, name_filter: str = "") -> tuple[list[Result], dict[str, int]]:
+def run(paths=None, name_filter: str = "", file_filter: str = "") -> tuple[list[Result], dict[str, int]]:
     results, skipped = [], {}
     for data in read_all(paths):
+        if file_filter and file_filter.lower() not in _file_label(data.path).lower():
+            continue
         for test in data.tests:
             reason = test.skip_reason()
             if reason:
@@ -279,8 +309,18 @@ def run(paths=None, name_filter: str = "") -> tuple[list[Result], dict[str, int]
                 continue
             if name_filter and name_filter.lower() not in test.name.lower():
                 continue
-            results.append(run_test(test, data.articles))
+            result = run_test(test, data.articles, data.extensions)
+            result.file = data.path
+            results.append(result)
     return results, skipped
+
+
+def _file_label(path: Optional[Path]) -> str:
+    """ext/<extension>/<file> for an extension's test file, else the file name."""
+    if path is None:
+        return ""
+    path = Path(path).resolve()
+    return path.relative_to(EXT_DIR).as_posix() if EXT_DIR in path.parents else path.name
 
 
 def load_passing(path: Path = PASSING_FILE) -> set[str]:
@@ -292,16 +332,26 @@ def main(argv=None) -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--filter", default="", help="only tests whose name contains this")
+    ap.add_argument("--file", default="", help="only test files whose name (e.g. Cite/citeParserTests.txt) contains this")
     ap.add_argument("--show", type=int, default=0, help="print this many failures")
     ap.add_argument("--accept", action="store_true", help=f"write the passing tests to {PASSING_FILE.name}")
     a = ap.parse_args(argv)
 
-    results, skipped = run(name_filter=a.filter)
+    results, skipped = run(name_filter=a.filter, file_filter=a.file)
     passed = [r for r in results if r.passed]
     known = load_passing()
     regressed = sorted(known - {r.test.name for r in passed} & {r.test.name for r in results})
-    print(f"{len(passed)} of {len(results)} legacy parser tests pass; skipped: "
+    core = [r for r in results if r.file is None or EXT_DIR not in Path(r.file).resolve().parents]
+    print(f"{sum(r.passed for r in core)} of {len(core)} core legacy parser tests pass; "
+          f"{len(passed)} of {len(results)} with the extensions'; skipped: "
           + ", ".join(f"{k} {v}" for k, v in sorted(skipped.items())))
+    by_file: dict[str, list[Result]] = {}
+    core_ids = {id(r) for r in core}
+    for r in results:
+        if id(r) not in core_ids:
+            by_file.setdefault(_file_label(r.file), []).append(r)
+    for label, rs in by_file.items():
+        print(f"  {label}: {sum(r.passed for r in rs)} of {len(rs)} pass")
     if regressed:
         print(f"{len(regressed)} tests that passed before fail now: " + "; ".join(regressed[:10]))
     shown = 0
@@ -309,11 +359,11 @@ def main(argv=None) -> int:
         if r.passed or shown >= a.show:
             continue
         shown += 1
-        print(f"\n--- {r.test.name} (line {r.test.line})\n[wikitext]\n{r.test.wikitext}\n[expected]\n{r.test.legacy_html}")
+        print(f"\n--- {r.test.name} ({_file_label(r.file)} line {r.test.line})\n[wikitext]\n{r.test.wikitext}\n[expected]\n{r.test.legacy_html}")
         print(f"[actual]\n{r.actual}" if not r.error else f"[error] {r.error}")
     if a.accept:
-        if a.filter:
-            print("--accept needs the full run (no --filter)")
+        if a.filter or a.file:
+            print("--accept needs the full run (no --filter or --file)")
             return 1
         PASSING_FILE.write_text("".join(n + "\n" for n in sorted(r.test.name for r in passed)), encoding="utf-8",
                                 newline="\n")

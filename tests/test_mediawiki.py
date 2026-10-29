@@ -20,7 +20,7 @@ class MediaWikiParserTests(unittest.TestCase):
         for data in parsertests.read_all():
             for test in data.tests:
                 if test.name in known:
-                    result = parsertests.run_test(test, data.articles)
+                    result = parsertests.run_test(test, data.articles, data.extensions)
                     if not result.passed:
                         failed.append(test.name)
         self.assertEqual(failed, [], f"{len(failed)} MediaWiki parser tests regressed")

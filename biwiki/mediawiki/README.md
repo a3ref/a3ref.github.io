@@ -63,6 +63,7 @@ the HTML the wiki produces (`action=parse`): SQF Highlighter (`<sqf>`, `<sqs>`),
 
 ## Tests
 
-`python -m biwiki.mediawiki.parsertests` runs MediaWiki's own parser tests (`tests/mediawiki/parserTests.txt`) and
-reports how many pass; `--accept` stores the passing ones in `tests/mediawiki/passing.txt`, which
+`python -m biwiki.mediawiki.parsertests` runs MediaWiki's own parser tests (`tests/mediawiki/parserTests.txt` and the
+other core files) and those of the ported extensions (`tests/mediawiki/ext/`, with the extension registered through
+`ext.register_all`) and reports how many pass, per extension file; `--accept` stores the passing ones in `tests/mediawiki/passing.txt`, which
 `python -m unittest` keeps from regressing.
