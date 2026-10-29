@@ -6,7 +6,9 @@
 # contributors, GPL-2.0-or-later.
 # Changed by a3ref contributors on 2026-10-30: translated to Python; one module; English content and interface
 # language; no ResourceLoader modules, section previews or VisualEditor configuration; $wgCiteBookReferencing and
-# $wgCiteResponsiveReferences are read from the parser's Config (cite_book_referencing, cite_responsive_references).
+# $wgCiteResponsiveReferences are read from the parser's Config (cite_book_referencing, cite_responsive_references);
+# MessageCache::get()'s whitespace fix of message texts is done in ReferenceMessageLocalizer; ParserClearState is
+# emulated by keeping the state per ParserOutput.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -24,8 +26,8 @@ from __future__ import annotations
 import re
 from typing import Any, Callable, Optional, Union
 
-from ..coreparserfunctions import ENGLISH, fetch_message, message_plain
-from ..html import close_element, expand_attributes, htmlspecialchars, open_element, raw_element
+from ..coreparserfunctions import ENGLISH, _replace_message_params, fetch_message
+from ..html import close_element, element, expand_attributes, htmlspecialchars, open_element, raw_element
 from ..sanitizer import escape_class, escape_id_for_link, safe_encode_attribute
 from ..stripstate import MARKER_PREFIX
 
@@ -72,16 +74,31 @@ class ReferenceMessageLocalizer:
         """Transliterate numerals, without adding or changing separators."""
         return ENGLISH.format_num_no_separators(number)
 
+    def _fetch(self, key: str) -> Optional[str]:
+        """MessageCache::get(), including its whitespace fix (``&#32;`` and the ``&nbsp;`` forms in message texts
+        become the characters), which ``fetch_message`` does not do yet."""
+        text = fetch_message(self.parser, key)
+        if text is not None:
+            # Fix whitespace
+            for search, replace in (("&#32;", " "), ("&nbsp;", " "), ("&#160;", " "),
+                                    ("&#xA0;", " ")):
+                text = text.replace(search, replace)
+        return text
+
     def plain(self, key: str, *params) -> str:
         """wfMessage( $key, ...$params )->plain()"""
-        return message_plain(self.parser, key, tuple(str(p) for p in params))
+        text = self._fetch(key)
+        if text is None:
+            # (Message::toString() for a missing message)
+            return "⧼" + htmlspecialchars(key) + "⧽"
+        return _replace_message_params(text, tuple(str(p) for p in params))
 
     text = plain  # Message::text() equals plain() for messages without {{...}}
 
     def is_disabled(self, key: str) -> bool:
         """Message::isDisabled(): the message does not exist, is empty or is '-'."""
-        text = fetch_message(self.parser, key)
-        return text is None or text.strip() == "" or text == "-"
+        text = self._fetch(key)
+        return text is None or text == "" or text == "-"
 
 
 class ErrorReporter:
@@ -378,7 +395,8 @@ class ReferenceStack:
 
         if _truthy(extends):
             counts = self.extends_count.setdefault(group, {})
-            counts[extends] = counts.get(extends, 0) - 1
+            if counts.get(extends) is not None:  # (PHP's null-- stays null)
+                counts[extends] -= 1
 
         if action == "new":
             # Rollback the addition of new elements to the stack
@@ -597,6 +615,8 @@ class Cite:
     def __init__(self, parser):
         self.is_section_preview = False
         message_localizer = ReferenceMessageLocalizer(parser)
+        # (wfMessage() of checkRefsNoReferences(); English is both the content and the interface language here)
+        self.message_localizer = message_localizer
         self.error_reporter = ErrorReporter(message_localizer)
         self.reference_stack = ReferenceStack(self.error_reporter)
         anchor_formatter = AnchorFormatter(message_localizer, parser.config)
@@ -834,6 +854,13 @@ class Cite:
                 s += "<br />" + self.error_reporter.half_parsed(
                     parser, "cite_error_group_refs_without_references",
                     safe_encode_attribute(group, config=parser.config))
+        if is_section_preview and s != "":
+            header_msg = "cite_section_preview_references"
+            if not self.message_localizer.is_disabled(header_msg):
+                s = element("h2", {"id": "mw-ext-cite-cite_section_preview_references_header"},
+                            self.message_localizer.text(header_msg)) + s
+            # provide a preview of references in its own section
+            s = raw_element("div", {"class": "mw-ext-cite-cite_section_preview_references"}, s)
         return "\n" + s if s != "" else ""
 
 
