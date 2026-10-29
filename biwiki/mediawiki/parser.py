@@ -90,9 +90,16 @@ class ParserOutput:
 
 class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
     def __init__(self, pages: Optional[Mapping[str, str]] = None, config: Config = DEFAULT, site=None,
-                 magic_words: MagicWordFactory = FACTORY):
+                 magic_words: MagicWordFactory = FACTORY, *, timestamp=None, revision_id: Optional[int] = None,
+                 site_stats=None):
         from .site import Site
 
+        # the time of the parse (a datetime, a Unix timestamp or a TS_MW string; None: now), the revision being
+        # parsed, and the wiki's statistics ({{NUMBEROFPAGES}} ...), as ParserOptions/the database give them
+        self.timestamp = timestamp
+        self.revision_id = revision_id
+        if site_stats is not None:
+            self.site_stats = site_stats
         self.pages = pages or {}
         self.config = config
         self.site = site if site is not None else Site(config)
@@ -168,6 +175,12 @@ class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
         text = self.strip_state.unstrip_general(text)
         # TODO: tidy (RemexHtml) with Sanitizer::armorFrenchSpaces
         return text
+
+    def get_variable_value(self, index: str, frame=None):
+        """Parser::getVariableValue(): the value of a magic variable ({{PAGENAME}} ...), None if it is none."""
+        from . import core_magic_variables
+
+        return core_magic_variables.get_variable_value(self, index, frame)
 
     # ---- stages -----------------------------------------------------------------------------------------------
 
@@ -451,14 +464,14 @@ class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
 
 
 def parse(text: str, title: str = "Main Page", pages: Optional[Mapping[str, str]] = None,
-          config: Config = DEFAULT, site=None, **get_text_options) -> str:
+          config: Config = DEFAULT, site=None, parser_options: Optional[dict] = None, **get_text_options) -> str:
     """The HTML MediaWiki renders for ``text`` on the page ``title``; ``pages`` holds the wikitext of the other
     pages (templates, pages that links may point to), by title; ``config`` the wiki's settings and ``site`` its
     namespaces and interwikis (biwiki.mediawiki.site). The result is ParserOutput::getText()'s, with
     ``get_text_options`` (allow_toc, unwrap, enable_section_edit_links, ...)."""
     from .parseroutput import get_text
 
-    parser = Parser(pages, config, site)
+    parser = Parser(pages, config, site, **(parser_options or {}))
     html = parser.parse(text, title)
     return get_text(html, parser.output, parser.site, **get_text_options)
 

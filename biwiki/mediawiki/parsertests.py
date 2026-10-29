@@ -224,6 +224,7 @@ def test_config(test: ParserTest):
 
 
 def run_test(test: ParserTest, articles: dict[str, str]) -> Result:
+    from .coreparserfunctions import TEST_SITE_STATS
     from .parser import parse
     from .site import test_site
 
@@ -233,7 +234,9 @@ def run_test(test: ParserTest, articles: dict[str, str]) -> Result:
         # getText( [ 'allowTOC' => !isset( $opts['notoc'] ), 'unwrap' => !isset( $opts['wrap'] ) ] )
         actual = parse(test.wikitext or "", title=title if isinstance(title, str) else DEFAULT_TITLE, pages=articles,
                        config=config, site=test_site(subpages="subpage" in test.options, config=config),
-                       allow_toc="notoc" not in test.options, unwrap="wrap" not in test.options)
+                       allow_toc="notoc" not in test.options, unwrap="wrap" not in test.options,
+                       # ParserTestRunner: the fake time 123 (Unix), revision 1337, 7 uploaded files
+                       parser_options={"timestamp": 123, "revision_id": 1337, "site_stats": TEST_SITE_STATS})
     except Exception as e:  # noqa: BLE001 - a crash is a failed test, reported with the rest
         return Result(test, False, error=f"{type(e).__name__}: {e}")
     actual = re.sub(r"\s+$", "", actual)  # as ParserTestRunner does

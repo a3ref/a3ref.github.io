@@ -59,6 +59,12 @@ class Config:
     remove_comments: bool = True  # ParserOptions removeComments
     interwiki_magic: bool = True  # ParserOptions interwikiMagic: interlanguage links go to the language links
     extra_interlanguage_link_prefixes: tuple[str, ...] = ()  # $wgExtraInterlanguageLinkPrefixes
+    allow_display_title: bool = True  # $wgAllowDisplayTitle
+    restrict_display_title: bool = True  # $wgRestrictDisplayTitle
+    allow_slow_parser_functions: bool = False  # $wgAllowSlowParserFunctions
+    miser_mode: bool = False  # $wgMiserMode
+    style_path: Optional[str] = None  # $wgStylePath; None: script_path + "/skins"
+    local_tz_offset: Optional[int] = None  # $wgLocalTZoffset in minutes; None: from localtimezone
     link_holder_batch_size: int = 1000
     localtimezone: str = "UTC"
 
@@ -92,6 +98,7 @@ TEST = Config(
     thumb_limits=(0, 0, 0, 0, 0, 180),
     max_toc_level=999,
     extra_interlanguage_link_prefixes=("mul",),
+    style_path="/skins",
 )
 
 # The Bohemia Interactive Community wiki (meta=siteinfo, 2026-10-29/30, saved in biki_siteinfo.json): titles are case

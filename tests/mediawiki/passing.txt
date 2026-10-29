@@ -67,6 +67,7 @@ Broken wikilinks (but not external links) prevent templates from closing
 CSS line continuation 1
 CSS line continuation 2
 CSS safety test (all browsers): vertical tab (T57332 / CVE-2013-4567)
+Case-insensitive magic words should still work with weird casing.
 Case-sensitive magic words, when cased differently, should just be template transclusions
 Category / paragraph interactions
 Comment in template title
@@ -351,6 +352,24 @@ MSIE CSS safety test: hex code
 MSIE CSS safety test: spurious slash
 Magic Word: case-insensitive (all-lowercase)
 Magic Word: case-insensitive (mixed case)
+Magic Word: {{CURRENTDAY2}}
+Magic Word: {{CURRENTDAYNAME}}
+Magic Word: {{CURRENTDAY}}
+Magic Word: {{CURRENTDOW}}
+Magic Word: {{CURRENTHOUR}}
+Magic Word: {{CURRENTMONTH1}}
+Magic Word: {{CURRENTMONTHABBREV}}
+Magic Word: {{CURRENTMONTHNAMEGEN}}
+Magic Word: {{CURRENTMONTHNAME}}
+Magic Word: {{CURRENTMONTH}}
+Magic Word: {{CURRENTTIMESTAMP}}
+Magic Word: {{CURRENTTIME}}
+Magic Word: {{CURRENTWEEK}} (T6594)
+Magic Word: {{CURRENTYEAR}}
+Magic Word: {{PAGENAMEE}} with metacharacters (T28781)
+Magic Word: {{PAGENAME}} with metacharacters
+Magic Word: {{PAGENAME}} with metacharacters (T28781)
+Magic Words LOCAL (UTC)
 Magic links inside links (not autolinked)
 Magic links: All disabled (T47942)
 Magic links: ISBN (T3937)
@@ -364,6 +383,7 @@ Magic links: RFC (T67278)
 Magic links: RFC (w/ non-newline whitespace, T30950/T31025)
 Magic links: internal link to RFC (T2479)
 Magic links: use appropriate serialization for "almost" magic links.
+Magic variable as template parameter
 Malformed definition list with colon
 Media link to nonexistent file (T3702)
 Mixed list
@@ -453,6 +473,7 @@ Parsoid-centric test: Whitespace in ext- and wiki-links should be preserved
 Parsoid: Defaultsort variations (T236846)
 Parsoid: Make sure nested lists are serialized on their own line even if HTML contains no newlines
 Parsoid: Pipe in external link target and content in template parameter
+Parsoid: Pipe in template with nested template in external link target in template parameter (seriously)
 Parsoid: Pipes in external links in template parameter
 Parsoid: Recognize nowiki with odd capitalization
 Parsoid: Recognize nowiki with trailing space in tags
@@ -622,6 +643,8 @@ T6781: %26 in autonumber URL
 T6781: %26 in bracketed URL
 T72867: Don't block XML namespace declaration
 T72875: Test for brackets in attributes of elements in internal link texts
+T7678: Double-parsed template argument
+T7678: Double-parsed template invocation
 T7918: autonumbering
 T8200: blockquotes and paragraph formatting
 T8200: paragraphs inside blockquotes (extra line break on open and close)
@@ -714,6 +737,7 @@ Templates: Ugly templates: 3. newline-only template parameter
 Templates: Ugly templates: 4. newline-only template parameter inconsistency
 Templates: With colons
 Things that look like <pre> tags aren't treated as such
+Title needed when expanding templates.
 Transclusion of a child page
 Transclusion of a sibling page (one level up)
 Transclusion of nonexistent MediaWiki message
@@ -724,6 +748,9 @@ Unclosed and unmatched quotes
 Unclosed language converter markup "-{"
 Urlencode
 Use url link syntax for links where the content is equal the link target
+Using {{!}} in template arguments (T290526)
+Using {{!}} in template arguments, part 2 (T290526)
+Using {{!}} in wikilinks (T290526)
 Using {{=}} when it expands to "=" should not create a tracking category
 Wikilink in wikilink
 Wikilinks with embedded newlines are not broken
@@ -765,3 +792,4 @@ post-expand include size being exceeded
 subst: does not work during normal parse
 text with entity-escaped character entity-like string: eacute
 unclosed internal link XSS (T137264)
+{{!}} is a magic word
