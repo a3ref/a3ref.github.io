@@ -303,11 +303,12 @@ class LinkCache:
     answer in MediaWiki. Keys are page titles with spaces; they are normalised like titles when first needed."""
 
     def __init__(self, pages: Optional[Mapping[str, str]], site: Site, magic_words: MagicWordFactory = FACTORY,
-                 special_pages: Optional[SpecialPageFactory] = None):
+                 special_pages: Optional[SpecialPageFactory] = None, files=None):
         self.pages = pages or {}
         self.site = site
         self.magic_words = magic_words
         self.special_pages = special_pages or SpecialPageFactory()
+        self.files = files  # a files.FileRepo, or None for no files
         self._index: Optional[dict[str, str]] = None
         self._redirects: dict[str, Optional[Title]] = {}
 
@@ -363,9 +364,36 @@ class LinkCache:
         """The 'redirect' field of the page row."""
         return self.get_redirect_target(title) is not None
 
+    def find_file(self, title: Title):
+        """RepoGroup::findFile(): the file a File: or Media: title names, following a redirect of its file page
+        (FileRepo::checkRedirect()); None if there is none."""
+        if self.files is None or title is None:
+            return None
+        file = self.files.get(title)
+        if file is not None:
+            return file
+        # Now try redirects
+        redirect = self.check_redirect(title)
+        if redirect is not None:
+            file = self.files.get(redirect)
+            if file is not None:
+                file.redirected_from = title.db_key
+            return file
+        return None
+
+    def check_redirect(self, title: Title) -> Optional[Title]:
+        """LocalRepo::checkRedirect(): the target of the file page if it is a redirect to a File: page."""
+        if title.namespace not in (NS_FILE, NS_MEDIA):
+            return None
+        file_title = Title.make_title(NS_FILE, title.db_key, site=title.site)
+        target = self.get_redirect_target(file_title)
+        if target is not None and target.namespace == NS_FILE:
+            return target
+        return None
+
     def file_exists(self, title: Title) -> bool:
-        """RepoGroup::findFile() (TODO: files, with the image port; every file is missing for now)."""
-        return False
+        """Does RepoGroup::findFile() find the file?"""
+        return self.find_file(title) is not None
 
     def message_exists(self, title: Title) -> bool:
         """Is the text of a MediaWiki: title a known system message? (MessageCache::figureMessage() strips a

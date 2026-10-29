@@ -31,6 +31,9 @@ class LinkParser(LinksMixin):
         self.output = SimpleNamespace(categories={}, page_properties={})
         self.strip_state = StripState(self)
 
+    def add_tracking_category(self, msg: str) -> bool:
+        return True
+
     def handle_external_links(self, text: str) -> str:
         return text
 
@@ -141,8 +144,12 @@ class InternalLinksTest(unittest.TestCase):
                          '<a href="/index.php?title=Special:Upload&amp;wpDestFile=Foobar.jpg" class="new" '
                          'title="Foobar.jpg">A file</a>')
         self.assertEqual(self.p.output.images, {"Foobar.jpg": 1})
-        # images: make_image() is a stub until the image code is ported; captions with links are consumed
-        self.assertEqual(self.p.render("[[File:X.jpg|thumb|a [[Foo]] caption]] after"), "File:X.jpg after")
+        # a missing file: a frame with a link to the upload form, the caption's links resolved
+        self.assertEqual(self.p.render("[[File:X.jpg|thumb|a [[Foo]] caption]] after"),
+                         '<div class="thumb tright"><div class="thumbinner" style="width:182px;">'
+                         '<a href="/index.php?title=Special:Upload&amp;wpDestFile=X.jpg" class="new" '
+                         'title="File:X.jpg">File:X.jpg</a>  <div class="thumbcaption">a ' + red("Foo")
+                         + " caption</div></div></div> after")
         self.assertEqual(self.p.render("[[:File:X.jpg]]"), red("File:X.jpg"))
 
     def test_subpages(self):

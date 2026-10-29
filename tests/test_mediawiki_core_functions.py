@@ -233,7 +233,8 @@ class ParserFunctionsTest(unittest.TestCase):
     def test_url_functions(self):
         self.assertEqual("a+b%26c a%20b a_b", _render("{{urlencode:a b&c}} {{urlencode:a b|PATH}} "
                                                       "{{urlencode:a b|WIKI}}"))
-        self.assertEqual("/index.php?title=Some_page&amp=&", _render("{{localurl:Some page|amp=&}}"))
+        # tidy (Remex) serialises the text: "&amp" is a legacy character reference, "&" is escaped
+        self.assertEqual("/index.php?title=Some_page&amp;amp=&amp;", _render("{{localurl:Some page|amp=&}}"))
         self.assertEqual("/wiki/File:Foo.png", _render("{{localurl:Media:Foo.png}}"))
         self.assertEqual("/wiki/Foo_bar", _render("{{localurl:Foo%20bar}}"))
         self.assertEqual("http://example.org/wiki/Foo", cpf.canonicalurl(_Parser(), "Foo"))

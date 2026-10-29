@@ -554,7 +554,11 @@ Magic links: internal link to RFC (T2479)
 Magic links: use appropriate serialization for "almost" magic links.
 Magic variable as template parameter
 Malformed definition list with colon
+Media link
 Media link to nonexistent file (T3702)
+Media link with multiple options
+Media link with nasty text
+Media link with text
 Mixed list
 Mixing markup for italics and bold
 Morwen/13: Unclosed link followed by heading

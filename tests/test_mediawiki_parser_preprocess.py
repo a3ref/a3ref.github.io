@@ -17,7 +17,7 @@ import unittest
 
 from biwiki.mediawiki.config import TEST
 from biwiki.mediawiki.magicword import MagicWordFactory
-from biwiki.mediawiki.parser import ParserOutput
+from biwiki.mediawiki.parser import Parser, ParserOutput
 from biwiki.mediawiki.parser_preprocess import (OT_HTML, OT_PREPROCESS, OT_WIKI, SFH_NO_HASH, SFH_OBJECT_ARGS,
                                                 PreprocessingMixin, extract_tags_and_params, normalize_subpage_link,
                                                 strip_outer_paragraph, wf_escape_wiki_text)
@@ -243,7 +243,12 @@ class TagHookTest(unittest.TestCase):
         p = StandIn()
         self.assertTrue(p.expand('<langconvert from="zh" to="zh-tw">x</langconvert>').startswith(
             '<span class="error"><strong>Error:</strong> Langconvert tag'))
-        self.assertEqual("a &lt;b&gt;", p.expand("<gallery>a <b></gallery>"))
+        # the gallery needs the whole Parser (links, images): a bogus title is skipped, a missing file shows its name
+        parser = Parser(config=TEST, site=test_site(False, TEST))
+        self.assertEqual('<ul class="gallery mw-gallery-traditional">\n</ul>',
+                         parser.parse("<gallery>a <b></gallery>", "Parser test"))
+        self.assertIn('<div class="thumb" style="height: 150px;">Foo.jpg</div>',
+                      parser.parse("<gallery>\nFile:Foo.jpg|x\n</gallery>", "Parser test"))
         self.assertEqual("<html>x</html>", p.expand("<html>x</html>"))  # $wgRawHtml is off: not a tag
         raw = StandIn(config=TEST.with_(raw_html=True))
         self.assertEqual("<b>x</b>", raw.expand("<html><b>x</b></html>"))

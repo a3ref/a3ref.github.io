@@ -590,8 +590,11 @@ class PreprocessingMixin:
         return None
 
     def render_image_gallery(self, text: str, params: dict) -> str:
-        """Parser::renderImageGallery() (TODO: not ported, needs images): the content, escaped."""
-        return htmlspecialchars(text)
+        """Parser::renderImageGallery(): render an image gallery from a text with one line per image (ported in
+        gallery.py)."""
+        from .gallery import render_image_gallery
+
+        return render_image_gallery(self, text, params)
 
     # ---- entry points -----------------------------------------------------------------------------------------
 

@@ -1,12 +1,13 @@
 # Ported from MediaWiki 1.39 includes/parser/Parser.php (https://www.mediawiki.org/), (C) MediaWiki contributors:
 # Parser::handleInternalLinks(), handleInternalLinks2(), makeKnownLinkHolder(), armorLinks(), replaceLinkHolders(),
 # replaceLinkHoldersPrivate(), replaceLinkHoldersText(), getLinkRenderer(), nextLinkID(), fetchFileAndTitle(),
-# normalizeLinkUrl(), normalizeUrlComponent(); the ParserOutput methods they call (addLink(), addInterwikiLink(),
-# addLanguageLink(), addImage()); the language codes of includes/languages/data/Names.php (for
+# normalizeLinkUrl(), normalizeUrlComponent(), fetchFileNoRegister(), makeImage(), getImageParams(),
+# parseLinkParameter(), stripAltText(), parseWidthParam(); the ParserOutput methods they call (addLink(),
+# addInterwikiLink(), addLanguageLink(), addImage()); the language codes of includes/languages/data/Names.php (for
 # LanguageNameUtils::getLanguageName()).
 # Changed by a3ref contributors on 2026-10-30: translated to Python as a mixin of Parser; the content language is
-# English (no link prefixes, no variants); page existence comes from the parser's pages (linkrenderer.LinkCache);
-# images are a stub (make_image) until the image code is ported; no hooks.
+# English (no link prefixes, no variants); page existence comes from the parser's pages (linkrenderer.LinkCache),
+# files from the parser's files (files.FileRepo); no hooks.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -179,11 +180,21 @@ class LinksMixin:
         """Which pages exist: the parser's pages, for its site."""
         cache = self.__dict__.get("_link_cache")
         key = self.__dict__.get("_link_cache_key")
-        if cache is None or key is None or key[0] is not self.pages or key[1] is not self.site:
-            cache = self._link_cache = LinkCache(self.pages, self.site, self.magic_words)
-            self._link_cache_key = (self.pages, self.site)
+        files = self.get_files()
+        if (cache is None or key is None or key[0] is not self.pages or key[1] is not self.site
+                or key[2] is not files):
+            cache = self._link_cache = LinkCache(self.pages, self.site, self.magic_words, files=files)
+            self._link_cache_key = (self.pages, self.site, files)
             self._link_renderer = None
+            self._bad_file_lookup = None
         return cache
+
+    def get_files(self):
+        """The wiki's files (``self.files``, a files.FileRepo; an empty one if it is None)."""
+        from .files import EMPTY_FILES
+
+        files = getattr(self, "files", None)
+        return files if files is not None else EMPTY_FILES
 
     def get_link_renderer(self) -> LinkRenderer:
         """A LinkRenderer instance to make links with"""
@@ -528,18 +539,301 @@ class LinksMixin:
 
     # ---- files ------------------------------------------------------------------------------------------------
 
-    def fetch_file_and_title(self, link: Title, options: Optional[dict] = None) -> tuple[None, Title]:
-        """Fetch a file and its title and register a reference to it. (TODO: files, with the image port; every file
-        is missing for now, so the file is None.)"""
-        file = None
+    def fetch_file_and_title(self, link: Title, options: Optional[dict] = None) -> tuple:
+        """Fetch a file and its title and register a reference to it: (File or None, Title)."""
+        file = self.fetch_file_no_register(link, options)
         # Register the file as a dependency...
         self.output_add_image(link.db_key)
+        if file and not link.is_same_link_as(file.get_title()):
+            # Update fetched file title
+            self.output_add_image(file.get_title().db_key)
         return file, link
 
-    def make_image(self, title: Title, options: str, holders: Optional[LinkHolderArray] = None) -> str:
-        """Parse image options text and use it to make an image. (TODO: a later step ports Parser::makeImage() and
-        Linker::makeImageLink(); until then the link text, escaped.)"""
-        return htmlspecialchars(title.prefixed_text)
+    def fetch_file_no_register(self, link: Title, options: Optional[dict] = None):
+        """Helper function for fetch_file_and_title(): the file (RepoGroup::findFile()), or None."""
+        if options and "broken" in options:
+            return None  # broken thumbnail forced by hook
+        return self.get_link_cache().find_file(link)
+
+    def get_bad_file_lookup(self):
+        """The bad image list: [[MediaWiki:Bad image list]] in the parser's pages."""
+        from .files import BadFileLookup
+
+        cache = self.get_link_cache()
+        lookup = self.__dict__.get("_bad_file_lookup")
+        if lookup is None:
+            def list_callback() -> str:
+                title = Title.new_from_text("MediaWiki:Bad image list", site=self.site)
+                return cache.get_page_text(title) or ""
+
+            def find_file(name: str):
+                return cache.find_file(Title.make_title_safe(NS_FILE, name, site=self.site))
+
+            lookup = self._bad_file_lookup = BadFileLookup(list_callback, find_file, self.site)
+        return lookup
+
+    # ---- images: Parser::makeImage() and its helpers ----------------------------------------------------------
+
+    def get_thumb_size(self) -> int:
+        """ParserOptions::getThumbSize(): the 'thumbsize' user option, an index into $wgThumbLimits."""
+        return getattr(self.config, "thumbsize", 5)
+
+    def get_image_params(self, handler) -> tuple[dict, object]:
+        """(parameter map, MagicWordArray of the image options) for a media handler (None: a missing file)"""
+        handler_class = type(handler).__name__ if handler else ""
+        image_params = self.__dict__.setdefault("_image_params", {})
+        if handler_class not in image_params:
+            # Initialise static lists
+            internal_param_names = {
+                "horizAlign": ["left", "right", "center", "none"],
+                "vertAlign": ["baseline", "sub", "super", "top", "text-top", "middle", "bottom", "text-bottom"],
+                "frame": ["thumbnail", "manualthumb", "framed", "frameless", "upright", "border", "link", "alt",
+                          "class"],
+            }
+            param_map: dict[str, tuple[str, str]] = {}
+            for type_, names in internal_param_names.items():
+                for name in names:
+                    # For grep: img_left, img_right, img_center, img_none, img_baseline, img_sub, img_super,
+                    # img_top, img_text_top, img_middle, img_bottom, img_text_bottom, img_thumbnail,
+                    # img_manualthumb, img_framed, img_frameless, img_upright, img_border, img_link, img_alt,
+                    # img_class
+                    magic_name = f"img_{name}".replace("-", "_")
+                    param_map[magic_name] = (type_, name)
+            # Add handler params
+            if handler:
+                for magic, param_name in handler.get_param_map().items():
+                    param_map[magic] = ("handler", param_name)
+            else:
+                # Parse the size for non-existent files. See T273013
+                param_map["img_width"] = ("handler", "width")
+            image_params[handler_class] = (param_map, self.magic_words.new_array(list(param_map)))
+        return image_params[handler_class]
+
+    @staticmethod
+    def parse_width_param(value: str, parse_height: bool = True) -> dict:
+        """Parsed a width param of imagelink like 300px or 200x300px"""
+        parsed_width_param: dict = {}
+        if value == "":
+            return parsed_width_param
+        # (T15500) In both cases (width/height and width only), permit trailing "px" for backward compatibility.
+        m = re.match(r"^([0-9]*)x([0-9]*)\s*(?:px)?\s*$", value) if parse_height else None
+        if m:
+            parsed_width_param["width"] = int(m.group(1) or 0)
+            parsed_width_param["height"] = int(m.group(2) or 0)
+        elif re.match(r"^[0-9]*\s*(?:px)?\s*$", value):
+            from .files import php_intval
+
+            parsed_width_param["width"] = php_intval(value)
+        return parsed_width_param
+
+    def make_image(self, link: Title, options: str, holders=False) -> str:
+        """Parse image options text and use it to make an image.
+
+        Options (the parts of "options|alt text"): thumbnail, left, right, none, ___px, center, framed, frameless,
+        upright, border, alt=, class=, link=, and the vertical alignments baseline, sub, super, top, text-top,
+        middle, bottom, text-bottom."""
+        from .linker import make_image_link
+        from .stringutils import delimiter_explode
+
+        # Protect LanguageConverter markup when splitting into parts
+        parts = list(delimiter_explode("-{", "}-", "|", options, True))
+
+        # Fetch and register the file (file title may be different via hooks)
+        file, link = self.fetch_file_and_title(link, {})
+
+        # Get parameter map
+        handler = file.get_handler() if file else None
+        param_map, mw_array = self.get_image_params(handler)
+
+        if not file:
+            self.add_tracking_category("broken-file-category")
+
+        # Process the input parameters
+        caption = ""
+        params: dict[str, dict] = {"frame": {}, "handler": {}, "horizAlign": {}, "vertAlign": {}}
+        seenformat = False
+        for part in parts:
+            part = part.strip(" \t\n\r\0\x0b")
+            magic_name, value = mw_array.match_variable_start_to_end(part)
+            validated = False
+            if magic_name in param_map:
+                type_, param_name = param_map[magic_name]
+                # Special case; width and height come in one variable together
+                if type_ == "handler" and param_name == "width":
+                    parsed_width_param = self.parse_width_param(value)
+
+                    # Parsoid applies data-(width|height) attributes to broken media spans, for client use. See
+                    # T273013
+                    def validate_func(name, val):
+                        return handler.validate_param(name, val) if handler else val > 0
+
+                    if "width" in parsed_width_param:
+                        width = parsed_width_param["width"]
+                        if validate_func("width", width):
+                            params[type_]["width"] = width
+                            validated = True
+                    if "height" in parsed_width_param:
+                        height = parsed_width_param["height"]
+                        if validate_func("height", height):
+                            params[type_]["height"] = height
+                            validated = True
+                    # else no validation -- T15436
+                else:
+                    if type_ == "handler":
+                        # Validate handler parameter
+                        validated = handler.validate_param(param_name, value)
+                    else:
+                        # Validate internal parameters
+                        if param_name in ("alt", "class"):
+                            validated = True
+                            value = self.strip_alt_text(value, holders)
+                        elif param_name == "link":
+                            param_name, value = self.parse_link_parameter(self.strip_alt_text(value, holders))
+                            if param_name:
+                                validated = True
+                                if param_name == "no-link":
+                                    value = True
+                        elif param_name in ("manualthumb", "frameless", "framed", "thumbnail"):
+                            if param_name == "manualthumb":
+                                # @todo FIXME: Possibly check validity here for manualthumb? downstream behavior
+                                # seems odd with missing manual thumbs.
+                                value = self.strip_alt_text(value, holders)
+                            # use first appearing option, discard others.
+                            validated = not seenformat
+                            seenformat = True
+                        else:
+                            # Most other things appear to be empty or numeric...
+                            from .files import php_is_numeric
+
+                            validated = value is False or php_is_numeric(str(value).strip(" \t\n\r\0\x0b"))
+                    if validated:
+                        params[type_][param_name] = value
+            if not validated:
+                caption = part
+
+        # Process alignment parameters
+        if params["horizAlign"]:
+            params["frame"]["align"] = next(iter(params["horizAlign"]))
+        if params["vertAlign"]:
+            params["frame"]["valign"] = next(iter(params["vertAlign"]))
+
+        params["frame"]["caption"] = caption
+
+        # Will the image be presented in a frame, with the caption below?
+        has_visible_caption = ("framed" in params["frame"] or "thumbnail" in params["frame"]
+                               or "manualthumb" in params["frame"])
+
+        # In the old days, [[Image:Foo|text...]] would set alt text. Later it came to also set the caption, ordinary
+        # text after the image -- which makes no sense, because that just repeats the text multiple times in screen
+        # readers. It *also* came to set the title attribute.
+        # Now that we have an alt attribute, we should not set the alt text to equal the caption: that's worse than
+        # useless, it just repeats the text. This is the framed/thumbnail case. If there's no caption, we use the
+        # unnamed parameter for alt text as well, just for the time being, if the unnamed param is set and the alt
+        # param is not.
+        if has_visible_caption:
+            if caption == "" and "alt" not in params["frame"]:
+                # No caption or alt text, add the filename as the alt text so that screen readers at least get some
+                # description of the image
+                params["frame"]["alt"] = link.text
+            # Do not set params['frame']['title'] because tooltips are unnecessary for framed images, the caption is
+            # visible
+        else:
+            if "alt" not in params["frame"]:
+                # No alt text, use the "caption" for the alt text
+                if caption != "":
+                    params["frame"]["alt"] = self.strip_alt_text(caption, holders)
+                else:
+                    # No caption, fall back to using the filename for the alt text
+                    params["frame"]["alt"] = link.text
+            # Use the "caption" for the tooltip text
+            params["frame"]["title"] = self.strip_alt_text(caption, holders)
+        params["handler"]["targetlang"] = self.get_target_language().code
+
+        # Linker does the rest
+        ret = make_image_link(self, link, file, params["frame"], params["handler"], False, "",
+                              self.get_thumb_size())
+
+        # Give the handler a chance to modify the parser object
+        if handler:
+            handler.parser_transform_hook(self, file)
+        return ret
+
+    def parse_link_parameter(self, value: str) -> tuple:
+        """Parse the value of 'link' parameter in image syntax ([[File:Foo.jpg|link=<value>]]). Adds an entry to
+        appropriate link tables. Returns (type, target): (None, False) for an invalid target (use default),
+        ('no-link', False) for an empty value, ('link-url', URL) for an external link, ('link-title', Title) for an
+        internal link."""
+        from .parser import EXT_LINK_ADDR, EXT_LINK_URL_CLASS
+
+        chars = EXT_LINK_URL_CLASS
+        addr = EXT_LINK_ADDR
+        prots = valid_protocols(self.config)
+        type_ = None
+        target = False
+        if value == "":
+            type_ = "no-link"
+        elif re.match(rf"^(?:(?i:{prots}))", value):
+            if re.match(rf"^(?:(?i:{prots})){addr}{chars}*$", value):
+                add_external_link = getattr(self.output, "add_external_link", None)
+                if add_external_link is not None:
+                    add_external_link(value)
+                type_ = "link-url"
+                target = value
+        else:
+            # Percent-decode link arguments for consistency with wikilink handling (T216003#7836261).
+            if "%" in value:
+                value = unquote(value, errors="surrogateescape")
+            link_title = Title.new_from_text(value, site=self.site)
+            if link_title:
+                self.output_add_link(link_title)
+                type_ = "link-title"
+                target = link_title
+        return type_, target
+
+    # Compatibility hack! In HTML certain entity references not terminated by a semicolon are decoded (but not if
+    # we're in an attribute; that's how link URLs get away without properly escaping & in queries). But wikitext has
+    # always required semicolon-termination of entities, so encode & where needed to avoid decode of
+    # semicolon-less entities. See T209236 and https://www.w3.org/TR/html5/syntax.html#named-character-references
+    _LEGACY_ENTITY_REGEX = re.compile(r"""
+            &           # 1. entity prefix
+            (?=         # 2. followed by:
+            (?:         #  a. one of the legacy semicolon-less named entities
+                A(?:Elig|MP|acute|circ|grave|ring|tilde|uml)|
+                C(?:OPY|cedil)|E(?:TH|acute|circ|grave|uml)|
+                GT|I(?:acute|circ|grave|uml)|LT|Ntilde|
+                O(?:acute|circ|grave|slash|tilde|uml)|QUOT|REG|THORN|
+                U(?:acute|circ|grave|uml)|Yacute|
+                a(?:acute|c(?:irc|ute)|elig|grave|mp|ring|tilde|uml)|brvbar|
+                c(?:cedil|edil|urren)|cent(?!erdot;)|copy(?!sr;)|deg|
+                divide(?!ontimes;)|e(?:acute|circ|grave|th|uml)|
+                frac(?:1(?:2|4)|34)|
+                gt(?!c(?:c|ir)|dot|lPar|quest|r(?:a(?:pprox|rr)|dot|eq(?:less|qless)|less|sim);)|
+                i(?:acute|circ|excl|grave|quest|uml)|laquo|
+                lt(?!c(?:c|ir)|dot|hree|imes|larr|quest|r(?:Par|i(?:e|f|));)|
+                m(?:acr|i(?:cro|ddot))|n(?:bsp|tilde)|
+                not(?!in(?:E|dot|v(?:a|b|c)|)|ni(?:v(?:a|b|c)|);)|
+                o(?:acute|circ|grave|rd(?:f|m)|slash|tilde|uml)|
+                p(?:lusmn|ound)|para(?!llel;)|quot|r(?:aquo|eg)|
+                s(?:ect|hy|up(?:1|2|3)|zlig)|thorn|times(?!b(?:ar|)|d;)|
+                u(?:acute|circ|grave|ml|uml)|y(?:acute|en|uml)
+            )
+            (?:[^;]|$))  #  b. and not followed by a semicolon
+            """, re.X)
+
+    def strip_alt_text(self, caption: str, holders) -> str:
+        """Strip bad stuff out of the title (tooltip). We can't just use replace_link_holders_text() here, because
+        if this function is called from handle_internal_links2(), self.link_holders won't be up-to-date."""
+        from .sanitizer import strip_all_tags
+
+        if holders:
+            tooltip = holders.replace_text(caption)
+        else:
+            tooltip = self.replace_link_holders_text(caption)
+        # make sure there are no placeholders in thumbnail attributes that are later expanded to html- so expand
+        # them now and remove the tags
+        tooltip = self.strip_state.unstrip_both(tooltip)
+        tooltip = self._LEGACY_ENTITY_REGEX.sub("&amp;", tooltip)
+        return strip_all_tags(tooltip)
 
     # ---- external link URLs -----------------------------------------------------------------------------------
 

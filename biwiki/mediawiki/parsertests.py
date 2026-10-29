@@ -227,6 +227,7 @@ def run_test(test: ParserTest, articles: dict[str, str], extensions=()) -> Resul
     """``extensions``: the extensions to register (names of biwiki.mediawiki.ext.register_all), for the parser
     tests of an extension."""
     from .coreparserfunctions import TEST_SITE_STATS
+    from .files import test_files
     from .parser import parse
     from .site import test_site
 
@@ -239,7 +240,7 @@ def run_test(test: ParserTest, articles: dict[str, str], extensions=()) -> Resul
                        allow_toc="notoc" not in test.options, unwrap="wrap" not in test.options,
                        # ParserTestRunner: the fake time 123 (Unix), revision 1337, 7 uploaded files
                        parser_options={"timestamp": 123, "revision_id": 1337, "site_stats": TEST_SITE_STATS,
-                                       "extensions": extensions})
+                                       "extensions": extensions, "files": test_files()})
     except Exception as e:  # noqa: BLE001 - a crash is a failed test, reported with the rest
         return Result(test, False, error=f"{type(e).__name__}: {e}")
     actual = re.sub(r"\s+$", "", actual)  # as ParserTestRunner does

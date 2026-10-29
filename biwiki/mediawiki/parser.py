@@ -91,9 +91,11 @@ class ParserOutput:
 class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
     def __init__(self, pages: Optional[Mapping[str, str]] = None, config: Config = DEFAULT, site=None,
                  magic_words: MagicWordFactory = FACTORY, *, timestamp=None, revision_id: Optional[int] = None,
-                 site_stats=None, extensions=()):
+                 site_stats=None, extensions=(), files=None):
         from .site import Site
 
+        # the wiki's uploaded files (a files.FileRepo; None: no files, every image link is to a missing file)
+        self.files = files
         # the extensions the wiki runs (names as in biwiki.mediawiki.ext.register_all), registered on first parse
         self.extensions = set(extensions)
         self._extensions_registered = False
