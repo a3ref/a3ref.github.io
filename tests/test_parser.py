@@ -9,7 +9,7 @@ from biwiki.fetch import load_cache
 from biwiki.parse import parse_page, split_param, syntax_form
 from biwiki.render import page_slug, slug, summary, topic_group
 from biwiki.report import leftover_markup, load_known, position, save_known
-from biwiki.site import ANCHOR, Site, _place_anchors, _toc, heading_id
+from biwiki.site import ANCHOR, Site, _description, _place_anchors, _toc, heading_id
 from biwiki.wikitext import Renderer, wiki_anchor
 
 RAW = Path(__file__).parent / "fixtures" / "raw"
@@ -412,6 +412,65 @@ class SlugTest(unittest.TestCase):
         # BIS_fnc_missionHandlers: a code block with a blank line in it is not split into a prose tail
         self.assertEqual(summary("```\n#define A 1\n\n//--- Mission end type\n```"), "")
         self.assertEqual(summary("````sqf\na\n\n```\nb\n````\n\nText after."), "Text after.")
+
+    def test_summary_is_plain_text(self):
+        self.assertEqual(summary("Remainder of *a* divided by **b**, so `true` is \\*not\\* <kbd>Ctrl</kbd> &amp; _x."),
+                         "Remainder of a divided by b, so true is *not* Ctrl & _x.")
+        self.assertEqual(summary("Selected with <kbd><</kbd> and <kbd>></kbd>; a * b."), "Selected with < and >; a * b.")
+
+    def test_summary_passes_over_placeholders(self):
+        self.assertEqual(summary("*N/A*"), "")
+        self.assertEqual(summary("/*\n\nInitialize the queue."), "Initialize the queue.")
+        self.assertEqual(summary("**Author:** Bohemia Interactive\n\n**Version:** 1.3\n\n**Description:**\n\nLauncher runs the game."),
+                         "Launcher runs the game.")
+        self.assertEqual(summary("**Description:** : n/a\n\nIntroduced with Arma 2."), "Introduced with Arma 2.")
+        self.assertEqual(summary("Arma 3 v1.68\n\nJets DLC adds catapults."), "Jets DLC adds catapults.")
+        self.assertEqual(summary("Arma 3 v1.66 The class disables commands."), "The class disables commands.")
+
+
+class DescriptionTest(unittest.TestCase):
+    """The meta description of a page: its summary or, when that says nothing, a sentence from the record."""
+
+    @staticmethod
+    def rec(**kw) -> dict:
+        rec = {"name": "setPos", "type": "command", "groups": ["Positions"],
+               "syntaxes": [{"syntax": "object setPos pos", "returns": {"type": "Nothing", "type_expr": "Nothing"}}]}
+        return {**rec, **kw}
+
+    def test_composed_from_the_record(self):
+        self.assertEqual(_description("", self.rec()),
+                         "setPos (Arma 3 scripting command, Positions): object setPos pos. Returns Nothing.")
+        rec = self.rec(syntaxes=[{"syntax": "random x", "returns": {"type": None, "type_expr": "Number"}}], name="random",
+                       groups=["Math"])
+        self.assertEqual(_description("", rec), "random (Arma 3 scripting command, Math): random x. Returns Number. "
+                                                "From the Bohemia Interactive Community Wiki, as HTML, Markdown and JSON.")
+
+    def test_placeholders_rejected(self):
+        for junk in ("*N/A*", "N/A - see Teams", "/*", "Author: Bohemia Interactive", "REDIRECT Model Config",
+                     "Arma 3 v1.68", "setPos", "SetPos."):
+            self.assertTrue(_description(junk, self.rec()).startswith("setPos (Arma 3 scripting command"), junk)
+
+    def test_function_without_syntax(self):
+        rec = self.rec(name="BIN_fnc_x", type="function", groups=["Contact"], syntaxes=[{"syntax": "", "returns": None}])
+        desc = _description("", rec)
+        self.assertTrue(desc.startswith("BIN_fnc_x (Arma 3 function, Contact). From the Bohemia"), desc)
+        self.assertLessEqual(len(desc), 160)
+
+    def test_topic_lists_its_sections(self):
+        rec = {"name": "Mission.sqm", "type": "topic", "groups": ["Mission Editing"], "syntaxes": [],
+               "sections": [{"heading": None, "level": 1}, {"heading": "Header", "level": 2},
+                            {"heading": "Sub", "level": 3}, {"heading": "*Mission*", "level": 2}]}
+        self.assertEqual(_description("", rec),
+                         "Mission.sqm (Arma 3 scripting topic, Mission Editing): Covers Header and Mission.")
+
+    def test_summary_kept_plain_and_bounded(self):
+        long = "Sets the `object` position over *surface*. " * 6
+        desc = _description(long, self.rec())
+        self.assertLessEqual(len(desc), 160)
+        self.assertTrue(desc.startswith("Sets the object position over surface.") and desc.endswith("…"), desc)
+        # a short summary gets the context and the syntax
+        self.assertEqual(_description("Sets a position.", self.rec()),
+                         "setPos (Arma 3 scripting command, Positions): Sets a position. Syntax: object setPos pos.")
 
 
 if __name__ == "__main__":

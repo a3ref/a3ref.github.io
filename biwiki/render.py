@@ -13,7 +13,7 @@ from pathlib import Path
 from .fetch import CATEGORIES, TEMPLATES, TOPIC_TITLES, load_cache
 from .parse import parse_page, parse_topic, script_name, wiki_url
 from .report import Report
-from .site import Site, _anchor, heading_id
+from .site import PLACEHOLDER, Site, _anchor, heading_id, plain_text
 from .wikitext import Renderer
 
 SITE_URL = "https://a3ref.github.io/"
@@ -65,20 +65,31 @@ def page_slug(title: str, kind: str, topics: Collection[str] = ()) -> str:
     return slug(short) if kind == "topics" and (short == title or short not in topics) else slug(title)
 
 
+_INFOBOX_FIELD = re.compile(r"\*\*(?:Authors?|Version|Compatibility|Download):?\*\*")
+
+
 def summary(md: str, limit: int = 220) -> str:
-    """First sentence(s) of a Markdown description as plain text."""
+    """First sentence(s) of a Markdown description as plain text. Blocks that only fill a slot are passed over:
+    an infobox field ("**Author:** ..."), a placeholder ("*N/A*", the "/*" of a header comment), a bare version
+    badge ("Arma 3 v1.68"); a leading badge or "Description:" label is dropped."""
     # code blocks go first, whole: one with a blank line in it would split into "paragraphs", and its tail
     # ("//--- comment\n```") would read as prose
     md = re.sub(r"(?ms)^[ \t]*(`{3,})[^\n]*\n.*?^[ \t]*\1`*[ \t]*$", "", md)
-    paragraphs = [p for p in md.split("\n\n") if p.strip() and not p.lstrip().startswith(("#", ">", "```", "|", "-"))]
+    blocks = [p for p in md.split("\n\n") if p.strip()]
+    paragraphs = [p for p in blocks if not p.lstrip().startswith(("#", ">", "```", "|", "-"))]
     # without prose, the first block that reads as text (a heading or a list); never a table or code
-    rest = [p for p in md.split("\n\n") if p.strip() and not p.lstrip().startswith(("|", "```"))]
-    text = paragraphs[0] if paragraphs else (rest[0] if rest else "")
-    text = re.sub(r"```.*?```", "", text, flags=re.S)
-    text = re.sub(r"\\?!?\[([^\]]+)\]\([^)]*\)", r"\1", text)
-    text = re.sub(r"^>.*$", "", text, flags=re.M)
-    text = re.sub(r"(?m)^(#+|[-*]|\d+\.)\s+", "", text)  # heading and list marks
-    text = re.sub(r"\s+", " ", text.replace("**", "")).strip()
+    rest = [p for p in blocks if not p.lstrip().startswith(("|", "```")) and p not in paragraphs]
+    text = ""
+    for block in paragraphs + rest:
+        if _INFOBOX_FIELD.match(block.lstrip()):
+            continue
+        block = re.sub(r"```.*?```", "", block, flags=re.S)
+        block = re.sub(r"^>.*$", "", block, flags=re.M)
+        block = re.sub(r"(?m)^(#+|[-*]|\d+\.)\s+", "", block)  # heading and list marks
+        text = re.sub(r"^Description:\s*:?\s*", "", re.sub(r"^Arma 3 v\d+(?:\.\d+)*\b\s*", "", plain_text(block)))
+        if text and not PLACEHOLDER.fullmatch(text):
+            break
+        text = ""
     if len(text) <= limit:
         return text
     cut = text[:limit]

@@ -433,10 +433,11 @@ class Site:
         updated = (rec["updated"] or "")[:10]
         footer = (f'Content from the <a href="{rec["url"]}">Bohemia Interactive Community Wiki</a>, '
                   f'revision {rec["revid"]}{", edited " + updated if updated else ""}.')
+        desc = _description(summary, rec)
         return self.shell(path=f"{kind}/{s}.html", title=f"{rec['name']} – Arma 3 {label.lower()}",
-                          description=_description(summary, rec["name"], label.lower()), header=header, main=body + notes,
+                          description=desc, header=header, main=body + notes,
                           crumbs=crumbs, toc=toc, side=self._side(kind, group, siblings, rec["name"]),
-                          jsonld=[_article_ld(self.base, f"{kind}/{s}", rec, summary)], extra_head=_alternates(s),
+                          jsonld=[_article_ld(self.base, f"{kind}/{s}", rec, desc)], extra_head=_alternates(s),
                           footer=footer, page_class=f"page-{rec['type']}")
 
     def topic(self, s: str, rec: dict, summary: str, siblings: list | None = None) -> str:
@@ -455,10 +456,11 @@ class Site:
         updated = (rec["updated"] or "")[:10]
         footer = (f'Content from the <a href="{rec["url"]}">Bohemia Interactive Community Wiki</a>, '
                   f'revision {rec["revid"]}{", edited " + updated if updated else ""}.')
+        desc = _description(summary, rec)
         return self.shell(path=f"topics/{s}.html", title=f"{rec['name']} – Arma 3 scripting",
-                          description=_description(summary, rec["name"], "topic"), header=header, main=body, crumbs=crumbs,
+                          description=desc, header=header, main=body, crumbs=crumbs,
                           toc=toc if len(heads) > 1 else "", side=self._side("topics", group, siblings, rec["name"]),
-                          jsonld=[_article_ld(self.base, f"topics/{s}", rec, summary)], extra_head=_alternates(s),
+                          jsonld=[_article_ld(self.base, f"topics/{s}", rec, desc)], extra_head=_alternates(s),
                           footer=footer, page_class="page-topic")
 
     def _side(self, kind: str, group: str | None, siblings: list | None, current: str) -> str:
@@ -534,8 +536,8 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
                 header = f"""<h1 class="name">{html.escape(g)}</h1>
 <p class="lede">{len(groups[g])} {label.lower()}. Also as <a href="{_slug(g)}.md">Markdown</a> for agents.</p>"""
                 doc = self.shell(path=path, title=f"{g} – Arma 3 {label.lower()}",
-                                 description=_description(f"Arma 3 {label.lower()} in the group {g}: "
-                                                          + ", ".join(r["name"] for r in groups[g][:8]) + ".", g, "group"),
+                                 description=_short(f"Arma 3 {label.lower()} in the group {g}: "
+                                                    + ", ".join(r["name"] for r in groups[g][:8]) + ".", 159),
                                  header=header, main=f'<ul class="entries">{rows(groups[g], f"../../{kind}/")}</ul>',
                                  crumbs=[("Home", "index.html"), (label, f"{kind}/index.html"), (g, path)],
                                  page_class="page-index", og_type="website")
@@ -694,9 +696,89 @@ def _place_anchors(doc: str) -> str:
     return _ANCHOR.sub(span, doc)
 
 
-def _description(summary: str, name: str, what: str) -> str:
-    text = summary or f"{name}: Arma 3 scripting {what}."
-    return text if len(text) <= 160 else text[:157].rsplit(" ", 1)[0] + "…"
+_MD_LINK = re.compile(r"\\?!?\[([^\]]+)\]\([^)]*\)")
+# the inline tags the wiki's descriptions carry; a bare "<" or "a<b and c>d" in the text is not a tag
+_INLINE_TAG = re.compile(r"</?(?:kbd|code|span|sup|sub|small|big|b|i|u|s|em|strong|tt|var|abbr|del|ins|mark|q|p|div|pre|ul|ol|li)"
+                         r"\b[^<>]*>", re.I)
+# a description that is only a placeholder: "N/A", the opening of a header comment, dashes, question marks
+PLACEHOLDER = re.compile(r"(?i)/\*.*|\*+/|(?:n/?a|tbd|todo)\b.*|[-?.]+")
+KIND_WORDS = {"command": "scripting command", "function": "function", "topic": "scripting topic"}
+DESCRIPTION_TAIL = "From the Bohemia Interactive Community Wiki, as HTML, Markdown and JSON."
+
+
+def plain_text(md: str) -> str:
+    """Markdown with inline HTML as plain text on one line, for summaries and meta descriptions: no emphasis or
+    code marks, links, tags, entities or backslash escapes. Underscores stay: SQF names start with them."""
+    text = _MD_LINK.sub(r"\1", md)
+    text = re.sub(r"<(https?://[^\s<>]+)>", r"\1", text)  # autolinks
+    text = re.sub(r"(`+)(.+?)\1", r"\2", text)
+    text = re.sub(r"<br\s*/?>", " ", text, flags=re.I)
+    text = _INLINE_TAG.sub("", text)
+    text = re.sub(r"\*\*(?=\S)(.+?)(?<=\S)\*\*", r"\1", text)
+    text = re.sub(r"(?<![\w*\\])\*(?=[^\s*])(.+?)(?<=[^\s*\\])\*(?![\w*])", r"\1", text)
+    text = re.sub(r"\\([\\`*_{}\[\]()#+.!|<>~-])", r"\1", text)
+    return re.sub(r"\s+", " ", html.unescape(text)).strip()
+
+
+def _says_nothing(text: str, name: str) -> bool:
+    """A summary no searcher learns anything from: a placeholder, an infobox line, a wiki redirect, a bare
+    version badge or the page name again."""
+    t = text.strip(" .:;")
+    norm = lambda s: re.sub(r"\W", "", s).lower()  # noqa: E731
+    return (not t or bool(PLACEHOLDER.fullmatch(t)) or t.lower().startswith(("author:", "redirect"))
+            or bool(re.fullmatch(r"Arma 3 v[\d.]+", t)) or norm(t) == norm(name))
+
+
+def _facts(rec: dict) -> list[str]:
+    """What a record says about itself without prose: the first syntax form and its return type, or for a topic
+    its top-level section headings."""
+    if rec["type"] == "topic":
+        heads = [(s["level"], plain_text(s["heading"])) for s in rec.get("sections", []) if s.get("heading")]
+        top = [h for level, h in heads if level == min(level for level, _ in heads)] if heads else []
+        if not top:
+            return []
+        shown = top[:4]
+        while len(shown) > 1 and len(", ".join(shown)) > 90:
+            shown.pop()
+        listed = ", ".join(shown[:-1]) + " and " + shown[-1] if len(shown) > 1 else shown[0]
+        return [f"Covers {listed}{', …' if len(shown) < len(top) else ''}."]
+    out = []
+    form = next((s for s in rec.get("syntaxes", []) if s.get("syntax")), None)
+    if form:
+        out.append(plain_text(form["syntax"]).rstrip(".") + ".")
+        ret = form.get("returns") or {}
+        returns = plain_text(ret.get("type") or ret.get("type_expr") or "")
+        if returns:
+            out.append(f"Returns {returns.rstrip('.')}.")
+    elif rec.get("arma3_since"):
+        out.append(f"Added in Arma 3 v{rec['arma3_since']}.")
+    return out
+
+
+def _description(summary: str, rec: dict) -> str:
+    """The meta description: the summary as plain text or, when that is empty or says nothing, a sentence composed
+    from the record ("setPos (Arma 3 scripting command, Positions): object setPos pos. Returns Nothing."); a short
+    one gets that context too. 70 to 160 characters where the record has enough to say."""
+    name = rec["name"]
+    text = plain_text(summary)
+    if _says_nothing(text, name):
+        text = ""
+    group = rec["groups"][0] if rec.get("groups") else ""
+    what = f"Arma 3 {KIND_WORDS[rec['type']]}" + (f", {group}" if group else "")
+    facts = _facts(rec)
+    if not text:
+        text = f"{name} ({what})" + (": " + " ".join(facts) if facts else ".")
+    elif len(text) < 70:
+        text = f"{name} ({what}): {text}"
+        if facts and rec["type"] != "topic" and not facts[0].startswith("Added in "):
+            facts[0] = f"Syntax: {facts[0]}"  # after a sentence, a bare syntax form would not read as one
+        for fact in facts:
+            if len(text) >= 70 or len(text) + 1 + len(fact) > 160:
+                break
+            text += " " + fact
+    if len(text) < 70 and len(text) + 1 + len(DESCRIPTION_TAIL) <= 160:
+        text += " " + DESCRIPTION_TAIL
+    return text if len(text) <= 160 else text[:159].rsplit(" ", 1)[0].rstrip(",;:") + "…"
 
 
 def _alternates(s: str) -> str:
@@ -704,12 +786,12 @@ def _alternates(s: str) -> str:
             f'<link rel="alternate" type="application/json" href="{s}.json">\n')
 
 
-def _article_ld(base: str, path: str, rec: dict, summary: str) -> dict:
+def _article_ld(base: str, path: str, rec: dict, description: str) -> dict:
     return {
         "@context": "https://schema.org",
         "@type": "TechArticle",
         "headline": rec["name"],
-        "description": summary or rec["name"],
+        "description": description,
         "url": f"{base}{path}.html",
         "dateModified": rec["updated"],
         "inLanguage": "en",
