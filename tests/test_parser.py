@@ -143,6 +143,34 @@ class ParamTest(unittest.TestCase):
         p = split_param("pos: Array with [a, b]\n- a: Number\n- b: Number - (Optional, default 0) offset")
         self.assertEqual((p["optional"], p["default"]), (False, None))
 
+    def test_optional_since(self):
+        # the parameter existed before; it only became optional then, so it is no "since" (added in)
+        p = split_param("angle: Number - (Optional since 2.20, Default: 0) rotation angle")
+        self.assertEqual((p["optional"], p["default"], p["optional_since"], p["description"]),
+                         (True, "0", "arma3 2.20", "rotation angle"))
+        p = split_param('font: String - (Optional since Arma 3 v2.22, default "" (system font)) font type')
+        self.assertEqual(p["optional_since"], "arma3 2.22")
+        self.assertEqual(split_param("count: Number - (Optional after Arma 3 v2.14) elements")["optional_since"],
+                         "arma3 2.14")
+        self.assertNotIn("optional_since", split_param("unit: Object - (Optional, default objNull) the unit"))
+
+    def test_bare_default_value(self):
+        self.assertEqual(split_param("parentTask: Task - (Optional, taskNull) - the parent task")["default"], "taskNull")
+        self.assertEqual(split_param("n: Number - (Optional, -1) count")["default"], "-1")
+        for prose in ("current game language", "getter if not provided", "no default"):
+            p = split_param(f"x: String - (Optional, {prose}) text")
+            self.assertEqual((p["optional"], p["default"]), (True, None), prose)
+
+    def test_sentence_default_keeps_the_rest_of_the_line(self):
+        raw = {"title": "BIS fnc test", "wikitext": (
+            "{{RV|type=function\n|game1= arma3\n|s1= [speed] call [[BIS_fnc_test]]\n"
+            "|p1= speed: [[Number]] - (Optional, default 150) velocity, in m/s. Default is 150, if you use flares, "
+            "set it to a lower value (1-5)\n"
+            "|p2= radius: [[Number]] - (Optional) area radius. Default: [0, 0], in metres\n}}")}
+        p1, p2 = parse_page(raw, "functions", Renderer(None))["syntaxes"][0]["params"]
+        self.assertEqual(p1["description"], "velocity, in m/s. If you use flares, set it to a lower value (1-5)")
+        self.assertEqual((p2["default"], p2["description"]), ("[0, 0]", "area radius. In metres"))
+
     def test_syntax_forms(self):
         f = syntax_form("setPos", "obj setPos pos", [{"name": "obj", "types": ["Object"]}, {"name": "pos", "types": ["Array"]}])
         self.assertEqual((f["form"], f["left"]["types"], f["right"]["types"]), ("binary", ["Object"], ["Array"]))

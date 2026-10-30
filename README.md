@@ -247,6 +247,8 @@ Cloudflare rejects real headless Chrome; if a checkbox appears, run without `--h
 
 `name`, `type`, `optional` and `default` of parameters are extracted heuristically from the wiki text
 (`name: Type - (Optional, default x) description`); `text` always holds the original, losslessly.
+A parameter's `since` is the version that added it; a parameter that became optional later
+("(Optional since 2.20, ...)") also has `optional_since` (`"arma3 2.20"`), present only then.
 `type` is the type as the wiki writes it ("Object or Array of Objects"); `type_expr` is the same type
 normalised for programs: alternatives joined with ` | `, element types as `Array<...>`
 (`Object | Array<Object>`, `Array<Array<Number>>`), qualifiers such as "in range 0..1" dropped. When the

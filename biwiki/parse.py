@@ -109,25 +109,60 @@ def _mask_optional(s: str) -> str:
 
 
 _SENTENCE_DEFAULT = re.compile(
-    r"\s*\(default(?::|\s+is)?\s+([^()\n]+)\)|(?:^|(?<=[.,;])\s+|\s+-\s+)default(?::|\s+is)\s*([^\n]+?)\.?\s*$", re.I)
+    r"\s*\(default(?::|\s+is)?\s+([^()\n]+)\)|(?:^|(?<=[.,;])\s+|\s+-\s+)default(?::|\s+is)\s*(?=\S)", re.I)
+
+
+def _clause_end(s: str, start: int) -> tuple[int, int]:
+    """Where the value starting at ``start`` ends: at a ',', ';' or '. ' outside brackets, quotes and code.
+    Returns (end of the value, start of the text after it)."""
+    depth, quote = 0, ""
+    for i in range(start, len(s)):
+        c = s[i]
+        if quote:
+            quote = "" if c == quote else quote
+        elif c in "\"'`" and (c != "'" or i == start or not s[i - 1].isalnum()):
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif depth <= 0 and (c in ",;" or c == "." and (i + 1 == len(s) or s[i + 1].isspace())):
+            return i, i + 1
+    return len(s), len(s)
 
 
 def _sentence_default(desc: str) -> tuple[str, Optional[str]]:
     """A default given outside "(Optional, default x)" on the parameter's own line: "... (Default: nil)",
-    "... Default: false", "area radius - default: 50". Returns the description without it, and the default."""
+    "... Default: false", "area radius - default: 50". Returns the description without it, and the default.
+
+    Only the default's clause goes: "speed. Default is 150, if you use flares, set it lower" keeps "If you use
+    flares, set it lower"."""
     own, nl, more = desc.partition("\n")
     m = _SENTENCE_DEFAULT.search(own)
     if not m:
         return desc, None
-    own = (own[: m.start()] + own[m.end() :]).strip()
-    return (own + nl + more).strip(), (m.group(1) or m.group(2)).strip()
+    if m.group(1):
+        own, value = (own[: m.start()] + own[m.end() :]).strip(), m.group(1)
+    else:
+        end, after = _clause_end(own, m.end())
+        value, before, rest = own[m.end() : end], own[: m.start()].strip(), own[after:].strip()
+        if rest and (not before or before.endswith(".")):
+            rest = rest[0].upper() + rest[1:]  # the rest starts the sentence the default started
+        own = (before + " " + rest).strip()
+    return (own + nl + more).strip(), value.strip()
+
+
+_OPTIONAL_SINCE = re.compile(r"optional\s+(?:since|after|from)\s+(?:Arma\s*3\s+v?)?(\d+\.\d+)\b", re.I)
+# a value written alone in "(Optional, x)": number, string, array/code literal, boolean, nil, null or side constant
+_VALUE = re.compile(r"-?\d+(?:\.\d+)?|\"[^\"]*\"|'[^']*'|\[[^\[\]]*\]|\{\s*\}|true|false|nil|[a-z]+Null|west|east|"
+                    r"independent|resistance|civilian|side(?:Unknown|Logic|Empty|Enemy|Friendly|Ambient)", re.I)
 
 
 def split_param(plain: str) -> dict:
     """Heuristically split ``name: Type - (Optional, default x) description``."""
     first, _, more = plain.partition("\n")
     name = type_ = desc = ""
-    optional, default = False, None
+    optional, default, optional_since = False, None, None
     lead = re.match(r"^\s*\((?:O|o)ptional\)\s*", first)  # "(optional) defaultValue - anything: ..."
     if lead:
         optional, first = True, first[lead.end():]
@@ -160,9 +195,18 @@ def split_param(plain: str) -> dict:
         optional = True
         j = _balanced_paren(desc, i)
         inner = desc[i + 1 : j] if j != -1 else desc[i + 1 :]
+        # "(Optional since 2.20, default: 0)": the parameter was there before, only optional from then on
+        since = _OPTIONAL_SINCE.match(inner)
+        if since:
+            optional_since = f"arma3 {since.group(1)}"
         dm = re.search(r"default(?:s to|\s+is)?[:\s]+(.*)$", inner, flags=re.S | re.I)
         if dm:
             default = dm.group(1).strip().rstrip(",").strip()
+        else:
+            # "(Optional, taskNull)": a bare value is the default; words ("current game language") are not
+            bare = inner[since.end() if since else len("Optional") :].strip(" ,")
+            if _VALUE.fullmatch(bare):
+                default = bare
         desc = re.sub(r"^[\s:-]+", "", (desc[:i] + (desc[j + 1 :] if j != -1 else "")).strip(" -\n"))
     if optional and default is None:
         desc, default = _sentence_default(desc)
@@ -172,6 +216,7 @@ def split_param(plain: str) -> dict:
         "optional": optional,
         "default": default,
         "description": desc.strip() or None,
+        **({"optional_since": optional_since} if optional_since else {}),
     }
 
 
@@ -226,6 +271,8 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
                     item["description"] = ((item["description"] or "") + "\n\n" + table_md).strip()
                     md += "\n\n" + table_md
                 item["since"] = _text(p, f"p{pn}since") or None
+                if "optional_since" in item:  # after since, where a reader looks for it
+                    item["optional_since"] = item.pop("optional_since")
                 item["text"] = md
                 params.append(item)
         ret = p.get(f"r{n}")
