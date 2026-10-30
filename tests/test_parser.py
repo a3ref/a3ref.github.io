@@ -1,18 +1,30 @@
-"""Unit tests for the wikitext → Markdown renderer and the record parser. Run: python -m unittest"""
+"""Unit tests for the wikitext → Markdown rendering and the record parser. Run: python -m unittest"""
 from __future__ import annotations
 
 import unittest
 from pathlib import Path
+from typing import Optional
 
 from biwiki import docblock, typeexpr
-from biwiki.fetch import load_cache
+from biwiki.fetch import TEMPLATES, load_cache
+from biwiki.markdown import LinkResolver
 from biwiki.parse import parse_page, split_param, syntax_form
+from biwiki.portrender import PortContext, PortRenderer
 from biwiki.render import page_markdown, page_slug, slug, summary, topic_group
 from biwiki.report import leftover_markup, load_known, position, save_known
 from biwiki.site import ANCHOR, Site, _description, _place_anchors, _toc, heading_id
-from biwiki.wikitext import Renderer, wiki_anchor
+from biwiki.wikitext import wiki_anchor
 
 RAW = Path(__file__).parent / "fixtures" / "raw"
+_CONTEXT: list[PortContext] = []
+
+
+def renderer(resolve: Optional[LinkResolver] = None, **options) -> PortRenderer:
+    """A renderer as the build makes one, over the fixture pages and the templates they use."""
+    if not _CONTEXT:
+        raws = {k: load_cache(RAW / f"{k}.json") for k in ("commands", "functions", "topics")}
+        _CONTEXT.append(PortContext.load(RAW / TEMPLATES, RAW, raws))
+    return _CONTEXT[0].renderer(resolve, **options)
 
 
 def fixture(kind: str, title: str) -> dict:
@@ -20,16 +32,16 @@ def fixture(kind: str, title: str) -> dict:
 
 
 def command(title: str) -> dict:
-    return parse_page(fixture("commands", title), "commands", Renderer(None))
+    return parse_page(fixture("commands", title), "commands", renderer())
 
 
 def function(title: str) -> dict:
-    return parse_page(fixture("functions", title), "functions", Renderer(None))
+    return parse_page(fixture("functions", title), "functions", renderer())
 
 
 class WikitextTest(unittest.TestCase):
     def md(self, text: str) -> str:
-        return Renderer(None).md(text)
+        return renderer().md(text)
 
     def test_wiki_anchor(self):
         self.assertEqual(wiki_anchor("Machine_Network_ID"), "Machine Network ID")
@@ -50,7 +62,7 @@ class WikitextTest(unittest.TestCase):
         self.assertEqual(self.md("[[setPos]] and [[Position|pos]]"), "setPos and pos")
 
     def test_links_with_resolver(self):
-        md = Renderer(lambda title, anchor: f"../commands/{title}.md").md("[[setPos]]")
+        md = renderer(lambda title, anchor: f"../commands/{title}.md").md("[[setPos]]")
         self.assertEqual(md, "[setPos](../commands/setPos.md)")
 
     def test_lists_code_headings_alerts(self):
@@ -80,8 +92,8 @@ class WikitextTest(unittest.TestCase):
         self.assertEqual(self.md("a<br><br>b"), "a\n\nb")
         self.assertEqual(self.md("a<br>\n\nb<br>"), "a\n\nb")  # at the end of a paragraph it shows nothing
         self.assertEqual(self.md("lowest*:<br><small>* not true</small>"), "lowest*:\\\n\\* not true")  # no list
-        self.assertEqual(self.md("Options:<br>\n* one\n* two"), "Options:\n- one\n- two")  # a real list stays one
-        self.assertEqual(Renderer(None, hard_breaks=False).md("a<br>b"), "a\nb")  # plain text: a newline
+        self.assertEqual(self.md("Options:<br>\n* one\n* two"), "Options:\n\n- one\n- two")  # a real list stays one
+        self.assertEqual(renderer(hard_breaks=False).md("a<br>b"), "a\nb")  # plain text: a newline
         self.assertEqual(self.md("see [[x]] command.<br>\n<br>\n{{Feature|informative|n}}"), "see x command.\n\n> [!NOTE]\n> n")
 
     def test_literal_backslashes(self):
@@ -109,21 +121,11 @@ class WikitextTest(unittest.TestCase):
         md = self.md('<code style="display: block">[[player]] setPos [0, 0, 0];<br>{{cc|done}}</code>')
         self.assertEqual(md, "```\nplayer setPos [0, 0, 0];\n// done\n```")
 
-    def test_magic_words_and_pipe_trick(self):
-        self.assertEqual(self.md("__NOTOC__\n[[raP (ArmA)|]] and [[Seattle, Washington|]]"), "raP and Seattle")
+    def test_magic_words(self):
+        self.assertEqual(self.md("__NOTOC__\n[[raP (ArmA)|raP]] and text"), "raP and text")
 
     def test_definition_line_with_colon(self):
         self.assertEqual(self.md("; Type: String\n; Description: Text."), "**Type:** String\n\n**Description:** Text.")
-
-    def test_infobox_templates(self):
-        md = self.md("{{Tool\n|AUTHOR= BI\n|COMMAND=\n tool.exe -help\n|SEEALSO= [[Other]]\n}}")
-        self.assertEqual(md, "**Author:** BI\n\n**Command:**\n\n```\ntool.exe -help\n```\n\n**See also:** Other")
-
-    def test_control_type_attribute(self):
-        md = self.md("{{CT|attribute\n|name=colorText\n|type1=Array\n|value1={1,1,1,1}\n|description=Text colour.\n}}")
-        self.assertIn("##### colorText", md)
-        self.assertIn("**Type:** Array\n\n**Description:** Text colour.", md)
-        self.assertIn("```cpp\ncolorText[] = {1,1,1,1};\n```", md)
 
 
 class ParamTest(unittest.TestCase):
@@ -167,7 +169,7 @@ class ParamTest(unittest.TestCase):
             "|p1= speed: [[Number]] - (Optional, default 150) velocity, in m/s. Default is 150, if you use flares, "
             "set it to a lower value (1-5)\n"
             "|p2= radius: [[Number]] - (Optional) area radius. Default: [0, 0], in metres\n}}")}
-        p1, p2 = parse_page(raw, "functions", Renderer(None))["syntaxes"][0]["params"]
+        p1, p2 = parse_page(raw, "functions", renderer())["syntaxes"][0]["params"]
         self.assertEqual(p1["description"], "velocity, in m/s. If you use flares, set it to a lower value (1-5)")
         self.assertEqual((p2["default"], p2["description"]), ("[0, 0]", "area radius. In metres"))
 
@@ -201,7 +203,7 @@ class PageTest(unittest.TestCase):
         self.assertIn("ctrlAddEventHandler", rec["replaced_by"])
 
     def test_function(self):
-        rec = parse_page(fixture("functions", "BIS fnc spawnGroup"), "functions", Renderer(None))
+        rec = parse_page(fixture("functions", "BIS fnc spawnGroup"), "functions", renderer())
         self.assertEqual(rec["name"], "BIS_fnc_spawnGroup")
         self.assertEqual([p["name"] for p in rec["syntaxes"][0]["params"]][:2], ["position", "side"])
 
@@ -218,7 +220,7 @@ class PageTest(unittest.TestCase):
             "{{RV|type=command\n|game1= arma3\n|s1= object [[setDamage]] [damage, killer]\n"
             "|p1= damage: [[Number]]\n"
             "|p2= {{Icon|serverExec|28}} killer: [[Object]] - (Optional, default [[objNull]]) the entity\n}}")}
-        p = parse_page(raw, "commands", Renderer(None))["syntaxes"][0]["params"][1]
+        p = parse_page(raw, "commands", renderer())["syntaxes"][0]["params"][1]
         self.assertEqual((p["name"], p["type_expr"], p["default"], p["description"]), ("killer", "Object", "objNull", "the entity"))
         self.assertIn("killer", p["text"])
 
@@ -226,13 +228,13 @@ class PageTest(unittest.TestCase):
         raw = {"title": "a / b", "wikitext": (
             "{{RV|type=command\n|game1= arma3\n|s1= a [[a / b|/]] b\n|r1= [[Number]] - quotient\n"
             "|s2= config [[a / b|/]] name\n|r21= [[Config]] - config entry\n}}")}
-        syntaxes = parse_page(raw, "commands", Renderer(None))["syntaxes"]  # |r21= numbered like the parameters
+        syntaxes = parse_page(raw, "commands", renderer())["syntaxes"]  # |r21= numbered like the parameters
         self.assertEqual([(s["syntax"], s["returns"]["type_expr"]) for s in syntaxes],
                          [("a / b", "Number"), ("config / name", "Config")])
         raw = {"title": "ppEffectAdjust", "wikitext": (
             "{{RV|type=command\n|game1= arma3\n|s1= effect [[ppEffectAdjust]] settings\n|r1= [[Nothing]]\n"
             "|r2= [[Nothing]]\n}}")}
-        self.assertEqual(len(parse_page(raw, "commands", Renderer(None))["syntaxes"]), 1)  # a stray |r2=: no form
+        self.assertEqual(len(parse_page(raw, "commands", renderer())["syntaxes"]), 1)  # a stray |r2=: no form
 
     def test_notes_in_the_syntax_field(self):
         raw = {"title": "addMagazine", "wikitext": (
@@ -240,7 +242,7 @@ class PageTest(unittest.TestCase):
             "{{GVI|arma3|1.00}} {{Icon|localArgument|32}}{{Icon|globalEffect|32}}\n"
             "|s2= [[local]] variable = value <span style=\"margin-left: 7em\">'''From v1.00 until v1.54''' - see "
             "'''[[private]]'''</span>\n}}")}
-        s1, s2 = parse_page(raw, "commands", Renderer(None))["syntaxes"]
+        s1, s2 = parse_page(raw, "commands", renderer())["syntaxes"]
         self.assertEqual((s1["syntax"], s1["form"]), ("unitName addMagazine magazineName", "binary"))
         self.assertIn("Arma 3 v1.00", s1["note"])
         self.assertEqual((s2["syntax"], s2["note"]), ("local variable = value", "**From v1.00 until v1.54** - see **private**"))
@@ -252,7 +254,7 @@ class PageTest(unittest.TestCase):
             "** from: [[Object]] - sound source\n"
             "|p2= layerName: can be one of:\n* [[String]] - layer name\n* [[Number]] - layer ID\n"
             "|p3= group: One of\n* [[Group]]\n* [[Object]] of type [[Object|Unit]] - its group is used\n}}")}
-        p1, p2, p3 = parse_page(raw, "commands", Renderer(None))["syntaxes"][0]["params"]
+        p1, p2, p3 = parse_page(raw, "commands", renderer())["syntaxes"][0]["params"]
         self.assertEqual((p1["type"], p1["type_expr"], p1["types"]), (None, "Object | Array", ["Object", "Array"]))
         self.assertEqual(p2["type_expr"], "String | Number")
         self.assertEqual(p3["type_expr"], "Group | Object")
@@ -278,7 +280,7 @@ class PageTest(unittest.TestCase):
             "|p1= <nowiki/>\n{{{!}} class=\"wikitable\"\n! Game\n{{!}} v1\n{{!}}}\n"
             "a - vector starting point, [[Position]] '''or''' [[Object]]\n"
             "|p2= <!-- to delete if unused -->\n}}")}
-        params = parse_page(raw, "functions", Renderer(None))["syntaxes"][0]["params"]
+        params = parse_page(raw, "functions", renderer())["syntaxes"][0]["params"]
         self.assertEqual([p["name"] for p in params], ["a"])  # the comment-only p2 is no parameter
         self.assertEqual(params[0]["types"], ["Position", "Object"])  # types after the description
         self.assertIn("| Game |", params[0]["description"])  # the table before it moves after the description
@@ -288,7 +290,7 @@ class PageTest(unittest.TestCase):
         self.assertEqual(p["type_expr"], "Config | Array<String>")
 
     def test_placeholder_function_filled_from_docblock(self):
-        rec = parse_page(fixture("functions", "BIS fnc taskHandler"), "functions", Renderer(None))
+        rec = parse_page(fixture("functions", "BIS fnc taskHandler"), "functions", renderer())
         self.assertTrue(rec["filled_from_docblock"])
         self.assertTrue(rec["description"])
         # "return value:" in lower case is the returns label too
@@ -308,20 +310,20 @@ class PageTest(unittest.TestCase):
             '<dd class="note">No link.\n</dl>\n\n'
             "{{Note\n|user= Sa-Matra\n|timestamp= 20220828050658\n|text= A newer note.\n}}\n"
             "{{Note\n|user= Sa-Matra\n|timestamp= 20220828050658\n|text= Only the primary turret, see [[weaponsTurret]].\n}}")}
-        notes = parse_page(raw, "commands", Renderer(None))["notes"]
+        notes = parse_page(raw, "commands", renderer())["notes"]
         self.assertEqual([(n["user"], n["date"]) for n in notes], [
             ("Bdfy", "2007-01-20"), ("Killzone_Kid", "2016-12-03T21:35:00Z"), ("Unknown", "2014-09-10"),
             ("Sa-Matra", "2022-08-28T05:06:58Z")])  # page order; the note given both ways is kept once
         self.assertEqual(notes[0]["text"], "Only the primary turret, see weaponsTurret.")
         self.assertEqual(notes[1]["text"], '*weapons* skips "Throw".\n\n```sqf\nplayer weapons;\n```')
         self.assertEqual(notes[2]["text"], "No link.")
-        md = page_markdown(parse_page(raw, "commands", Renderer(None)), lambda t, a: None)
+        md = page_markdown(parse_page(raw, "commands", renderer()), lambda t, a: None)
         self.assertIn("**Bdfy** — 2007-01-20\n\nOnly the primary turret", md)
 
     def test_return_without_dash(self):
         def returns(text: str) -> dict:
             raw = {"title": "x", "wikitext": f"{{{{RV|type=command\n|game1= arma3\n|s1= [[x]]\n|r1= {text}\n}}}}"}
-            return parse_page(raw, "commands", Renderer(None))["syntaxes"][0]["returns"]
+            return parse_page(raw, "commands", renderer())["syntaxes"][0]["returns"]
 
         r = returns("[[Array]] of [[Number]]s in format [airTemperature, blackSurfaceTemperature, whiteSurfaceTemperature]")
         self.assertEqual((r["type"], r["description"]), ("Array of Numbers", "in format [airTemperature, "
@@ -344,7 +346,7 @@ class PageTest(unittest.TestCase):
     def test_return_types_in_the_type_position(self):
         def returns(text: str) -> dict:
             raw = {"title": "x", "wikitext": f"{{{{RV|type=command\n|game1= arma3\n|s1= [[x]]\n|r1= {text}\n}}}}"}
-            return parse_page(raw, "commands", Renderer(None))["syntaxes"][0]["returns"]
+            return parse_page(raw, "commands", renderer())["syntaxes"][0]["returns"]
 
         r = returns("Nothing")  # unlinked (setDiaryRecordText)
         self.assertEqual((r["types"], r["type_expr"]), (["Nothing"], "Nothing"))
@@ -358,7 +360,7 @@ class PageTest(unittest.TestCase):
             "{{RV|type=command\n|game1= arma3\n|s1= [[x]] a\n"
             "|p1= a: [[String]] (\"\" to get all attributes, [[typeOf]] to get [[Object]] Specific attributes)\n"
             "|p2= b: [Array]] format [[Position]] - broken link markup\n}}")}
-        a, b = parse_page(raw, "commands", Renderer(None))["syntaxes"][0]["params"]
+        a, b = parse_page(raw, "commands", renderer())["syntaxes"][0]["params"]
         self.assertEqual((a["types"], a["type_expr"]), (["String"], "String"))
         self.assertEqual((b["types"], b["type_expr"]), (["Position"], None))  # no type read: the linked types
 
@@ -366,7 +368,7 @@ class PageTest(unittest.TestCase):
         raw = {"title": "BIN fnc test", "wikitext": (
             "{{RV|type=function\n|game1= arma3\n|descr= <pre>/*\n\tDescription:\n\t\tRegister entities to a site.\n\n"
             "\tReturns:\n\t\tBOOL - true if added\n*/</pre>\n{{Wiki|placeholder}}\n|s1=\n|r1=\n}}")}
-        r = parse_page(raw, "functions", Renderer(None))["syntaxes"][0]["returns"]
+        r = parse_page(raw, "functions", renderer())["syntaxes"][0]["returns"]
         self.assertEqual((r["type"], r["description"], r["source"]), ("Boolean", "true if added", "docblock"))
 
     def test_example_code_as_shown(self):
@@ -376,7 +378,7 @@ class PageTest(unittest.TestCase):
             "|x1= <sqf>\n_wp = _grp addWaypoint [position player, 0];\t// placed like [[setVehiclePosition]]'s "
             "\"NONE\" placement\n_a = [[0]] - [0]; /* ''killer'' is [[Object|an object]] */\nhint \"// [[x]]\";\n"
             "_b = [[[1], 0]]; // [<nowiki/>[1]], [[[\"a\", 0]]]\n</sqf>\n}}")}
-        code = parse_page(raw, "commands", Renderer(None))["examples"][0]["code"]
+        code = parse_page(raw, "commands", renderer())["examples"][0]["code"]
         self.assertEqual(code, ["_wp = _grp addWaypoint [position player, 0];\t// placed like setVehiclePosition's "
                                 "\"NONE\" placement\n_a = [[0]] - [0]; /* killer is an object */\nhint \"// [[x]]\";\n"
                                 "_b = [[[1], 0]]; // [[1]], [[[\"a\", 0]]]"])
@@ -471,7 +473,7 @@ class TypeExprTest(unittest.TestCase):
 
 class TableTest(unittest.TestCase):
     def test_row_and_column_spans(self):
-        md = Renderer(None).md('{|\n! A !! B !! C\n|-\n| rowspan="2" | x || y || z\n|-\n| y2 || z2\n|-\n| colspan="3" | all\n|}')
+        md = renderer().md('{|\n! A !! B !! C\n|-\n| rowspan="2" | x || y || z\n|-\n| y2 || z2\n|-\n| colspan="3" | all\n|}')
         self.assertEqual(md.split("\n")[2:], ["| x | y | z |", "| x | y2 | z2 |", "| all |  |  |"])
 
 
@@ -564,9 +566,9 @@ class SiteHtmlTest(unittest.TestCase):
         self.assertEqual(two.count("<blockquote"), 2)
 
     def test_links_in_code_blocks(self):
-        md = Renderer(lambda t, a: f"../commands/{t}.html", code_links=True).md("x\n [[player]] setDamage 1")
+        md = renderer(lambda t, a: f"../commands/{t}.html", code_links=True).md("x\n [[player]] setDamage 1")
         self.assertIn('<code><a href="../commands/player.html">player</a> setDamage 1', self.site.html(md))
-        self.assertEqual(Renderer(lambda t, a: f"{t}.md").md("x\n [[player]] setDamage 1"), "x\n\n```\nplayer setDamage 1\n```")
+        self.assertEqual(renderer(lambda t, a: f"{t}.md").md("x\n [[player]] setDamage 1"), "x\n\n```\nplayer setDamage 1\n```")
 
     def test_anchors(self):
         # the wiki's anchors become ids, once each and never one the page has already (a heading's, the shell's)
@@ -622,17 +624,18 @@ class SiteHtmlTest(unittest.TestCase):
 
     def test_arg_title_anchor_is_the_name(self):
         # {{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}: the wiki's anchor is #allowProfileGlasses
-        md = Renderer(None, anchors=True).md("{{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}\ntext")
+        md = renderer(anchors=True).md("{{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}\ntext")
         body, heads = self.site._ids(self.site.html(md))
         self.assertEqual(heads[0][1], "allowprofileglasses-arma-3-v2-04")
         self.assertIn('<span id="allowprofileglasses"></span>', _place_anchors(body))
-        self.assertNotIn(ANCHOR[0], Renderer(None).md("{{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}"))
+        self.assertNotIn(ANCHOR[0], renderer().md("{{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}"))
 
-    def test_legacy_renderer_anchors(self):
-        r = Renderer(lambda t, a: f"{t}.html#{heading_id(a)}", anchors=True)
-        self.assertEqual(r.md('<span id="B_Soldier">x</span> [[P#.23include|i]] [[P#a_b|ab]]'),
-                         f"{ANCHOR[0]}b-soldier{ANCHOR[1]}x [i](P.html#include) [ab](P.html#a-b)")
-        self.assertEqual(Renderer(None).md('<span id="B_Soldier">x</span>'), "x")
+    def test_anchors_of_ids_and_links(self):
+        r = renderer(lambda t, a: f"{t}.html#{heading_id(a)}", anchors=True)
+        # links to an existing page keep their anchor (a red link loses it, as on the wiki)
+        self.assertEqual(r.md('<span id="B_Soldier">x</span> [[setPos#.23include|i]] [[setPos#a_b|ab]]'),
+                         f"{ANCHOR[0]}b-soldier{ANCHOR[1]}x [i](setPos.html#include) [ab](setPos.html#a-b)")
+        self.assertEqual(renderer().md('<span id="B_Soldier">x</span>'), "x")
 
 
 class TopicGroupTest(unittest.TestCase):

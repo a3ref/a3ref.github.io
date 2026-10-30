@@ -103,8 +103,8 @@ class PortBuildTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             raw = Path(tmp)
-            for f in RAW.glob("*.json"):
-                shutil.copyfile(f, raw / f.name)
+            for f in ("commands.json", "functions.json", "topics.json"):
+                shutil.copyfile(RAW / f, raw / f)
             out = StringIO()
             with redirect_stdout(out):
                 self.assertIs(_renderer_factory("auto", None, raw, {}), Renderer)
