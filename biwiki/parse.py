@@ -258,6 +258,8 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
                     continue
                 md = r.md(pv)
                 item = split_param(plain)
+                if item["type"] and _ONE_OF.fullmatch(item["type"]):
+                    item["type"] = None  # "group: One of" + a list of types: no type of its own, read the list
                 head = type_head(pv, has_name=True)
                 item["type_expr"], item["types"] = head_types(head)
                 type_md = r.md(head).strip() if _type_after_dash(item, r.plain(head)) else None
@@ -742,6 +744,7 @@ def head_types(head) -> tuple[Optional[str], list[str]]:
     return expr, types
 
 
+_ONE_OF = re.compile(r"(?:can be\s+)?one of(?:\s+the following)?\s*:?", re.I)
 _NO_PARAM = re.compile(r"\s*(-|none|nothing|n/a)\.?\s*", re.I)
 _LIST_ITEM = re.compile(r"^\s*(?:\*(?![*:#])|<br\s*/?>)\s*(.*)$")
 

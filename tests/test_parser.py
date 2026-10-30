@@ -213,6 +213,19 @@ class PageTest(unittest.TestCase):
         self.assertEqual(lines["type_expr"], "Array<String> | Array<Array<String>>")
         self.assertFalse(lines["optional"], "the (Optional, ...) of an array element is not the parameter's")
 
+    def test_one_of_a_list_of_types(self):
+        raw = {"title": "say2D", "wikitext": (
+            "{{RV|type=command\n|game1= arma3\n|s1= from [[say2D]] sound\n"
+            "|p1= from: One of\n* [[Object]] - the sound source\n* [[Array]] with [from, to]\n"
+            "** from: [[Object]] - sound source\n"
+            "|p2= layerName: can be one of:\n* [[String]] - layer name\n* [[Number]] - layer ID\n"
+            "|p3= group: One of\n* [[Group]]\n* [[Object]] of type [[Object|Unit]] - its group is used\n}}")}
+        p1, p2, p3 = parse_page(raw, "commands", Renderer(None))["syntaxes"][0]["params"]
+        self.assertEqual((p1["type"], p1["type_expr"], p1["types"]), (None, "Object | Array", ["Object", "Array"]))
+        self.assertEqual(p2["type_expr"], "String | Number")
+        self.assertEqual(p3["type_expr"], "Group | Object")
+        self.assertIn("the sound source", p1["description"])
+
     def test_type_after_dash(self):
         p = function("BIS fnc dbClassCheck")["syntaxes"][0]["params"][0]  # "databaseArray - [[Array]]: An array ..."
         self.assertEqual((p["name"], p["type"], p["type_expr"]), ("databaseArray", "Array", "Array"))
