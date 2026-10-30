@@ -139,7 +139,8 @@
 (function () {
   "use strict";
   // Open on wide screens, folded on narrow ones, where the column sits above the page. The HTML ships them
-  // open, so without scripts nothing is hidden.
+  // open, so without scripts nothing is hidden; with scripts, style.css already shows them folded from the first
+  // paint (html.js, set by theme.js), and this only makes the buttons and [hidden] agree.
   var mq = window.matchMedia("(max-width: 900px)");
   var btns = document.querySelectorAll("button.fold[aria-controls]");
   function set(b, open) {
@@ -186,6 +187,8 @@
     setBranch(tocBtns[i], false);
     tocBtns[i].addEventListener("click", function () { setBranch(this, this.getAttribute("aria-expanded") !== "true"); });
   }
+  // The buttons and [hidden] now say what style.css showed before this script ran (html.js); from here on they rule.
+  document.documentElement.classList.add("js-ready");
 
   // Keep the entry being read in view in a contents list taller than its box: the entry itself, or the entry of
   // the folded branch holding it.

@@ -3,6 +3,8 @@
 (function () {
   "use strict";
   var doc = document.documentElement;
+  // Scripts run: style.css shows the side column folded as site.js will leave it, so nothing shifts when it does.
+  doc.classList.add("js");
   var KEY = "theme";
   function stored() {
     try { var t = localStorage.getItem(KEY); return t === "light" || t === "dark" ? t : ""; } catch (e) { return ""; }

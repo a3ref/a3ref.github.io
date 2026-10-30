@@ -163,6 +163,15 @@ a:hover { text-decoration-thickness: 2px; }
   border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
 .toc-fold[aria-expanded="false"]::after { margin: 0 0 0 -.15rem; transform: rotate(-45deg); }
 .toc li:has(> ol[hidden] a[aria-current]) > a { color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+/* From the first paint until site.js has folded them (html.js, set by the blocking theme.js, without .js-ready),
+   show the sections as it will leave them: contents subsections folded, and on narrow screens the side sections
+   too, so the page does not shift when it runs. Without scripts everything stays open. */
+.js:not(.js-ready) .toc li > ol { display: none; }
+.js:not(.js-ready) .toc-fold::after { margin: 0 0 0 -.15rem; transform: rotate(-45deg); }
+@media (max-width: 900px) {
+  .js:not(.js-ready) :is(#side-body, #toc-list) { display: none; }
+  .js:not(.js-ready) .fold::after { margin-top: 0; transform: rotate(-45deg); }
+}
 .side-more { margin: .6rem 0 0 .6rem; font-size: .85rem; }
 
 /* The content column takes the room the side column leaves. Running text keeps the reading measure; tables use
