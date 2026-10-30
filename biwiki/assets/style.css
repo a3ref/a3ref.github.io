@@ -87,12 +87,14 @@ a:hover { text-decoration-thickness: 2px; }
 }
 .search input:focus + .search-key { display: none; }
 
-/* the theme switcher shows the icon of the current state; [hidden] until site.js wires it */
+/* the theme switcher shows the icon of the current state; [hidden] until site.js wires it, so without scripts
+   it is gone, but drawn from the first paint when they run, so the top bar does not reflow when site.js shows it */
 .theme-switch {
   flex: none; display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem;
   margin-left: -1rem; padding: 0; color: var(--muted); background: none; border: 1px solid var(--rule); border-radius: 6px; cursor: pointer;
 }
 .theme-switch[hidden] { display: none; }
+.js .theme-switch[hidden] { display: inline-flex; }  /* scripts run (theme.js): its room is kept from the first paint */
 .theme-switch:hover { color: var(--ink); background: var(--surface); }
 .theme-switch g { display: none; }
 :root:not([data-theme]) .ti-auto, :root[data-theme="light"] .ti-light, :root[data-theme="dark"] .ti-dark { display: inline; }
