@@ -288,6 +288,34 @@ class PageTest(unittest.TestCase):
         self.assertEqual((returns("[[Boolean]]")["type"], returns("[[Boolean]]")["description"]), ("Boolean", None))
         r = returns("true when the unit is ready, false while it is still loading its weapons")  # no type: as before
         self.assertEqual((r["type"], r["description"]), (None, None))
+        # only a " - " on the first line ends the type, not one in the list below it
+        r = returns("[[Array]] format [visionMode, flirIndex] where:\n* visionMode: [[Number]] - vision mode\n"
+                    "* flirIndex: [[Number]] - TI mode")
+        self.assertEqual((r["type"], r["type_expr"]), ("Array", "Array"))
+        self.assertTrue(r["description"].startswith("format [visionMode, flirIndex] where:"), r["description"])
+        r = returns("[[Array]] with [minSpeed, maxSpeed] - in m/s")  # "with ..." is description
+        self.assertEqual((r["type"], r["description"]), ("Array", "with [minSpeed, maxSpeed] - in m/s"))
+
+    def test_return_types_in_the_type_position(self):
+        def returns(text: str) -> dict:
+            raw = {"title": "x", "wikitext": f"{{{{RV|type=command\n|game1= arma3\n|s1= [[x]]\n|r1= {text}\n}}}}"}
+            return parse_page(raw, "commands", Renderer(None))["syntaxes"][0]["returns"]
+
+        r = returns("Nothing")  # unlinked (setDiaryRecordText)
+        self.assertEqual((r["types"], r["type_expr"]), (["Nothing"], "Nothing"))
+        r = returns("[[Boolean]] - [[true]] if found, see [[BIS_fnc_dbSymbolClass]] and [[Object]]")
+        self.assertEqual((r["types"], r["type_expr"]), (["Boolean"], "Boolean"))  # links in the description are none
+        r = returns("[[Nothing]], since {{GVI|arma3|2.20}} [[Object]]")  # drop
+        self.assertEqual((r["types"], r["type_expr"]), (["Nothing", "Object"], "Nothing | Object"))
+
+    def test_param_types_in_the_type_position(self):
+        raw = {"title": "x", "wikitext": (
+            "{{RV|type=command\n|game1= arma3\n|s1= [[x]] a\n"
+            "|p1= a: [[String]] (\"\" to get all attributes, [[typeOf]] to get [[Object]] Specific attributes)\n"
+            "|p2= b: [Array]] format [[Position]] - broken link markup\n}}")}
+        a, b = parse_page(raw, "commands", Renderer(None))["syntaxes"][0]["params"]
+        self.assertEqual((a["types"], a["type_expr"]), (["String"], "String"))
+        self.assertEqual((b["types"], b["type_expr"]), (["Position"], None))  # no type read: the linked types
 
     def test_docblock_return_description(self):
         raw = {"title": "BIN fnc test", "wikitext": (

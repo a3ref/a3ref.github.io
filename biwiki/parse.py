@@ -259,8 +259,7 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
                 md = r.md(pv)
                 item = split_param(plain)
                 head = type_head(pv, has_name=True)
-                item["types"] = type_links(head)
-                item["type_expr"] = typeexpr.of_wikitext(head)
+                item["type_expr"], item["types"] = head_types(head)
                 type_md = r.md(head).strip() if _type_after_dash(item, r.plain(head)) else None
                 if not item["types"] and not item["type"]:
                     item["type_expr"] = _listed_types(pv) or _table_types(plain) or _trailing_types(pv)
@@ -638,19 +637,28 @@ def _md_desc(md: str, item: dict, type_md: Optional[str] = None) -> Optional[str
 def _returns(code, r: Renderer) -> dict:
     md = r.md(code)
     plain = r.plain(code)
-    type_, sep, desc = plain.partition(" - ")
+    # only a " - " on the first line ends the type: "[[Array]] with [a, b]\n* a: [[Number]] - ..." is no type "Array
+    # with [a, b] a: Number"
+    first, nl, more = plain.partition("\n")
+    src_first, _, src_more = str(code).strip().partition("\n")
+    if src_more.strip() and all(src_first.count(a) == src_first.count(b) for a, b in (("{{", "}}"), ("[[", "]]"), ("<", ">"))):
+        # plain text may join a list to the first line ("where: - visionMode: ..."): split the source instead
+        first, nl, more = r.plain(src_first), "\n", r.plain(src_more)
+    type_, sep, desc = first.partition(" - ")
+    desc += nl + more
     head = type_head(code, has_name=False)
-    types, expr = type_links(head), typeexpr.of_wikitext(head)
+    expr, types = head_types(head)  # an unlinked "Nothing" is a type too
     if not expr:
         expr = _listed_types(code, from_first=True)
         types = types or typeexpr.names(expr)
     type_ = type_.strip() if sep or len(plain) < 60 else None
-    if not sep:
+    end = _type_prefix(first, types)
+    if not sep and end:
         # "Number in range 0..1, -1 in case of error": the type is the leading run of type names
-        first, nl, more = plain.partition("\n")
-        end = _type_prefix(first, types)
-        if end:
-            type_, desc = first[:end].strip(), (first[end:].lstrip(" ,;:") + nl + more).strip()
+        type_, desc = first[:end].strip(), (first[end:].lstrip(" ,;:") + nl + more).strip()
+    elif sep and end and re.match(r"\s*(?:with|in format)\b", first[end:]):
+        # "Array with [a, b] - where ...": the format is description
+        type_, desc = first[:end].strip(), first[end:].strip() + nl + more
     return {
         "type": type_,
         "types": types,
@@ -722,17 +730,16 @@ def type_head(code, has_name: bool) -> str:
     return head[:colon] if colon != -1 and typeexpr.of_wikitext(head[:colon]) else head
 
 
-def type_links(head) -> list[str]:
-    """Data types linked in a type part (see type_head): ``[[Array]] of [[String]]s`` -> Array, String.
-
-    A link with an anchor is named by its text (``[[Position#PositionAGL|PositionAGL]]`` -> PositionAGL).
-    """
-    out = []
-    for link in parse_wikitext(str(head)).filter_wikilinks():
-        name = typeexpr.link_type(link)
-        if name and name not in out:
-            out.append(name)
-    return out
+def head_types(head) -> tuple[Optional[str], list[str]]:
+    """The type expression of a type part (see type_head) and the data types in its type position:
+    ``[[Array]] of [[String]]s`` -> Array, String; links in notes and prose after it ("([[while]])",
+    "[[typeOf]] to get ...") are none. When no type can be read (broken markup such as "[Array]] format
+    [[Position]]"), the types are those linked in it."""
+    expr, types = typeexpr.wikitext_types(head)
+    if not expr:
+        links = (typeexpr.link_type(link) for link in parse_wikitext(str(head)).filter_wikilinks())
+        types = list(dict.fromkeys(t for t in links if t))
+    return expr, types
 
 
 _NO_PARAM = re.compile(r"\s*(-|none|nothing|n/a)\.?\s*", re.I)
