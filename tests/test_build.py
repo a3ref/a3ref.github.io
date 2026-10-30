@@ -54,6 +54,49 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(json.loads(bundle)["count"], 9)
         self.assertGreater(bundle.count("\n"), 7, "one record per line keeps git diffs readable")
 
+    def test_json_records(self):
+        """Format 2: empty and derivable fields are left out of command and function records, not of topics."""
+        for kind in ("commands", "functions"):
+            items = json.loads((self.dataset / f"{kind}.json").read_text(encoding="utf-8"))["items"]
+            for r in items:
+                # the change feed reads these from every bundle in the data repository's history
+                self.assertLessEqual({"name", "title", "type", "url", "revid", "updated"}, set(r), r["name"])
+                self.assertNotIn("categories", r)
+                self.assertIsInstance(r["games"], dict)
+                self.assertRegex(r["since"], r"^[a-z0-9]+ \d")
+                for k, v in r.items():
+                    if k not in ("updated", "description", "syntaxes", "groups"):
+                        self.assertNotIn(v, (None, [], {}, False, ""), f"{r['name']}.{k}")
+                for s in r["syntaxes"]:
+                    self.assertNotIn("operator", s)
+                    self.assertNotIn("exec", s)
+                if r["name"] in ("setPos", "BIS_fnc_spawnGroup"):
+                    page = json.loads((self.out / kind / f"{r['name']}.json").read_text(encoding="utf-8"))
+                    self.assertEqual(page, r, "page and bundle hold the same record")
+        set_pos = json.loads((self.out / "commands" / "setPos.json").read_text(encoding="utf-8"))
+        self.assertEqual(set_pos["since"], "ofp 1.00")
+        self.assertEqual(set_pos["games"]["arma3"], "0.50")
+        pos = set_pos["syntaxes"][0]["params"][1]
+        self.assertNotIn("text", pos, "pos: PositionAGL or Position2D - ... is rebuilt from name, type and description")
+        self.assertNotIn("types", pos, "the names in type_expr")
+        self.assertEqual(set_pos["syntaxes"][0]["left"], {"text": "object"})
+        topic = json.loads((self.out / "topics" / "Position.json").read_text(encoding="utf-8"))
+        self.assertIn("categories", topic, "topics keep their categories: feed.py reads them")
+
+    def test_json_schema(self):
+        try:
+            import jsonschema
+        except ImportError:
+            self.skipTest("jsonschema is not installed")
+        schema = json.loads((self.out / "schema.json").read_text(encoding="utf-8"))
+        jsonschema.Draft202012Validator.check_schema(schema)
+        sub = lambda name: {"$schema": schema["$schema"], "$defs": schema["$defs"], "$ref": f"#/$defs/{name}"}  # noqa: E731
+        for f, d in (("commands.json", "bundle"), ("functions.json", "bundle"), ("topics.json", "bundle"),
+                     ("index.json", "index"), ("syntax.json", "syntaxIndex")):
+            jsonschema.validate(json.loads((self.dataset / f).read_text(encoding="utf-8")), sub(d))
+        for path in ("commands/setPos", "functions/BIS_fnc_spawnGroup", "topics/Position"):
+            jsonschema.validate(json.loads((self.out / f"{path}.json").read_text(encoding="utf-8")), schema)
+
     def test_theme_switcher(self):
         page = (self.out / "commands" / "setPos.html").read_text(encoding="utf-8")
         head, body = page.split("</head>")

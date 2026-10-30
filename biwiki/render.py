@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .fetch import CATEGORIES, TEMPLATES, TOPIC_TITLES, load_cache
+from .jsonrecord import branches, compact
 from .ogimage import SUFFIX as OG_SUFFIX
 from .ogimage import OgImages
 from .parse import parse_page, parse_topic, script_name, wiki_url
@@ -386,6 +387,7 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     records: dict[str, list[dict]] = {}
+    bundles: dict[str, list[dict]] = {}  # the same records as written to JSON
     slugs: dict[str, str] = {}
     summaries: dict[str, str] = {}
     search: list[list] = []
@@ -403,7 +405,7 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
             else:
                 shutil.rmtree(target)
         target.mkdir(parents=True, exist_ok=True)
-        records[kind] = []
+        records[kind], bundles[kind] = [], []
         for raw in sorted(raws[kind].values(), key=lambda v: v["title"].lower()):
             s = pages.slug(raw["title"], kind)
             # One broken page must not take the whole site down: record it and move on.
@@ -421,7 +423,9 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
                 continue
             report.check_page(raw["title"], kind, rec, page_md, md_r.unknown, raw["wikitext"])
             writer.write(target, s, "md", page_md)
-            writer.write(target, s, "json", json.dumps(rec, ensure_ascii=False, separators=(",", ":")))
+            # the JSON leaves out what follows from the rest (jsonrecord.py); md, HTML and indexes use the full record
+            bundles[kind].append(json_rec := compact(rec))
+            writer.write(target, s, "json", json.dumps(json_rec, ensure_ascii=False, separators=(",", ":")))
             pending.append((target, s, rec, render_html))
             if kind == "topics" and (to := redirect_target(raw["wikitext"])):
                 redirects[rec["title"]] = to
@@ -458,7 +462,7 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     files = {
         f"{k}.json": {"updated": updated, "source": wiki_url(CATEGORIES[k]) if k != "topics" else wiki_url("Main Page"),
                       "count": len(recs), "items": recs}
-        for k, recs in records.items()
+        for k, recs in bundles.items()
     }
     files["index.json"] = {"updated": updated, "count": len(index), "items": index}
     for name, payload in files.items():
@@ -594,7 +598,7 @@ def _syntax_index(records: dict[str, list[dict]], updated) -> dict:
         if r["replaced_by"]:
             entry["replaced_by"] = r["replaced_by"]
         if r["branch"]:
-            entry["branch"] = r["branch"]
+            entry["branch"] = branches(r["branch"])  # ["diag", "prof"]: the wiki writes "diag prof"
         if r["operator"]:
             entry["operator"] = r["operator"]
         commands[(r["operator"] or r["name"]).lower()] = entry
