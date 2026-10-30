@@ -278,6 +278,10 @@ class TemplateTest(unittest.TestCase):
                             '/wiki/Arma_3_Contact"><img alt="enoch icon ca.png" /></a></div><div>This content is '
                             'exclusive to the Arma 3 Contact Expansion.</div></div></pre>'),
                          "> [!NOTE]\n> This content is exclusive to the Arma 3 Contact Expansion.")
+        # the text around the boxes stays code
+        self.assertEqual(md('<pre>/***\n *\tname: x\n<div class="biki-messagebox" style="background-color:DarkGray">'
+                            '<div>🏗</div><div>Placeholder</div></div>\nafter</pre>'),
+                         "```\n/***\n *    name: x\n```\n\n```\nafter\n```")
 
     def test_game_versions(self):
         gvi = ('<span class="gvi2 gvi-arma3 gvi-alpha" style="font-size: 10px"><span class="icon"><a href="/wiki/'
@@ -290,6 +294,8 @@ class TemplateTest(unittest.TestCase):
                '_Cold_War_Assault_version_1.85&amp;action=edit&amp;redlink=1" class="new" title="Category:Introduced '
                'with Arma: Cold War Assault version 1.85 (page does not exist)"> 1.85</a></span></span>')
         self.assertEqual(md(f"<p>{cwa}</p>"), "Arma: Cold War Assault v1.85")
+        # {{GVI|arma3}} without a version shows "?" on the wiki; Renderer writes the game only
+        self.assertEqual(md('<p><span class="gvi2 gvi-arma3"><span class="version">?</span></span></p>'), "Arma 3")
 
     def test_arg_title(self):
         self.assertEqual(md('<div style="display: flex; align-items: baseline"><div><span class="gvi2 gvi-arma3">'

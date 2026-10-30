@@ -34,6 +34,8 @@ SKIP_TAGS = {"button", "img", "input", "mw:editsection", "noscript", "script", "
 SKIP_CLASSES = {"toc", "toc-side", "mw-references-wrap", "references", "thumb", "gallery", "mw-editsection",
                 "bikispoiler-top", "catlinks", "printfooter", "mw-empty-elt", "metadata"}
 INLINE_CODE_TAGS = {"code", "tt", "var", "samp"}
+# blocks in a <pre> that are not code: what an unclosed <pre> wraps (see HtmlMarkdown._pre)
+PRE_BREAKERS = {"div", "table", "p", "ul", "ol", "dl", "blockquote"}
 FILE_PREFIXES = ("file:", "image:", "media:")
 # captions of images that stand for a symbol: {{Icon|checked}} in the comparison tables
 FILE_CAPTIONS = {"checked": "✓", "unchecked": "✗"}
@@ -250,15 +252,7 @@ class HtmlMarkdown:
         if tag == "hr":
             return ["---"]
         if tag == "pre":
-            # an unclosed <pre> ("|descr= <pre>" on placeholder function pages) is literal text to the preprocessor
-            # but an HTML tag to the sanitizer, so the wiki wraps the rest, message boxes included, in a <pre>:
-            # it shows them as boxes, not as code
-            if el.find(lambda e: e.tag in ("div", "table", "p", "ul", "ol", "dl")):
-                return self._flow(el.children)
-            if not self.preformat:
-                return self._paragraphs("".join(self._text(c) if isinstance(c, str) else self._inline(c)
-                                                for c in el.children).replace("\n", BR))
-            return self._code_block(self._code_text(el, links=self.code_links and not self.plain_mode), "")
+            return self._pre(el)
         if tag == "code":  # <code style="display: block">
             return self._code_block(self._code_text(el), "")
         if tag == "blockquote":
@@ -283,6 +277,26 @@ class HtmlMarkdown:
                 if titled:
                     return titled
         return self._flow(el.children)
+
+    def _pre(self, el: Element) -> list[str]:
+        """<pre>: a code block. An unclosed <pre> ("|descr= <pre>" on placeholder function pages) is literal text
+        to the preprocessor but an HTML tag to the sanitizer, so the wiki wraps the rest of the text, message
+        boxes included, in a <pre>: the boxes show as boxes, the text around them as code."""
+        is_box = lambda c: isinstance(c, Element) and c.tag in PRE_BREAKERS  # noqa: E731
+        if any(is_box(c) for c in el.children):
+            out: list[str] = []
+            run = Element("pre", el.attrs)
+            for c in el.children + [Element("div", {})]:
+                if is_box(c):
+                    out += self._pre(run) + self._flow([c])
+                    run.children = []
+                else:
+                    run.children.append(c)
+            return out
+        if not self.preformat:
+            return self._paragraphs("".join(self._text(c) if isinstance(c, str) else self._inline(c)
+                                            for c in el.children).replace("\n", BR))
+        return self._code_block(self._code_text(el, links=self.code_links and not self.plain_mode), "")
 
     def _paragraphs(self, text: str) -> list[str]:
         """Inline content -> paragraphs, with the blocks found inside it (slots) in between."""
@@ -559,7 +573,7 @@ class HtmlMarkdown:
         """{{GVI|arma3|2.00}}: class "gvi2 gvi-arma3" and a "version" span -> "Arma 3 v2.00"."""
         game = next((c[len("gvi-"):] for c in el.attrs.get("class", "").split() if c.startswith("gvi-")), "")
         versions = el.find(lambda e: "version" in e.classes)
-        version = next((v.text().strip() for v in versions), "")
+        version = next((v.text().strip() for v in versions), "").strip("?")  # {{GVI|arma3}} shows "?"
         name = game_name(game)
         # {{GVI|arma0|1.85}} has the class gvi-ofp; its category link names the game ("Arma: Cold War Assault")
         for a in (a for v in versions for a in v.find(lambda e: e.tag == "a")):
