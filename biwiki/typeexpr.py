@@ -44,6 +44,7 @@ TYPE_WORDS = {
 WIKI_WORDS = {"object", "array", "string", "number", "boolean", "code", "group", "side", "config",
               "control", "display", "nothing", "anything", "hashmap", "namespace"}
 
+_TYPE_NAMES = set(TYPE_WORDS.values())
 _SEPARATORS = {",", "or", "and/or", "and", "/"}
 _FILLERS = {"a", "an", "the", "empty", "non-empty", "two", "three", "four", "single"}
 _LEX = re.compile(r"'''|''|and/or|\d[\d.]*|[A-Za-z][\w.\-]*|\S")
@@ -85,15 +86,28 @@ def _is_file_link(target: str) -> bool:
 
 
 def link_type(link: Wikilink) -> Optional[str]:
-    """The type a link names: its text when it points into a section (``[[Position#PositionAGL|PositionAGL]]``).
+    """The type a link names: the page, or the subtype its section is about.
 
-    None for links that name no type: files and categories, and pages whose title starts in lower case,
-    which are commands ([[while]], [[typeOf]]) and values ([[true]], [[objNull]]); [[nil]] is Nothing.
+    A section named after a subtype of the page gives the subtype, whatever the text says
+    (``[[Position#PositionASL|ASL]]``, ``[[Position#PositionRelative|relative position]]``); a section with
+    a type name for text gives that type (``[[Position#Introduction|Position2D]]``); any other section gives
+    the page (``[[Position#Formats|visual]]`` -> Position). None for links that name no type: files and
+    categories, links within the page, and pages whose title starts in lower case, which are commands
+    ([[while]], [[typeOf]]) and values ([[true]], [[objNull]]); [[nil]] is Nothing.
     """
     target = str(link.title).strip().lstrip(":").replace("_", " ")
     if _is_file_link(target):
         return None
-    name = str(link.text).strip() if link.text is not None and "#" in target else target.split("#")[0].strip()
+    page, _, anchor = (x.strip() for x in target.partition("#"))
+    if not page:  # [[#Syntax|Primary Syntax]]
+        return None
+    label = str(link.text).strip() if link.text is not None else ""
+    if anchor and re.fullmatch(re.escape(page.replace(" ", "")) + r"[A-Z0-9]\w*", anchor):
+        name = anchor  # PositionAGL, PositionRelative, Position2D
+    elif anchor and label in _TYPE_NAMES:
+        name = label
+    else:
+        name = page
     low = name.lower()
     if low.endswith("s") and low[:-1] in WIKI_WORDS:  # [[Objects]]
         low = low[:-1]

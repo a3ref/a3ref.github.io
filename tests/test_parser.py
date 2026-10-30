@@ -368,6 +368,21 @@ class TypeExprTest(unittest.TestCase):
         for text, expr in cases.items():
             self.assertEqual(typeexpr.of_wikitext(text), expr, text)
 
+    def test_links_into_a_section(self):
+        cases = {
+            # the section names the subtype, whatever the text says (selectionPosition)
+            "[[Position#PositionRelative|relative position]]": "PositionRelative",
+            "[[Position#PositionASL|ASL]] or [[Position#PositionAGL|Above Ground Level]]": "PositionASL | PositionAGL",
+            # a generic section: the text when it is a type name, else the page
+            "[[Position#Introduction|Position2D]]": "Position2D",
+            "[[Position#Formats|visual]]": "Position",
+            "[[Object#Person|Person]] or [[Array]]": "Object | Array",
+            # a section of the page itself is no type
+            "[[#Syntax|Primary Syntax]]": None,
+        }
+        for text, expr in cases.items():
+            self.assertEqual(typeexpr.of_wikitext(text), expr, text)
+
     def test_links_to_commands_and_values_are_no_types(self):
         self.assertEqual(typeexpr.of_wikitext("[[Number]] or [[nil]]"), "Number | Nothing")
         self.assertEqual(typeexpr.of_wikitext("[[spawn]]: [[Script Handle]]"), None)
