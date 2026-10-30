@@ -328,6 +328,51 @@ class TypeExprTest(unittest.TestCase):
         for text, expr in cases.items():
             self.assertEqual(typeexpr.of_wikitext(text), expr, text)
 
+    def test_qualifiers_do_not_end_the_type(self):
+        cases = {
+            # version notes before an alternative (typeOf, ctrlAddEventHandler, animate, lbSetSelected)
+            "[[Object]], since {{GVI|arma3|2.22}} [[Control]], [[Display]]": "Object | Control | Display",
+            "[[String]], since {{GVI|arma3|1.06}} also [[Code]]": "String | Code",
+            "[[Boolean]] or (since {{GVI|arma3|1.66|size= 0.75}}) [[Number]]": "Boolean | Number",
+            "[[Number]] or since {{GVI|arma3|2.12}} [[Array]] of [[Number]]s": "Number | Array<Number>",
+            # alternatives in parentheses (limitSpeed, addWaypoint); notes there are dropped (do)
+            "[[Number]] (or [[Boolean]] since Arma 3 2.22) - in km/h": "Number | Boolean",
+            "[[Position#PositionAGL|PositionAGL]] ([[Position#PositionASL|PositionASL]] if ''radius'' is negative!) "
+            "or [[Object]]": "PositionAGL | PositionASL | Object",
+            "[[While Type]] ([[while]]), [[With Type]] ([[with]]), [[For Type]] ([[for]])":
+                "While Type | With Type | For Type",
+            '[[String]] ("" to get all attributes, [[typeOf]] to get Object Specific attributes)': "String",
+            # "of type" names a kind of the type (commandFire); prose before an alternative (forEach)
+            "[[Object]] of type [[Object|Unit]] or [[Array]] of [[Object|Unit]]s": "Object | Array<Object>",
+            "[[String]] only in {{ofp}} until v1.85 or {{GVI|arma0|1.85}} [[Code]]": "String | Code",
+            "[[Array]] in [[Date]] format or [[Number]]": "Date | Number",
+            # prose without a following alternative still ends the type
+            "[[Anything]] but [[Structured Text]]": "Anything",
+            "[[Number]] in range 0..1, -1 in case of error": "Number",
+        }
+        for text, expr in cases.items():
+            self.assertEqual(typeexpr.of_wikitext(text), expr, text)
+
+    def test_array_of_a_list(self):
+        cases = {
+            # "Array of A, B or C" is an array of any of them (setCuratorSelected, set3DENSelected)
+            "[[Array]] of [[Object]]s, [[Group]]s, [[Waypoint]]s, or [[String]]s": "Array<Object | Group | Waypoint | String>",
+            "[[Array]] of [[Eden Entity]] or [[Eden ID]]": "Array<Eden Entity | Eden ID>",
+            "[[Array]] of [[Object]], [[Location]], [[Group]], [[String]] (marker) and/or [[Position]]":
+                "Array<Object | Location | Group | String | Position>",
+            # a change of number ends the element; singulars joined by commas only are alternatives
+            "[[Array]] of [[Number]]s or [[Nothing]]": "Array<Number> | Nothing",
+            "[[Array]] of [[Config|configs]] or [[Array]]": "Array<Config> | Array",
+            "[[Array]] of [[Number]], [[String]]": "Array<Number> | String",
+        }
+        for text, expr in cases.items():
+            self.assertEqual(typeexpr.of_wikitext(text), expr, text)
+
+    def test_links_to_commands_and_values_are_no_types(self):
+        self.assertEqual(typeexpr.of_wikitext("[[Number]] or [[nil]]"), "Number | Nothing")
+        self.assertEqual(typeexpr.of_wikitext("[[spawn]]: [[Script Handle]]"), None)
+        self.assertEqual(typeexpr.of_wikitext("[[Boolean]] or [[true]]"), "Boolean")
+
     def test_header_types(self):
         self.assertEqual(typeexpr.of_text("ARRAY of STRINGs (Optional)"), "Array<String>")
         self.assertEqual(typeexpr.of_text("scalar or BOOL"), "Number | Boolean")
