@@ -48,7 +48,8 @@ returns a 404 that explains how to find the right path.
 What the records add on top of the wiki text:
 
 - `status` (`ok`, `deprecated`, `broken`) and `replaced_by`, so agents avoid outdated commands;
-- `types` lists for every parameter and return value (`["Array", "String"]`), linked to the data type topics;
+- the type of every parameter and return value normalised for programs (`type_expr`: `Array<String>`,
+  `Object | Group`), whose names are the data type topics;
 - for commands, the syntax `form` (`nullary`, `unary`, `binary`) with typed `left`/`right` operands, and the
   `operator` symbol of operator pages;
 - for the ~400 placeholder function pages, the description, parameters, return value and examples parsed from the
@@ -210,6 +211,9 @@ Cloudflare rejects real headless Chrome; if a checkbox appears, run without `--h
 
 ### JSON record
 
+A command or function record (format 2, `"version": 2` in [`schema.json`](https://a3ref.github.io/schema.json)),
+shortened:
+
 ```jsonc
 {
   "name": "createVehicle",            // as written in code (BIS_fnc_... for functions)
@@ -218,41 +222,79 @@ Cloudflare rejects real headless Chrome; if a checkbox appears, run without `--h
   "url": "https://community.bistudio.com/wiki/createVehicle",
   "revid": 377509, "updated": "2026-01-02T06:50:13Z",
   "groups": ["Object Manipulation"],
-  "games": [{"game": "ofp", "name": "Operation Flashpoint", "version": "1.34"}, ...],
-  "since": {...},                      // first game it appeared in
+  "status": "ok",                     // or "deprecated" / "broken", then also "replaced_by": [...]
+  "games": {"ofp": "1.34", "ofpe": "1.00", "arma1": "1.00", ..., "arma3": "0.50"},  // oldest first
+  "since": "ofp 1.34",                // first game it appeared in, as the syntax and parameter "since"
   "arma3_since": "0.50",
-  "branch": null,                      // "dev" / "diag" for commands only in dev/diag builds
-  "locality": {"argument": "global", "effect": "global", "server_exec": false},
-  "exec": null,                        // functions: "spawn" / "call"
+  "locality": {"effect": "global"},   // argument locality unknown, no server execution needed
   "description": "markdown",
   "syntaxes": [{
     "syntax": "type createVehicle position",
-    "since": null, "effect": null, "exec": null,
-    "params": [{
-      "name": "type", "type": "String", "types": ["String"], "type_expr": "String",
-      "optional": false, "default": null,
-      "description": "vehicle/object className", "since": null,
-      "text": "full parameter text (markdown)"
-    }],
-    "returns": {"type": "Object", "types": ["Object"], "type_expr": "Object", "description": null, "text": "markdown"}
+    "params": [
+      {"name": "type", "type": "String", "description": "vehicle/object className", "type_expr": "String"},
+      {"name": "position", "type": "Position", "description": "desired placement position. ...", "type_expr": "Position"}
+    ],
+    "returns": {"type": "Object", "type_expr": "Object"},
+    "form": "binary", "left": {"text": "type"}, "right": {"text": "position"}
+  }, {
+    "syntax": "createVehicle [type, position, markers, placement, special]",
+    "params": [..., {"name": "markers", "type": "Array of Strings", "optional": true, "default": "`[]`",
+                     "description": "if the markers array ...", "type_expr": "Array<String>",
+                     "text": "markers: Array of Strings - (Optional, default `[]`) if the markers array ..."}, ...],
+    "returns": {"type": "Object", "type_expr": "Object", "description": "created vehicle or objNull if failed"},
+    "form": "unary", "right": {"text": "[type, position, markers, placement, special]"}
   }],
-  "examples": [{"text": "markdown", "code": ["raw SQF"]}],
-  "multiplayer": null, "problems": null,
-  "aliases": [], "see_also": ["createVehicleLocal", ...],
-  "notes": [{"user": "MrSanchez", "date": "2015-08-22T13:04:00Z", "text": "markdown"}],
-  "categories": [...]
+  "examples": [{"code": ["raw SQF"]}, {"text": "markdown", "code": ["raw SQF"]}],
+  "see_also": ["createVehicleLocal", ...],
+  "notes": [{"user": "MrSanchez", "date": "2015-08-22T13:04:00Z", "text": "markdown"}]
 }
 ```
 
+| Field | Present | Meaning |
+|---|---|---|
+| `name`, `title`, `type`, `url`, `revid`, `updated`, `groups`, `status`, `description`, `syntaxes` | always | `updated` may be null, `description` empty |
+| `operator` | operator pages | the symbol (`!=`, `>>`) |
+| `replaced_by`, `aliases`, `see_also` | when not empty | names |
+| `games`, `since`, `arma3_since` | when known | game code → version that added it (null if the wiki gives none); `since` is `"<game> <version>"` |
+| `branch` | dev/diag/prof-only commands | list: `["diag", "prof"]` |
+| `locality` | when anything is known | `argument`, `effect` (`local`/`global`), `server_exec: true`; each key only when known |
+| `exec` | functions | `spawn` / `call` |
+| `syntaxes[]` | always | `syntax`, `params` and `returns` (null when the wiki gives none) always; `note`, `since`, `effect`, `server_exec: true` (this syntax runs on the server), commands' `form`, `left`, `right`, functions' `inferred` when set |
+| `params[]` | | `name` always; `type`, `type_expr`, `types`, `optional: true`, `default`, `description`, `since`, `optional_since`, `text`, `source` when set |
+| `examples[]`, `notes[]`, `multiplayer`, `problems` | when not empty | Markdown; examples also have their SQF `code` |
+| `categories_extra` | when not empty | wiki categories that do not follow from the other fields (`WIP`, `Stubs`, `AI`, `Easter Eggs`, `Arma 3: Remote Execution`, ...) |
+| `docblock`, `filled_from_docblock` | functions with a header comment | the header's `text`, `author` and `meta`; which fields were filled from it |
+
+Every optional field is left out when it is empty (null, `[]`, `{}`, `false`, `""`): read a missing field as that
+empty value. Also left out is what follows from other fields, so it can be rebuilt exactly:
+
+- a parameter's `text` when it is `name`, then `: type` if there is a type, then ` - description` if there is a
+  description; a return value's `text` when it is `type`, then ` - description` the same way;
+- an example's `text` when it is only its `code`: each snippet as a ```` ```sqf ```` block, one blank line apart;
+- `types` (parameters, return values, operands) when it lists the names in `type_expr` (split at `<`, `>`, `|`);
+  an operand's types are those of the parameter of the same name, or `["Array"]` for an array literal;
+- `categories`: the kind, the games, the groups, locality, server execution and branch categories
+  (rules in `schema.json`); `syntaxes[].operator`, which repeated the record's.
+
+Topic records (`topics/*.json`) have every field, `categories` included.
+
+**Changed in format 2** (the files had no version before): `categories` became `categories_extra`; `games` is a map
+and `since` a string; `branch` is a list (also in `syntax.json`); a syntax's `exec: "server"` is `server_exec: true`
+(the record's `exec` stays spawn/call); `syntaxes[].operator` is gone; `docblock` keeps `text`, `author` and `meta`;
+empty, derivable and default values are left out; a return type `-` is written as `Nothing`, game codes in `since`
+are lower case (`Arma3 2.08` → `arma3 2.08`), an unknown note date is left out instead of `""`. The command and
+function bundles are about 40% smaller.
+
 `name`, `type`, `optional` and `default` of parameters are extracted heuristically from the wiki text
-(`name: Type - (Optional, default x) description`); `text` always holds the original, losslessly.
+(`name: Type - (Optional, default x) description`); `text` holds the original, losslessly (left out only when the
+rule above rebuilds it).
 A parameter's `since` is the version that added it; a parameter that became optional later
 ("(Optional since 2.20, ...)") also has `optional_since` (`"arma3 2.20"`), present only then.
 `type` is the type as the wiki writes it ("Object or Array of Objects"); `type_expr` is the same type
 normalised for programs: alternatives joined with ` | `, element types as `Array<...>`
 (`Object | Array<Object>`, `Array<Array<Number>>`), qualifiers such as "in range 0..1" dropped. When the
 wiki lists the alternatives below the parameter (`* [[Number]]: ...` / `* [[Boolean]]: ...`), `type` is
-null and `type_expr` collects them. `type_expr` is null when the type is free text.
+missing and `type_expr` collects them. `type_expr` is missing when the type is free text.
 In JSON, links are plain text (fewer tokens); in `.md` and `.html` they are real links.
 
 ## HTML version

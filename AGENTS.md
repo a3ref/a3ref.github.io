@@ -64,6 +64,7 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 | HTML pages, CSP, SEO metadata, structured data | `biwiki/site.py`; styles and scripts in `biwiki/assets/` |
 | which pages are mirrored | `biwiki/fetch.py`: `CATEGORIES`, `TOPIC_TITLES`, `TOPIC_CATEGORIES`, `TOPIC_ROOT` with `TOPIC_SKIP_CATEGORY` / `TOPIC_SKIP_TITLE` (takes effect for existing pages only after a walk, which runs weekly: once pushed, start one with `gh workflow run sync.yml -R a3ref/data -f walk=true`; the site follows within the hour); the incremental sync is `fetch.sync_recent` |
 | topic groups | `biwiki/render.py`: `TOPIC_GROUPS`, `topic_group` |
+| what a command or function record leaves out in JSON (empty values, derivable fields, `games` map, `branch` list) | `biwiki/jsonrecord.py` (`compact`) |
 | JSON format documentation | `biwiki/schema.json` (copied to `out/` and the data clone) and "JSON record" in README.md |
 | parser health report, GitHub issue | `biwiki/report.py`, baseline `known-problems.json` |
 | change feed | `biwiki/feed.py` |
@@ -88,8 +89,13 @@ the templates those pages use in its `templates.json` (written by `tests/fixture
   record per line, and `updated` is the newest wiki edit, so the daily sync commits only real changes.
 - **Contracts other code relies on**: `index.json` fields `name`, `type`, `syntax`, `summary`, `groups`, `status`,
   `operator`, `aliases`, `md`, `json`; `syntax.json` `commands`/`functions` keyed by lower-case name with `forms`,
-  `status`, `replaced_by`, `branch`, `syntax`; topic records' `sections`. The MCP server (a3ref/mcp) and
-  external users read them. Changing them means updating `biwiki/schema.json`, README.md and a3ref/mcp.
+  `status`, `replaced_by`, `branch` (a list, `["diag", "prof"]`), `syntax`; topic records' `sections`. The MCP
+  server (a3ref/mcp) and external users read them. Changing them means updating `biwiki/schema.json`, README.md and
+  a3ref/mcp. `feed.py` reads `name`, `title`, `type`, `url`, `revid` and `updated` of every record (and topics'
+  `categories`) from the bundles in the data repository's history, old formats included: keep them in every record.
+- **JSON record format** (`"version"` in `biwiki/schema.json`, now 2): command and function records leave out empty
+  and derivable fields (`biwiki/jsonrecord.py`, applied only to what is written as JSON). A change to what a record
+  contains or omits bumps the version and goes into the README's "Changed in format N" note.
 - **Stable URLs.** Page paths come from `render.slug` / `page_slug`; changing them breaks links agents already use.
 - **Markdown links only to mirrored pages** (agents cannot open the wiki behind its bot check); HTML may link to
   the wiki.
