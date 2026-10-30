@@ -140,6 +140,20 @@
     body.scrollTop += cur.getBoundingClientRect().top - body.getBoundingClientRect().top - body.clientHeight / 2;
   });
 
+  // The column is fixed beside the page: once the footer scrolls into view, end the column above it (--foot
+  // shortens its max-height; its top never moves, so nothing shakes).
+  var side = document.querySelector(".frame-one > .side"), foot = document.querySelector(".footer"), footPending = false;
+  function fitSide() {
+    footPending = false;
+    var over = mq.matches ? 0 : Math.max(0, Math.ceil(window.innerHeight - foot.getBoundingClientRect().top + 16));
+    side.style.setProperty("--foot", over + "px");
+  }
+  if (side && foot) {
+    window.addEventListener("scroll", function () { if (!footPending) { footPending = true; requestAnimationFrame(fitSide); } }, { passive: true });
+    window.addEventListener("resize", fitSide);
+    fitSide();
+  }
+
   // Mark the contents entry of the section being read. The scroll handler only reads positions, once per
   // frame, and touches the DOM only when the section changes; it never scrolls anything.
   var links = document.querySelectorAll('.toc a[href^="#"]'), heads = [], byId = {}, current = null, pending = false;
