@@ -672,13 +672,20 @@ def _returns(code, r: Renderer) -> dict:
         # plain text may join a list to the first line ("where: - visionMode: ..."): split the source instead
         first, nl, more = r.plain(src_first), "\n", r.plain(src_more)
     type_, sep, desc = first.partition(" - ")
-    desc += nl + more
+    if re.match(r"\s*[-*]\s*\S", first):  # the value starts with a list ("* spawn: [[Script Handle]]"): no type line
+        type_, sep, desc = None, "", plain
+    elif sep:
+        desc += nl + more
+    elif len(plain) < 60:
+        type_, desc = first, more  # "[[Boolean]]"
+    else:
+        type_, desc = None, more  # a sentence (still in the text); the type is found below, if it starts it
     head = type_head(code, has_name=False)
     expr, types = head_types(head)  # an unlinked "Nothing" is a type too
     if not expr:
         expr = _listed_types(code, from_first=True)
         types = types or typeexpr.names(expr)
-    type_ = type_.strip() if sep or len(plain) < 60 else None
+    type_ = type_.strip() if type_ is not None else None
     end = _type_prefix(first, types)
     if not sep and end:
         # "Number in range 0..1, -1 in case of error": the type is the leading run of type names
