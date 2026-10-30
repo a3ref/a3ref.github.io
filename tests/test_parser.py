@@ -340,6 +340,14 @@ class SiteHtmlTest(unittest.TestCase):
         # never inside an attribute
         self.assertEqual(_place_anchors(f'<a title="{a}t{b}x">y{a}t{b}</a>'), '<a title="x">y<span id="t"></span></a>')
 
+    def test_arg_title_anchor_is_the_name(self):
+        # {{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}: the wiki's anchor is #allowProfileGlasses
+        md = Renderer(None, anchors=True).md("{{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}\ntext")
+        body, heads = self.site._ids(self.site.html(md))
+        self.assertEqual(heads[0][1], "allowprofileglasses-arma-3-v2-04")
+        self.assertIn('<span id="allowprofileglasses"></span>', _place_anchors(body))
+        self.assertNotIn(ANCHOR[0], Renderer(None).md("{{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}"))
+
     def test_legacy_renderer_anchors(self):
         r = Renderer(lambda t, a: f"{t}.html#{heading_id(a)}", anchors=True)
         self.assertEqual(r.md('<span id="B_Soldier">x</span> [[P#.23include|i]] [[P#a_b|ab]]'),

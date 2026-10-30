@@ -508,7 +508,9 @@ class Renderer:
         if key == "argtitle":  # {{ArgTitle|3|AnimChanged|{{GVI|arma3|1.00}}}}: one entry of an event handler list
             level = int(raw(0)) if raw(0).isdigit() else 3
             extra = arg(2)
-            return self._heading(level, arg(1) + (f" ({extra})" if extra else ""), slots)
+            # the wiki's anchor is the name alone (#allowProfileGlasses), not the heading with its version
+            mark = anchor_mark(self._plain_inner(pos[1].value)) if self.anchors and extra and len(pos) > 1 else ""
+            return self._heading(level, mark + arg(1) + (f" ({extra})" if extra else ""), slots)
         if key == "codecomment":
             return self._slot(slots, _inline_code(html.unescape(self._plain_inner(pos[0].value) if pos else "")))
         if key == "colorball":
