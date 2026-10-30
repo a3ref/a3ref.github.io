@@ -2,11 +2,14 @@
 # includes/title/TitleValue.php (assertValidSpec), includes/Title.php (the parts the parser uses), and the helpers
 # they call: Sanitizer::decodeCharReferencesAndNormalize() and Sanitizer::escapeIdForLink() /
 # escapeIdForExternalInterwiki() (includes/parser/Sanitizer.php), wfArrayToCgi(), wfAppendQuery() and wfExpandUrl()
-# (includes/GlobalFunctions.php, includes/utils/UrlUtils.php), IPUtils::sanitizeIP() (wikimedia/ip-utils 3.0.2)
+# (includes/GlobalFunctions.php, includes/utils/UrlUtils.php), IPUtils::sanitizeIP() (wikimedia/ip-utils 4.0.0)
 # (https://www.mediawiki.org/), (C) MediaWiki contributors.
 # Changed by a3ref contributors on 2026-10-30: translated to Python; Title and the codec take a Site instead of
 # MediaWikiServices; no database (article IDs, existence, content models, restrictions), hooks, gender
 # namespaces, language variants or action paths; getters as properties; error messages in English.
+# Changed by a3ref contributors on 2026-10-30: checked against 1.39.0 (isMainPage() not cached, UrlUtils without
+# getCanonicalServer(), ip-utils 4.0.0, whose IPUtils differs from 3.0.2 only in constant visibility); no change
+# in behaviour was needed.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your

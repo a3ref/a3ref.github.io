@@ -2,6 +2,8 @@
 # Html::rawElement(), element(), openElement(), closeElement(), expandAttributes(), dropDefaults().
 # Changed by a3ref contributors on 2026-10-30: translated to Python; attributes are a dict (or a list of pairs) whose
 # order is kept, as PHP's arrays keep theirs; no warnings.
+# Changed by a3ref contributors on 2026-10-30: rawElement() does not escape U+0338 (no
+# Sanitizer::escapeCombiningChar(), a later backport for T387130), as in 1.39.0.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -65,9 +67,7 @@ def raw_element(element: str, attribs: Optional[Attribs] = None, contents: Optio
     start = open_element(element, attribs)
     if element in VOID_ELEMENTS:
         return start[:-1] + "/>"
-    from .sanitizer import escape_combining_char
-
-    return start + escape_combining_char(contents or "") + close_element(element)
+    return start + (contents or "") + close_element(element)
 
 
 def element(element_: str, attribs: Optional[Attribs] = None, contents: Optional[str] = "") -> str:

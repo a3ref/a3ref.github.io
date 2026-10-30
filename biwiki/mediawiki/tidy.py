@@ -3,7 +3,7 @@
 # includes/tidy/TidyDriverBase.php (https://www.mediawiki.org/), (C) MediaWiki contributors; these files as in
 # MediaWiki 1.39.0, the release the wiki runs (they do not differ from REL1_39 commit 19ddcf0 except that
 # RemexCompatFormatter there also escapes U+0338 and normalizes character references only outside raw text elements,
-# a later fix for T387130).
+# later fixes for T387130 and T406391).
 # Changed by a3ref contributors on 2026-10-30: translated to Python, on top of the Python port of RemexHtml 3.0.2
 # (biwiki/mediawiki/remex/, MIT); the configuration ($wgTidyConfig, $wgParserEnableLegacyMediaDOM) is passed as
 # arguments with MediaWiki 1.39's defaults; tracing goes to the logging module instead of wfDebug().

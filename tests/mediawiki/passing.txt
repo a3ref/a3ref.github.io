@@ -2,6 +2,8 @@
 ! and || in td attributes should not be parsed as <th>/<td>
 "Extra" interlanguage links (T34189 / gerrit 111390)
 "border", "frameless" and "class" attributes on an image.
+"follow" after a named ref but before its parent
+"follow" after an anonymous ref but before its parent
 #if
 #ifeq
 #ifeq entities
@@ -34,6 +36,7 @@
 1. Template-generated table cell attributes and cell content
 1. Treebuilder fixup of formatting elt
 1. includeonly in html attr key
+10 references should enable the column mode
 11. Special case where only newlines separate links (T175416)
 1a. Indent-Pre and Comments
 1b. Indent-Pre and Comments
@@ -84,9 +87,11 @@
 6. Pre-blocks should extend across lines with leading WS even when there is no wrappable content
 7a. Indent-pre and category links
 8. Encapsulate foster-parented transclusion content
+9 references should *not* enable the column mode
 9. Encapsulate foster-parented transclusion content
 :Image link to nonexistent file (T3850 - bad)
 :Image link to nonexistent file (T3850 - bad) [media]
+<!--comment--> in a <ref> (T7384)
 </pre> inside nowiki
 <br> to <br />
 <includeonly> and <noinclude> being included
@@ -106,13 +111,26 @@
 <pre> with forbidden attribute (T5202)
 <pre> with forbidden attribute values (T5202)
 <pre> with width attribute (T5202)
+<ref> defined in <references>
+<ref> defined in <references> called with #tag
+<ref> defined in <references> error conditions
 <ref> in a <!--comment-->
 <ref> in a <nowiki>
+<ref> in a link should hoist the link outside the link (T301293)
+<ref> in an ignored caption (T235656)
+<ref> in expanded attributes of tags (legitimate or otherwise)
+<ref> ungrouped and grouped refs with and without content defined
+<ref> with a <nowiki>
+<ref> with a non-empty name parameter and no content.
+<ref> with a simple template
 <ref> with an empty-string name parameter and no content.
+<ref> with custom group link with number names in Klingon
 <ref> with no name and no content.
 <ref> with whitespace only name parameter and no content.
+<references> after <gallery> (bug 6164)
 <s> or <strike> for strikethrough
 <wbr> is valid wikitext (T54468)
+A follow="…" before its parent is not merged
 A table with caption with default-spaced attributes and a table row
 A table with captions with non-default spaced attributes and a table row
 A table with no data (take 2)
@@ -145,22 +163,27 @@ Attribute test: equals, then nothing
 Attribute test: no value (T54330)
 Attribute test: unquoted but illegal value (hash)
 Attribute test: unquoted value
+Attributes are trimmed by the parser, see Sanitizer::decodeTagAttributes()
 Avoid expanding multiline sol transparent template ranges unnecessarily
 Bad images - T18039: text after bad image disappears
+Bad images - T18039: text after bad image disappears [media]
 Bad images - basic functionality
+Bad images - basic functionality [media]
 Bad images - in gallery
-Bad images - manualthumb
 Bare pipe character (T54363)
 Bare pipe character from a template (T54363)
 Basic section headings
 Basic usage of {{=}}
 Blank input
+Blank ref followed by ref with content
 Block tag on both lines (<blockquote>)
 Block tag on both lines (<div>)
 Block tag on one line (<blockquote>)
 Block tag on one line (<div>)
 Block tag pre
 Bold conversion test
+Book Referencing attribute allowed with feature flag set
+Book Referencing attribute rejected by default
 Bracketed external links with template-generated invalid target
 Brackets in urls
 Break on | in element attribute in template
@@ -172,8 +195,10 @@ Broken link
 Broken link with fragment
 Broken templates
 Broken wikilinks (but not external links) prevent templates from closing
+Bug 13073 regression check: wrapped <references>
 Bug 19093: Default values don't fall through in switch
 Bug 22866: #ifexpr should evaluate "-0" as false
+Bug 31374 regression check: nested strip items
 Build table with pipe as data
 Build table with wikilink
 Build table with {{!}}
@@ -186,6 +211,9 @@ Case-sensitive magic words, when cased differently, should just be template tran
 Category / paragraph interactions
 Centre-aligned image
 Character reference normalization in link text (T3938)
+Check Cite handing of different types of whitespace in reference names
+Check Cite handing of linefeed whitespace in reference names
+CircularRef
 Comment in template title
 Comment on its own line post-expand
 Comment on its own line post-expand with non-significant whitespace
@@ -208,9 +236,11 @@ Compound transclusion with template and top level templatearg
 Confirm that 'apos' named character reference doesn't make it to output (not legal in HTML 4)
 Conflicting name="…" and follow="…" still invalid when a third parameter is present
 Confusing error
+Consecutive whitespace in custom link label message should not create empty []
 Content after <tr> like wikitext should get fully processed
 Corner case: french spaces in definition list
 Correct handling of <td>, <tr> (T8171)
+Counters should be cleared after processing named <references group="…">
 Custom class
 DIV IN UPPERCASE
 Decoding of HTML entities in embedded HTML tags
@@ -260,6 +290,7 @@ Definition lists: ignore colons inside tags
 Definition lists: self-closed tag
 Disable TOC
 Disabled subpages
+Disabling responsive references in the tag should remove the <div> wrapper
 Do not trim whitespace in HTML headings, list items, table captions, headings, and cells
 Do not trim whitespace in links and quotes
 Don't Allow tabindex > 0
@@ -271,6 +302,8 @@ Don't parse <nowiki><span class="error"></nowiki> (T149622)
 Double ISBN
 Double RFC
 Double RFC with a wiki link
+Double URL encoding in HTML5 mode
+Double URL encoding in legacy mode
 Double interlanguage link
 Double interlanguage link, with prefix links (T10897)
 Drop stripped tag markers, unless they have encapsulation info
@@ -290,12 +323,17 @@ Empty pre; pre inside other HTML tags (T56946)
 Empty table rows go away
 Empty tag w/ raw HTML ($wgRawHtml==true)
 Empty templates should be handled properly without being redlinked
+Enabling responsive references by default should add a <div> wrapper
+Enabling responsive references in the tag should add a <div> wrapper
 Ensure that HTML adoption agency algorithm is properly implemented.
 Ensure that transclusion titles are not url-decoded
 Entities in file name and attributes
+Entities in ref name
 Entities inside <nowiki>
 Entities inside <pre>
 Entities inside template parameters
+Erroneous refs
+Error conditions on non-visible content
 Escape HTML special chars in image alt text
 Escape HTML special chars in image alt text with LanguageConverter
 Escaping of interlanguage links (T129218, T156308)
@@ -305,6 +343,9 @@ Expansion of multi-line templates in attribute values (T8255)
 Explicitly specified timezone: America/New_York (UTC-5)
 Explicitly specified timezone: Europe/Paris (UTC+1)
 Explicitly specified timezone: UTC
+Extending a <ref> that doesn't appear in the text, but in <references>
+Extends <ref> defined in <references> called with #tag
+Extends parent <ref> defined in <references> called with #tag
 Extension tag in attribute value
 Extension tag in templated tag attribute
 External image
@@ -368,12 +409,14 @@ Extra new lines before and after lists are preserved
 Extra newlines between heading and content are swallowed (Parsoid does not)
 Extra newlines followed by heading
 Extra newlines: More paragraphs with indented comment
+FIXME: HTML5 fragment encoding
 Failing to transform badly formed HTML into correct XHTML
 File containing double quotes and spaces
 File containing single quotes
 File in link scenarios
 File with caption with pipe in extension tag attribute
 File with table in caption with extra table attribute spaces
+Forward-referenced ref with follow
 Fostered content in tables: Lists
 Fostered content in tables: Plain text
 Frameless image caption with a free URL
@@ -419,6 +462,8 @@ Gallery with valid attributes
 Gallery with wikitext incl bogus HTML tag (T237318)
 Gallery with wikitext inside caption
 Gallery with wikitext inside gallery caption
+Grouped references with automatic group references generating errors
+Grouped references with follow rendered in mixed order
 HHP2.1: Heuristics for headings in preprocessor parenthetical structures
 HHP2.2: Heuristics for headings in preprocessor parenthetical structures
 HTML Hex character encoding (spells the word "JavaScript")
@@ -556,10 +601,12 @@ Interlanguage link variations
 Interlanguage link with preceding local interwiki link (T70085)
 Interlanguage link with spacing
 Interlanguage link, with prefix links
+Interleaved extends groups
 Internal link with a namespace matching a local interwiki prefix (T228616)
 Internal link with ca linktrail, surrounded by bold apostrophes (T29473 primary issue)
 Internal link with ca linktrail, surrounded by italic apostrophes (T29473 primary issue)
 Internal link with en linktrail: no apostrophes (T29473)
+Intervening ref before extends
 Interwiki link encoding conversion (T3636)
 Interwiki link that could be a language link, if not for a local interwiki prefix (T292022)
 Interwiki link with colon escape after prefix
@@ -573,6 +620,9 @@ Invalid header with following text
 Invalid image attributes (T64500)
 Invalid text in table attributes should be discarded
 Isolated close tags should be treated as literal text (T54760)
+It should be impossible to roll back a follow="…", because it can't have a name
+It should be impossible to roll back a follow="…", because it must have a name
+It's not possible to follow="…" a <ref> defined in the <references> section
 Italicized possessive
 Italics and bold
 Italics and bold: 2-quote opening sequence: (2,2)
@@ -606,6 +656,7 @@ Langconvert tag: sr-el to sr-ec (should fail)
 Language converter over extlink
 Language converter tricky html2wt cases (2)
 Language parser function
+Legacy fragment encoding
 Less than in attribute position
 Link containing "#<" and "#>" % as a hex sequences- these are valid section anchors
 Link containing "#<" and "#>" % as a hex sequences- these are valid section anchors (legacy)
@@ -726,6 +777,13 @@ Multibyte character in padleft
 Multibyte character in padright
 Multiple colons escaping interlanguage links
 Multiple comments should still parse as SOL-transparent
+Multiple definition (inside <references/>)
+Multiple definition (inside {{#tag:references}})
+Multiple definition (mixed outside/inside)
+Multiple definition (outside <references/>)
+Multiple follow after refs without content and trailing ref with content in references section
+Multiple groups with extends
+Multiple groups with extends, duplicated names across groups
 Multiple lines without block tags
 Multiple list tags generated by templates
 Multiple local interwiki link prefixes
@@ -733,6 +791,8 @@ Multiple newlines after tables are converted to p-br-p tags
 Multiple newlines in between HTML list items don't induce paragraph wrapping
 Multiple spaces in titles should normalize to a single underscore
 Multiple tags in TOC
+Multiple, partly encoded spaces in HTML5 mode
+Multiple, partly encoded spaces in legacy mode
 Multiplication table
 Namespace -1 {{ns:-1}}
 Namespace 0 {{ns:00}} (T6783)
@@ -781,6 +841,7 @@ Non-word characters don't terminate tag names (T19663, T42670, T54022)
 None-aligned image
 Nonexistent special page link with fragment
 Nonexistent template
+Normal refs after extends
 Normalize empty paragraphs to HTML form that html2wt expects
 Nowiki and french spacing
 Nowiki markup in alt attribute (T206940)
@@ -789,7 +850,9 @@ Nowiki markup in link attribute (T206940)
 Nowiki markup in link attribute (edited html, no data-parsoid) (T206940)
 Nowiki with newlines in list
 Numbered list
+Numbers in the default group need to start with 1, independent from other groups
 Opera -o-link CSS
+Ordered lists directly following each other should not be merged
 Orphaned table row wikitext with templated table for an attribute should not duplicate table
 Out-of-order TOC heading levels
 P-wrapping non-breaking spaces
@@ -910,11 +973,26 @@ RAW magic word
 RFC code coverage
 RT-ed inter-element separators should be valid separators
 Redirected image
+Ref in ref: nested in top level ref
+Ref in ref: self-referential
+Ref in ref: top level ref nested in parser function
+Ref in ref: top level ref nested in transclusion
+Ref names containing a number
+Ref with content followed by blank ref
+Ref: 18. T58916: Extension attributes should be parsed as plain text
+Ref: 19. ref-tags with identical name encodings should get identical indexes
+Reference numbers exceeding 1000 do not have thousands separators
+Reference reuse numbers exceeding 1000 do not have thousands separators
+References: 3. ref list should be cleared after processing references
+References: 6. <references /> from a transclusion
+Regression sanity check: non-blank ref "1" followed by ref with content
 Regression with preformatted in <center>
+Regression: non-blank ref "0" followed by ref with content
 Relative subpage noslash link
 Render invalid page names as plain text (T53090)
 Render paragraphs when indent-pre is suppressed in blocklevels
 Replacing whitespace with tabs still doesn't break the list (gerrit 78327)
+Report bad attributes in reference tags
 Resolving duplicate section names
 Resolving duplicate section names with differing case (T12721)
 Right-aligned image
@@ -946,6 +1024,12 @@ Serialization of purely hash wikilink
 Serialize wikitext list items as HTML list items when embedded in a HTML list
 Serializing indent pre at sol
 Short headings with trailing space should match behavior of Parser::doHeadings (T21910)
+Similarly named refs with identical bodies
+Simple <ref>, no <references/>
+Simple <ref>, no <references/>, page ends in a list
+Simple <ref>, with <references/>
+Simple <ref>, with <references/> in group
+Simple <ref>, with <references/> in group, with groupname in Chinese
 Simple definition
 Simple image
 Simple image (using File: namespace, now canonical)
@@ -957,6 +1041,9 @@ Simple template
 Single {{!}} in table cell
 Single-comment whitespace lines dont break lists, and neither do multi-comment whitespace lines
 Single-line or multiline-comments can follow headings
+Smoke test for duplicated references with conflicting text
+Smoke test for duplicated references with the same text
+Smoke test for references that are reused *before* defined in <references>
 Space and question mark encoding in interlanguage links (T95473)
 Spacing of numbers in formatted dates
 Special characters in embedded file links (T29679)
@@ -978,10 +1065,17 @@ Subpage with namespaces
 T10293: Use of center tag ruins paragraph formatting
 T13748: Literal closing tags
 T153135: Unclosed markup in definition list (code coverage)
+T15673: <ref> with direction "LTR", keeps upper case
+T15673: <ref> with direction "ltr"
 T15673: <ref> with direction "nonsense" and "" (empty), strip invalid dir attribute and shows error
+T15673: <ref> with direction "rtl"
+T15673: Direction is supported when specifying name and group
 T17491: <ins>/<del> in blockquote
 T17491: <ins>/<del> in blockquote (2)
 T179544: {{anchorencode:}} output should be always usable in links
+T184912: Consistent normalization of consecutive underscores
+T196827: Ignore the dir parameter from the first use, which is not a full definition, and use the dir value from the full definition of a named ref tag
+T196827: Use the dir parameter only from the full definition of a named ref tag
 T198618: script element in ToC
 T199926: Hash only interwiki link
 T2002: [[page|http://url/]] should link to page, not http://url/
@@ -991,6 +1085,8 @@ T20784  Link to non-existent image page with caption should use caption as link 
 T21052 U+3000 IDEOGRAPHIC SPACE should terminate bracketed external links
 T21052 U+3000 IDEOGRAPHIC SPACE should terminate external images links
 T21052 U+3000 IDEOGRAPHIC SPACE should terminate free external links
+T220196 - Reference names with high-bit characters, html5 mode
+T220196 - Reference names with high-bit characters, legacy mode
 T2289: ">"-token in URL-tail
 T2289: ">"-token in bracketed URL
 T2289: literal ">"-token in URL-tail
@@ -1000,7 +1096,39 @@ T2289: literal double quote in bracketed URL
 T2337: Escaped self-links should be bold
 T2361: URL inside bracketed URL
 T2361: URL within URL, not bracketed
+T236256 - Base and book reference in different groups
+T236256 - Base in the unnamed default group
+T236256 - Can't be a follow up and a book reference the same time
+T236256 - Can't be a follow up and a book reference the same time, even when referencing 2 different bases
+T236256 - Can't extend a book reference (no nesting)
+T236256 - Can't extend a book reference (no nesting), specified in reverse order
+T236256 - Can't reuse a name for two book references
+T236256 - De-facto empty text for a book reference
+T236256 - Dont allow splitting a book reference for now
+T236256 - Empty text for a book reference
+T236256 - Everything in the same group
+T236256 - Extending a multi-part ref should be fine
+T236256 - Extending a reference that doesn't exist #1
+T236256 - Extending a reference that doesn't exist #2
+T236256 - Extending in the unnamed default group
+T236256 - Extending the same base multiple times is fine
+T236256 - Named reference without text
+T236256 - Naming book references is fine
+T236256 - No text for a book reference
+T236256 - Reference with the same name defined twice
+T239810: Extending a <ref> that doesn't appear in the text, but in {{#tag:references}}
+T240424 - Extended reference reused before defined in the <references> section
+T240424 - Subreference reused as normal ref before its full definition
+T241303: responsive attribute with an empty value should *not* disable the wrapper <div>
+T241303: responsive attribute with no value should *not* disable the wrapper <div>
+T242110: Bad extends attributes on reused sub-references should report an error
+T242110: Copy-pasted, named sub-references should appear in proper order
+T242110: Copy-pasted, named sub-references should be merged and not mess with the numbering
+T242110: Reused sub-references should be merged and not mess with the numbering
 T242437 - Blank ref name in #tag regression
+T242437 - Nested references edge case, inner tag function with LDR
+T242437 - Nested references edge case, outer tag function with LDR
+T242437 - Nested references edge case, outer tag function, inner LDR
 T24297: safesubst: works during normal parse
 T24905: <abbr> followed by ISBN followed by </a>
 T2499: Alt text should have &#1234;, not &amp;1234;
@@ -1020,6 +1148,8 @@ T2648: Frameless image caption with an interwiki link
 T2787: Links with one slash after the url protocol are invalid
 T28375: TOC with bold
 T28375: TOC with italics
+T29694 - [] in reference names in HTML5 fragment mode
+T29694 - [] in reference names in HTML5 fragment mode (tidied)
 T3186 news: in the middle of text
 T3219 URL next to image (broken)
 T3219 URL next to image (good)
@@ -1056,6 +1186,7 @@ T4304: HTML attribute safety (unsafe parameter; 2309)
 T4304: HTML attribute safety (web link)
 T45661: Piped links with identical prefixes
 T4702: Mismatched <i>, <b> and <a> tags are invalid
+T48140 - Make sure rollback/redo does not consume numbers
 T5090: External links other than http: in image captions
 T5158: Test for French spaces in attributes
 T51672: Test for brackets in attributes of elements in external link texts
@@ -1278,9 +1409,12 @@ Using {{!}} in template arguments, part 2 (T290526)
 Using {{!}} in wikilinks (T290526)
 Using {{=}} when it expands to "=" should not create a tracking category
 Using {{Template:=}} doesn't invoke the parser function
+Valid follow="…" after it's parent
 Valid parameters become invalid when a third is present
 Various link types in alt and link options
+Verify invalid use of a numeric character in a ref name
 Verify invalid use of a numeric character in a ref name and follow
+Whitespace only doesn't set content for named ref
 Width + Height sized image (using px) (height is ignored)
 Width-sized image (using px, no following whitespace)
 Width-sized image (using px, with following whitespace - test regression from r39467)
@@ -1340,4 +1474,5 @@ unclosed internal link XSS (T137264)
 {{!}} is a magic word
 {{#ifexist:}} media redirect (bug 32031)
 {{#ifexist}}
+{{REVISIONID}} on page with <ref> (bug 6299)
 {{REVISIONID}} on page without <ref> (bug 6299 sanity check)

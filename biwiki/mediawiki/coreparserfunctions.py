@@ -12,6 +12,9 @@
 # functions; English only; no database: page revisions, site statistics, category counts, restrictions and files
 # come from optional parser attributes (see "Parser interface" below), and are empty by default, as for MediaWiki's
 # parser tests with an empty database; no hooks, user preferences or language variants.
+# Changed by a3ref contributors on 2026-10-30: anchorencode() does not turn "&#95;" back into "_" (a later backport
+# for T407131), as in 1.39.0; formatNum() was checked against 1.39.0's Language.php (it builds a NumberFormatter per
+# call instead of caching one, which gives the same English output).
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -2010,9 +2013,7 @@ def padright(parser, string: str = "", length: Any = 0, padding: str = "0") -> s
 def anchorencode(parser, text: str = "") -> str:
     text = parser.kill_markers(text)
     section = guess_section_name_from_wiki_text(parser, text)[1:]
-    encoded_section = safe_encode_attribute(section, config=parser.config)
-    # decode underscores to avoid breaking templates (T407131)
-    return encoded_section.replace("&#95;", "_")
+    return safe_encode_attribute(section, config=parser.config)
 
 
 def special(parser, text: str = "") -> str:

@@ -103,7 +103,8 @@ A Python port of the MediaWiki 1.39 parser is being written, so pages render as 
 - **License: GPL-2.0-or-later**, as MediaWiki; the rest of the repository is MIT (see `LICENSE`). Code translated
   or adapted from MediaWiki goes into `biwiki/mediawiki/` only, never into MIT files, with the header given in
   its README (origin file, "(C) MediaWiki contributors", what was changed and when).
-- Port from MediaWiki branch `REL1_39` (commit `19ddcf0`), file by file, keeping names and comments so it can be
+- Port from MediaWiki tag `1.39.0` (commit `c95fc47`), the release the wiki runs, not from later `REL1_39`
+  commits, file by file, keeping names and comments so it can be
   compared with the PHP.
 - `python -m biwiki.mediawiki.parsertests` runs MediaWiki's parser tests (`tests/mediawiki/parserTests.txt`);
   after a step that makes more of them pass, `--accept` and commit `tests/mediawiki/passing.txt`.

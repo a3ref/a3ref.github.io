@@ -5,6 +5,10 @@
 # module-level functions and MediaWiki's configuration globals a ``config`` argument (config.py); PHP's byte-string and
 # PCRE behaviour is reproduced where Python's differs (see the comments); removeSomeTags() and stripAllTags() run
 # on Python's html.parser instead of RemexHtml (an approximation until Remex is ported); hooks are not run.
+# Changed by a3ref contributors on 2026-10-30: data-* attributes match '/^data-[^:]*$/i', safeEncodeAttribute()
+# escapes "__" as "&#95;_" (not every "_" and "＿"), no escapeCombiningChar() and normalizeWhitespace() /
+# normalizeSectionNameWhitespace() without the preg_replace() null check (later backports for T407131 and
+# T387130), as in 1.39.0.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -467,9 +471,8 @@ def validate_tag_attributes(attribs: Mapping[str, str], element: str, *, config:
     return validate_attributes(attribs, attributes_allowed_internal(element), config=config)
 
 
-# PHP: '|^data-[^:= \t\r\n/>\0_＿]*$|i' without /u, so the class holds the three bytes of '＿' (EF BC BF) one by
-# one: any character whose UTF-8 form contains one of them is refused too. Matched on the UTF-8 bytes to keep that.
-_DATA_ATTRIBUTE = re.compile(b"^data-[^:= \\t\\r\\n/>\\x00_\\xef\\xbc\\xbf]*$", re.I)
+# PHP: '/^data-[^:]*$/i' (without /u; only ASCII ':' is excluded, so code points and bytes give the same result).
+_DATA_ATTRIBUTE = re.compile(r"^data-[^:]*$", re.I | re.ASCII)
 
 
 def validate_attributes(attribs: Mapping[str, str], allowed: Union[Mapping[str, Any], Iterable[str]], *,
@@ -506,12 +509,7 @@ def validate_attributes(attribs: Mapping[str, str], allowed: Union[Mapping[str, 
         # * Disallow data attributes used by MediaWiki code
         # * Ensure that the attribute is not namespaced by banning
         #   colons.
-        # * Ensure attribute name will be accepted by the HTML
-        #   parser; see
-        #   https://github.com/whatwg/dom/issues/849#issuecomment-1007541209
-        # * Underscore and double-wide underscore (U+FF3F) is disallowed
-        #   here (but not in Parsoid): T407131
-        if ((not _DATA_ATTRIBUTE.search(attribute.encode("utf-8", "surrogatepass"))
+        if ((not _DATA_ATTRIBUTE.search(attribute)
              and attribute not in allowed) or is_reserved_data_attribute(attribute)):
             continue
 
@@ -794,8 +792,7 @@ def safe_encode_attribute(text: str, *, config: Config = DEFAULT) -> str:
         "RFC": "&#82;FC",
         "PMID": "&#80;MID",
         "|": "&#124;",
-        "_": "&#95;",
-        "＿": "&#xFF3F;",  # Japanese magic words
+        "__": "&#95;_",
     })
 
     # Stupid hack
@@ -938,12 +935,6 @@ def escape_class(class_: str) -> str:
     return class_.rstrip("_")
 
 
-def escape_combining_char(html: str) -> str:
-    return php_strtr(html, {
-        "̸": "&#x338;",  # T387130
-    })
-
-
 def escape_html_allow_entities(html: str) -> str:
     """Given HTML input, escape with htmlspecialchars but un-escape entities. This allows (generally harmless)
     entities like &#160; to survive."""
@@ -952,7 +943,7 @@ def escape_html_allow_entities(html: str) -> str:
     # hurt. Use ENT_SUBSTITUTE so that incorrectly truncated multibyte characters
     # don't cause the entire string to disappear.
     html = _htmlspecialchars(html, quotes=True)
-    return escape_combining_char(html)
+    return html
 
 
 # --- Decoding attributes -------------------------------------------------------------------------------------------
@@ -1015,15 +1006,16 @@ def _get_tag_attribute_callback(set_: re.Match[str]) -> str:
 
 
 def _normalize_whitespace(text: str) -> str:
-    normalized = re.sub(r"[ \r\n\t]+", " ", text)
-    return _php_trim(normalized)
+    return _php_trim(re.sub(
+        r"(?:\r\n|[\x20\x0d\x0a\x09])+",
+        " ",
+        text))
 
 
 def normalize_section_name_whitespace(section: str) -> str:
     """Normalizes whitespace in a section name, such as might be returned by Parser::stripSectionName(), for use in
     the id's that are used for section links."""
-    normalized = re.sub(r"[ _]+", " ", section)
-    return _php_trim(normalized)
+    return _php_trim(re.sub(r"[ _]+", " ", section))
 
 
 # --- Character references ------------------------------------------------------------------------------------------

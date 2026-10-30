@@ -5,8 +5,10 @@ Bohemia Interactive Community Wiki runs, so that a3ref renders wiki pages the wa
 
 ## Origin
 
-- Source: MediaWiki, branch `REL1_39`, commit `19ddcf09181a8b7d2837b4c99e11184c53047697`
-  (<https://github.com/wikimedia/mediawiki/tree/REL1_39>), mainly `includes/parser/` and `tests/parser/`.
+- Source: MediaWiki, tag `1.39.0` (commit `c95fc4786beba034fa643062b98a60ccbde831fd`), the release the wiki runs
+  (<https://github.com/wikimedia/mediawiki/tree/1.39.0>), mainly `includes/parser/` and `tests/parser/`. The port
+  was begun from branch `REL1_39` at commit `19ddcf0` (1.39.17); the fixes backported there after 1.39.0 were taken
+  out again on 2026-10-30.
 - Copyright (C) MediaWiki contributors; see <https://www.mediawiki.org/wiki/Special:Version/Credits>.
 - Port: Copyright (C) 2026 a3ref contributors.
 
@@ -51,7 +53,7 @@ Ported (with tests): doQuotes, BlockLevelPass, StripState, magic words, Sanitize
 Title/MediaWikiTitleCodec, namespaces and interwikis (Site, with the BI wiki's own settings in `biki_siteinfo.json`).
 
 In progress: the template half of Parser.php and CoreTagHooks; CoreParserFunctions and CoreMagicVariables; internal
-links, LinkHolderArray and LinkRenderer; RemexHtml 3.0.3 (MIT, `remex/`) and MediaWiki's tidy layer.
+links, LinkHolderArray and LinkRenderer; RemexHtml 3.0.2 (MIT, `remex/`) and MediaWiki's tidy layer.
 
 Still to do: finalizeHeadings/formatHeadings (TOC, edit-section links, ParserOutput::getText), images and galleries
 (Parser::makeImage, Linker::makeImageLink, File), then the wiki's extensions: ParserFunctions (incl. string

@@ -145,9 +145,9 @@ class HtmlTagsTest(unittest.TestCase):
 
 class AttributesTest(unittest.TestCase):
     def test_fix_tag_attributes(self):
-        self.assertEqual(' class="a" style="color:red" id="b&#95;c"',
+        self.assertEqual(' class="a" style="color:red" id="b_c"',
                          s.fix_tag_attributes(' class="a" style="color:red" onclick="x" id="b c"', "td"))
-        self.assertEqual(' class="a" id="b&#95;c" style="color:red"',
+        self.assertEqual(' class="a" id="b_c" style="color:red"',
                          s.fix_tag_attributes(' class="a" style="color:red" onclick="x" id="b c"', "td", sorted=True))
         self.assertEqual("", s.fix_tag_attributes("  ", "td"))
         self.assertEqual(' id="b.21c"', s.fix_tag_attributes(' id="b&#33;c"', "td",
@@ -168,7 +168,8 @@ class AttributesTest(unittest.TestCase):
                          s.safe_encode_attribute("{{x}} [[y]] | ISBN http://z ''"))
         self.assertEqual("a&#10;b&#9;&lt;&quot;", s.safe_encode_attribute('a\nb\t<"'))
         self.assertEqual("HTTP&#58;//x", s.safe_encode_attribute("HTTP://x"))
-        self.assertEqual("&#95;&#xFF3F;", s.safe_encode_attribute("_＿"))
+        # only "__" is escaped (double-underscore magic words); single "_" and "＿" stay
+        self.assertEqual("_＿ &#95;_ &#95;__", s.safe_encode_attribute("_＿ __ ___"))
 
     def test_validate_tag_attributes(self):
         cases = [
@@ -185,12 +186,12 @@ class AttributesTest(unittest.TestCase):
                  "DATA-mw": "disallow impersonating PARSOID",
                  "data-mw-extension": "disallow impersonating extension",
                  "data-:namespaced": "disallow namespace",
-                 "data- invalid": "disallow XSS",
-                 "data-/invalid": "disallow XSS",
-                 "data->invalid": "disallow XSS",
-                 "data-=invalid": "disallow XSS",
+                 # 1.39.0 refuses only colons; the HTML parser check came later
+                 "data- invalid": "allowed in 1.39.0",
+                 "data-/invalid": "allowed in 1.39.0",
              },
-             {"data-wikitext": "wikitext", "DATA-WIKITEXT-2": "WIKITEXT-2", "data-wikitext-ĳ": "wikitext-Ĳ"}),
+             {"data-wikitext": "wikitext", "DATA-WIKITEXT-2": "WIKITEXT-2", "data-wikitext-ĳ": "wikitext-Ĳ",
+              "data- invalid": "allowed in 1.39.0", "data-/invalid": "allowed in 1.39.0"}),
         ]
         for element, attribs, expected in cases:
             with self.subTest(element=element, attribs=attribs):
@@ -215,11 +216,11 @@ class AttributesTest(unittest.TestCase):
         # a deprecated sequential list of names still works
         self.assertEqual({"title": "t"}, s.validate_attributes({"title": "t", "x": "y"}, ["title"]))
 
-    def test_data_attribute_bytes(self):
-        # PHP's byte regex refuses the bytes of U+FF3F (EF BC BF) one by one: "ü" is C3 BC
-        self.assertEqual({}, s.validate_attributes({"data-ü": "x"}, {}))
-        self.assertEqual({"data-é": "x"}, s.validate_attributes({"data-é": "x"}, {}))
-        self.assertEqual({}, s.validate_attributes({"data-a_b": "x"}, {}))
+    def test_data_attribute_names(self):
+        # '/^data-[^:]*$/i': anything but a colon, underscores included (T407131's restriction is not in 1.39.0)
+        self.assertEqual({"data-ü": "x"}, s.validate_attributes({"data-ü": "x"}, {}))
+        self.assertEqual({"data-a_b": "x"}, s.validate_attributes({"data-a_b": "x"}, {}))
+        self.assertEqual({}, s.validate_attributes({"data-a:b": "x"}, {}))
 
     def test_attributes_allowed_internal(self):
         cases = [
@@ -465,8 +466,9 @@ class CharReferencesTest(unittest.TestCase):
             ("a¡b", "a&#161;b"),
             ("foo&#039;bar", "foo'bar"),
             ("&lt;script&gt;foo&lt;/script&gt;", "<script>foo</script>"),
-            ("&#x338;", "̸"),
-            ("&#x338;", "&#x338;"),
+            # no U+0338 escape in 1.39.0 (T387130 came later)
+            ("̸", "̸"),
+            ("̸", "&#x338;"),
         ]
         for expected, html in cases:
             with self.subTest(html):
