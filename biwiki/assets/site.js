@@ -178,6 +178,9 @@
     setBranch(only[1], true);
     lone = only[2];
   }
+  // the list of the entries shown at first; following the reader opens only their branches, one level deeper,
+  // as the wiki's contents do (deeper levels open by their own toggles)
+  var topList = lone;
   // The toggles of the entry being read and of the entries holding it, innermost first.
   function branchesOf(a) {
     var out = [];
@@ -186,10 +189,10 @@
     }
     return out;
   }
-  // Open the branches holding the section being read (and its own subsections); fold again those this opened
-  // earlier and the reader has left.
+  // Open the top entry's branch holding the section being read; fold again those this opened earlier and the
+  // reader has left.
   function follow(a) {
-    var want = a ? branchesOf(a) : [], k;
+    var want = (a ? branchesOf(a) : []).filter(function (b) { return b.parentNode.parentNode === topList; }), k;
     for (k = opened.length - 1; k >= 0; k--) {
       if (want.indexOf(opened[k]) < 0) { setBranch(opened[k], false); opened.splice(k, 1); }
     }
