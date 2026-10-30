@@ -7,7 +7,7 @@
 # option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY
 # WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details: biwiki/mediawiki/COPYING.
-"""Parser extensions (ParserFunctions, Cite, SyntaxHighlight) and their registration.
+"""Parser extensions (ParserFunctions, Cite, SyntaxHighlight and the BI wiki's own tags) and their registration.
 
 ``Parser(extensions={"ParserFunctions", "Cite", "SyntaxHighlight"})`` registers them on its first parse; their settings ($wgPF...,
 $wgCite...) are fields of the parser's Config (biwiki.mediawiki.config).
@@ -35,11 +35,26 @@ def _register_syntax_highlight(parser) -> None:
     syntaxhighlight.register(parser)
 
 
+def _register_enforce_highlighter(parser) -> None:
+    from . import enforcehighlighter
+
+    enforcehighlighter.register(parser)
+
+
+def _register_spoiler(parser) -> None:
+    from . import spoiler
+
+    spoiler.register(parser)
+
+
 # extension name (as in its extension.json) -> its ParserFirstCallInit handler
 EXTENSIONS: dict[str, Callable] = {
     "ParserFunctions": _register_parser_functions,
     "Cite": _register_cite,
     "SyntaxHighlight": _register_syntax_highlight,
+    # Bohemia Interactive's own, written after the wiki's HTML
+    "EnforceScriptHighlighter": _register_enforce_highlighter,
+    "BIKISpoiler": _register_spoiler,
 }
 
 
