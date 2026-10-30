@@ -30,8 +30,9 @@ BLOCK_TAGS = {"address", "article", "aside", "blockquote", "center", "dd", "div"
 # never shown: interface widgets, the table of contents, images and galleries, edit links, the reference list
 # (its notes are inlined where they are cited)
 SKIP_TAGS = {"button", "img", "input", "mw:editsection", "noscript", "script", "style", "audio", "video", "map"}
+# "metadata": {{Wiki|stub}}'s notice, whose "expanding it" link is the wiki's edit form (Renderer drops it too)
 SKIP_CLASSES = {"toc", "toc-side", "mw-references-wrap", "references", "thumb", "gallery", "mw-editsection",
-                "bikispoiler-top", "catlinks", "printfooter", "mw-empty-elt"}
+                "bikispoiler-top", "catlinks", "printfooter", "mw-empty-elt", "metadata"}
 INLINE_CODE_TAGS = {"code", "tt", "var", "samp"}
 FILE_PREFIXES = ("file:", "image:", "media:")
 # captions of images that stand for a symbol: {{Icon|checked}} in the comparison tables
@@ -44,7 +45,11 @@ BR = "\ue010"  # <br>, resolved when a paragraph is finished
 _SLOT = re.compile("\ue011(\\d+)\ue012")  # finished blocks inside inline content (a <div> in a <span>)
 _CODE_SLOT = re.compile("\ue013(\\d+)\ue014")  # inline code, kept away from the text passes
 _STAR = "\ue015"  # emphasis mark, a "*" only once the paragraph's text has been escaped
-_LINE_MARK = re.compile(r"(?m)^([ \t]*)([*+-](?=[ \t])|#{1,6}(?=[ \t]|$)|>|\d{1,9}[.)](?=[ \t]|$))")
+_LINE_MARK = re.compile(r"([ \t]*)([*+-](?=[ \t])|#{1,6}(?=[ \t]|$)|>|\d{1,9}[.)](?=[ \t]|$))")
+# MediaWiki's French spacing (Sanitizer::armorFrenchSpaces): a space before "?:;!%»›" or after "«‹" turned into
+# &#160;, which the port writes for &nbsp; and a literal U+00A0 too. The wiki text has a plain space there.
+_FRENCH_NBSP = re.compile(" (?=[?:;!%»›](?!\\w))|(?<=[«‹]) ")
+_GVI_CATEGORY = re.compile(r"Category:Introduced with (.+?) version")
 _NOTE_ID = re.compile(r"usernote(\d{12,14})")
 # {{Wiki|placeholder}}, {{Wiki|TODO}} ...: maintenance message boxes, told apart by the colours Template:Wiki
 # gives Template:Messagebox; they carry no reference content (Renderer drops {{Wiki}} too)
@@ -245,6 +250,11 @@ class HtmlMarkdown:
         if tag == "hr":
             return ["---"]
         if tag == "pre":
+            # an unclosed <pre> ("|descr= <pre>" on placeholder function pages) is literal text to the preprocessor
+            # but an HTML tag to the sanitizer, so the wiki wraps the rest, message boxes included, in a <pre>:
+            # it shows them as boxes, not as code
+            if el.find(lambda e: e.tag in ("div", "table", "p", "ul", "ol", "dl")):
+                return self._flow(el.children)
             if not self.preformat:
                 return self._paragraphs("".join(self._text(c) if isinstance(c, str) else self._inline(c)
                                                 for c in el.children).replace("\n", BR))
@@ -297,15 +307,34 @@ class HtmlMarkdown:
             part = re.sub(f"{BR}[ \t]*\n?[ \t]*", "\\\\\n" if self._hard else "\n", part).strip(" \t\n")
             if not part:
                 continue
-            if self._hard:  # nothing in a paragraph starts a list, heading or quote; "![" is no image
-                part = _LINE_MARK.sub(lambda m: m.group(1) + (re.sub(r"[.)]", r"\\\g<0>", m.group(2))
-                                                              if m.group(2)[0].isdigit() else "\\" + m.group(2)),
-                                      part)
+            if self._hard:
+                part = self._escape_marks(part)
             if not self.plain_mode:
                 part = part.replace("![", "\\![")
             part = part.replace(_STAR, "*")
             out.append(_CODE_SLOT.sub(lambda m: self._codes[int(m.group(1))], part))
         return out
+
+    @staticmethod
+    def _escape_marks(part: str) -> str:
+        """Escape the line starts that would change what a paragraph means in Markdown.
+        The first line keeps a list mark, as Renderer does ("1. Navigate to ..." written as text reads as the
+        list it is meant to be), but not a heading or quote mark. A later line (after a hard break or a source
+        line break) keeps the marks that cannot interrupt a paragraph: an ordered item other than "1."."""
+        lines = part.split("\n")
+        for i, ln in enumerate(lines):
+            m = _LINE_MARK.match(ln)
+            if not m:
+                continue
+            mark = m.group(2)
+            if i == 0:
+                escape = mark[0] in "#>"
+            else:
+                escape = not mark[0].isdigit() or re.fullmatch(r"0*1[.)]", mark) is not None
+            if escape:
+                mark = re.sub(r"[.)]", r"\\\g<0>", mark) if mark[0].isdigit() else "\\" + mark
+                lines[i] = m.group(1) + mark + ln[m.end():]
+        return "\n".join(lines)
 
     def _line(self, nodes) -> str:
         """Inline content as one line (headings, table titles)."""
@@ -328,7 +357,7 @@ class HtmlMarkdown:
         code = code.strip("\n").rstrip()
         if not code.strip():
             return []
-        code = code.replace("\t", "    ")
+        code = code.replace("\t", "    ").replace(" ", " ")  # code is copied: no non-breaking spaces
         if self._in_cell and "\n" not in code:  # a fence cannot live in a table cell; one line reads as code
             return [_inline_code(code)]
         fence = "````" if "```" in code else "```"
@@ -379,8 +408,20 @@ class HtmlMarkdown:
         out: list[str] = []
         kids = [c for c in el.children if isinstance(c, Element) and not self._skip(c)]
         i = 0
+        dd_line = False  # out[-1] is a one-line ": text" indentation, which the next one continues
         while i < len(kids):
             c = kids[i]
+            if c.tag == "dd":  # ": text" lines read as consecutive lines of one paragraph, as Renderer writes them
+                body = self._flow(c.children)
+                simple = len(body) == 1 and "\n\n" not in body[0] and not re.match(r"(?:[-*+] |\d+[.)] |```|\||>)", body[0])
+                if simple and dd_line:
+                    out[-1] += "\n" + body[0]
+                else:
+                    out += body
+                dd_line = simple
+                i += 1
+                continue
+            dd_line = False
             if c.tag == "dt":
                 term = self._line(c.children)
                 nxt = kids[i + 1] if i + 1 < len(kids) and kids[i + 1].tag == "dd" else None
@@ -483,16 +524,20 @@ class HtmlMarkdown:
         return out
 
     def _arg_title(self, el: Element) -> Optional[list[str]]:
-        """{{ArgTitle|3|Name|{{GVI|arma3|1.00}}}}: a game version beside a heading -> "Name (Arma 3 v1.00)"."""
+        """{{ArgTitle|3|Name|left|right}}: a <div> with the heading between a "left" and a "right" <div>, e.g.
+        {{GVI|arma3|1.00}} -> "Name (Arma 3 v1.00)". As Renderer does, only "left" goes into the heading, in
+        parentheses, and "right" is dropped: topic sections and their anchors come from these headings."""
+        kids = el.elements()
         heads = el.find(lambda e: re.fullmatch(r"h[1-6]", e.tag) is not None)
-        if len(heads) != 1:
+        if len(heads) != 1 or len(kids) > 3:
             return None
-        gvis = el.find(lambda e: "gvi2" in e.classes)
-        if not gvis:
+        head = heads[0]
+        at = next((i for i, k in enumerate(kids) if k is head or head in k.elements()), None)
+        if at is None:
             return None
-        title = self._line(heads[0].children)
-        versions = ", ".join(self._gvi(g) for g in gvis)
-        return self._heading(int(heads[0].tag[1]), f"{title} ({versions})" if title else "")
+        title = self._line(head.children)
+        left = self._line([c for k in kids[:at] for c in k.children])
+        return self._heading(int(head.tag[1]), f"{title} ({left})" if title and left else title)
 
     def _note(self, el: Element) -> list[str]:
         """A user note ({{Note}}): author, date, text -> "> **Author** (2020-01-01):" and the text."""
@@ -513,13 +558,21 @@ class HtmlMarkdown:
     def _gvi(self, el: Element) -> str:
         """{{GVI|arma3|2.00}}: class "gvi2 gvi-arma3" and a "version" span -> "Arma 3 v2.00"."""
         game = next((c[len("gvi-"):] for c in el.attrs.get("class", "").split() if c.startswith("gvi-")), "")
-        version = next((v.text().strip() for v in el.find(lambda e: "version" in e.classes)), "")
+        versions = el.find(lambda e: "version" in e.classes)
+        version = next((v.text().strip() for v in versions), "")
         name = game_name(game)
+        # {{GVI|arma0|1.85}} has the class gvi-ofp; its category link names the game ("Arma: Cold War Assault")
+        for a in (a for v in versions for a in v.find(lambda e: e.tag == "a")):
+            m = _GVI_CATEGORY.match(a.attrs.get("title", ""))
+            if m and m.group(1) in GAME_NAMES.values():
+                name = m.group(1)
+                break
         return f"{name} v{version}" if version else name
 
     # ---- inline -----------------------------------------------------------------------------
 
     def _text(self, s: str) -> str:
+        s = _FRENCH_NBSP.sub(" ", s)
         # a backslash of the wiki text ("P:\") is literal; Markdown would read it as an escape or a line break
         if self.hard_breaks and self.emphasis:
             s = _MD_BACKSLASH.sub(r"\\\\", s)
@@ -530,7 +583,7 @@ class HtmlMarkdown:
                        for c in el.children)
 
     def _code(self, code: str) -> str:
-        md = _inline_code(code)
+        md = _inline_code(code.replace(" ", " "))  # code is copied: no non-breaking spaces
         if not md:
             return ""
         self._codes.append(md)

@@ -32,8 +32,14 @@ class TextTest(unittest.TestCase):
         # "![" is no image; a backslash of the text is literal
         self.assertEqual(md('<p>!<a href="/wiki/setPos">alive</a> P:\\ dir\\*</p>'),
                          "\\![alive](../commands/setPos.md) P:\\ dir\\\\*")
-        # a paragraph's line never starts a list, heading or numbered item
-        self.assertEqual(md("<p>1. one<br />\n- two<br />\n# three</p>"), "1\\. one\\\n\\- two\\\n\\# three")
+        # a later line of a paragraph never starts a list, heading or quote
+        self.assertEqual(md("<p>a<br />\n1. one<br />\n- two<br />\n# three<br />\n&gt; q</p>"),
+                         "a\\\n1\\. one\\\n\\- two\\\n\\# three\\\n\\> q")
+        # only "1." can interrupt a paragraph: "2." needs no escape
+        self.assertEqual(md("<p>1) one<br />\n2) two<br />\n10. ten</p>"), "1) one\\\n2) two\\\n10. ten")
+        # the first line keeps a list mark, as Renderer does, but not a heading or quote mark
+        self.assertEqual(md("<p>- item</p><p># no heading</p><p>&gt; no quote</p>"),
+                         "- item\n\n\\# no heading\n\n\\> no quote")
 
     def test_breaks(self):
         self.assertEqual(md("<p>a<br />\nb<br /></p>"), "a\\\nb")
@@ -48,6 +54,15 @@ class TextTest(unittest.TestCase):
 
     def test_nbsp_kept(self):
         self.assertEqual(md("<p>a&#160;b</p>"), "a\xa0b")
+
+    def test_french_spacing(self):
+        # MediaWiki's &#160; before "!?:;%»" and after "«" is a plain space of the wiki text
+        self.assertEqual(md("<p>Go&#160;! a&#160;: b&#160;:c 5&#160;% «&#160;q&#160;» 8&#160;+&#160;1</p>"),
+                         "Go ! a : b\xa0:c 5 % « q » 8\xa0+\xa01")
+        self.assertEqual(html_to_plain("<p>why&#160;?</p>"), "why ?")
+        # code has no non-breaking spaces at all
+        self.assertEqual(md('<p><code>a&#160;;</code></p><div class="sqfhighlighter-block">hint "a&#160;!"; x&#160;=1;'
+                            '</div><pre>pre&#160;?\n</pre>'), '`a ;`\n\n```sqf\nhint "a !"; x =1;\n```\n\n```\npre ?\n```')
 
 
 class LinkTest(unittest.TestCase):
@@ -125,6 +140,10 @@ class BlockTest(unittest.TestCase):
                          "**Type:** String\n\n**Author:** BI")
         self.assertEqual(md("<dl><dt>Boundary cases</dt><dd></dd></dl>"), "**Boundary cases**")
         self.assertEqual(md("<p>text</p><dl><dd>indented</dd></dl>"), "text\n\nindented")
+        # ": a" lines are lines of one paragraph, as Renderer writes them; a block ends the run
+        self.assertEqual(md("<dl><dd>one</dd><dd>two <b>2</b></dd><dd><ul><li>x</li></ul></dd><dd>three</dd>"
+                            "<dt>T</dt><dd>d</dd><dd>four</dd></dl>"),
+                         "one\ntwo **2**\n\n- x\n\nthree\n\n**T:** d\n\nfour")
 
     def test_blockquote_and_rule(self):
         self.assertEqual(md("<blockquote><p>quoted</p></blockquote><hr />"), "> quoted\n\n---")
@@ -248,6 +267,17 @@ class TemplateTest(unittest.TestCase):
                             '<div>Placeholder</div></div>'), "")
         self.assertEqual(md('<div class="biki-messagebox" style="background-color:#AAB8C6"><div>QGIS</div>'
                             '<div>Tip</div></div>'), "> Tip")
+        # {{Wiki|stub}}: its link is the wiki's edit form, which Markdown must not link to
+        self.assertEqual(md('<div class="notice metadata" id="stub"><i>This article is a <a href="/wiki/Category:Stubs">'
+                            'Stub</a>. You can help by <span class="plainlinks"><a class="external text" href="https://'
+                            'community.bistudio.com/wiki?title=X&amp;action=edit">expanding it</a></span>.</i></div>'
+                            '<p>text</p>'), "text")
+        # an unclosed <pre> before the boxes (placeholder function pages): the wiki shows boxes, not code
+        self.assertEqual(md('<pre><div class="biki-messagebox" style="background-color:DarkGray"><div>🏗</div><div>'
+                            'Placeholder</div></div> <div class="biki-messagebox feature-arma3contact"><div><a href="'
+                            '/wiki/Arma_3_Contact"><img alt="enoch icon ca.png" /></a></div><div>This content is '
+                            'exclusive to the Arma 3 Contact Expansion.</div></div></pre>'),
+                         "> [!NOTE]\n> This content is exclusive to the Arma 3 Contact Expansion.")
 
     def test_game_versions(self):
         gvi = ('<span class="gvi2 gvi-arma3 gvi-alpha" style="font-size: 10px"><span class="icon"><a href="/wiki/'
@@ -255,12 +285,28 @@ class TemplateTest(unittest.TestCase):
                'action=edit&amp;redlink=1" class="new"> 1.00</a></span></span>')
         self.assertEqual(md(f"<p>{gvi} text <span class=\"gvi2 gvi-arma2oa\"></span></p>"),
                          "Arma 3 v1.00 text Arma 2: Operation Arrowhead")
+        # {{GVI|arma0|1.85}} has the class gvi-ofp: the game comes from its category
+        cwa = ('<span class="gvi2 gvi-ofp"><span class="version"><a href="/wiki?title=Category:Introduced_with_Arma:'
+               '_Cold_War_Assault_version_1.85&amp;action=edit&amp;redlink=1" class="new" title="Category:Introduced '
+               'with Arma: Cold War Assault version 1.85 (page does not exist)"> 1.85</a></span></span>')
+        self.assertEqual(md(f"<p>{cwa}</p>"), "Arma: Cold War Assault v1.85")
 
     def test_arg_title(self):
         self.assertEqual(md('<div style="display: flex; align-items: baseline"><div><span class="gvi2 gvi-arma3">'
                             '<span class="version"> 1.00</span></span></div><div style="flex-grow: 1">\n'
                             '<h3><span class="mw-headline" id="AnimChanged">AnimChanged</span></h3>\n</div></div>'),
                          "#### AnimChanged (Arma 3 v1.00)")
+        # {{ArgTitle|3|Modules||{{GVI|...}}}}: what is right of the title stays out of it, as with Renderer
+        self.assertEqual(md('<div style="display: flex; align-items: baseline"><div style="flex-grow: 1">\n'
+                            '<h3><span class="mw-headline" id="Modules">Modules</span></h3>\n</div>'
+                            '<div style="margin-left: 0.5em">\n<p><span class="gvi2 gvi-arma2"><span class="version">'
+                            ' 1.00</span></span>\n<span class="gvi2 gvi-tkoh"></span>\n</p></div></div><p>Text</p>'),
+                         "#### Modules\n\nText")
+        # several versions on the left: as the wiki text separates them
+        self.assertEqual(md('<div style="display: flex"><div style="margin-right: 0.5em"><span class="gvi2 gvi-tkoh">'
+                            '<span class="version">1.00</span></span>\n<span class="gvi2 gvi-arma3"><span class="version">'
+                            '1.00</span></span></div><div style="flex-grow: 1">\n<h2>Scripting</h2>\n</div></div>'),
+                         "### Scripting (Take On Helicopters v1.00 Arma 3 v1.00)")
 
     def test_icons_and_marks(self):
         self.assertEqual(md('<p><a href="/wiki/Multiplayer_Scripting#Locality"><span class="icon2" '

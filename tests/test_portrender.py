@@ -68,6 +68,14 @@ class PortRendererTest(unittest.TestCase):
         r.md("{{NoSuchTemplate}}")
         self.assertEqual(r.unknown, {"template:NoSuchTemplate": 1})
 
+    def test_unclosed_pre(self):
+        # "|descr= <pre>\n{{Wiki|placeholder}} {{Feature|...}}": the port, as the wiki, wraps the boxes in a <pre>
+        ctx = PortContext({**PAGES, "Template:Box": '<div class="biki-messagebox feature-arma3contact"><div>i</div>'
+                                                    '<div>Exclusive.</div></div>'})
+        r = ctx.renderer(None)
+        r.page_title = "setThing"
+        self.assertEqual(r.md("<pre>\n{{Box}} "), "> [!NOTE]\n> **Arma 3 Contact:** Exclusive.")
+
     def test_timestamp(self):
         self.assertEqual(mw_timestamp("2021-03-04T05:06:07Z"), "20210304050607")
         self.assertIsNone(mw_timestamp(None))
