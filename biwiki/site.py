@@ -301,7 +301,7 @@ class Site:
 <meta http-equiv="Content-Security-Policy" content="{csp}">
 <title>{html.escape(title)}</title>
 <meta name="description" content="{desc}">
-{canon}<meta name="color-scheme"content="light dark">
+{canon}<meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="{light}" media="(prefers-color-scheme: light)" data-scheme="light">
 <meta name="theme-color" content="{dark}" media="(prefers-color-scheme: dark)" data-scheme="dark">
 <script src="{root}assets/theme.js"></script>

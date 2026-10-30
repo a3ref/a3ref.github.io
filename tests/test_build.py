@@ -78,7 +78,8 @@ class BuildTest(unittest.TestCase):
 
     def test_seo_metadata(self):
         page = (self.out / "commands" / "setPos.html").read_text(encoding="utf-8")
-        self.assertIn('<link rel="canonical" href="https://a3ref.github.io/commands/setPos.html">', page)
+        self.assertIn('<link rel="canonical" href="https://a3ref.github.io/commands/setPos.html">\n'
+                      '<meta name="color-scheme" content="light dark">', page)
         self.assertIn('"mainEntityOfPage": {"@type": "WebPage", "@id": "https://a3ref.github.io/commands/setPos.html"}', page)
         # served at every missing address, so it names none as its own
         self.assertNotIn('rel="canonical"', (self.out / "404.html").read_text(encoding="utf-8"))
