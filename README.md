@@ -196,7 +196,7 @@ Cloudflare rejects real headless Chrome; if a checkbox appears, run without `--h
 | File | Purpose |
 |---|---|
 | `index.html` | **the site**: home page with search, groups, topics, recent edits |
-| `commands/`, `functions/`, `topics/` | one page per entry as `<name>.md` (YAML front matter + Markdown), `.json` and `.html`, plus lower-case aliases and an `index.md`/`index.html` by group |
+| `commands/`, `functions/`, `topics/` | one page per entry as `<name>.md` (YAML front matter + Markdown), `.json` and `.html`, plus lower-case aliases and an `index.md`/`index.html` by group; `<name>.og.png` is the page's 1200×630 preview image for link previews |
 | `commands.json`, `functions.json`, `topics.json` | every record of one kind in a single file |
 | `index.json` | lightweight index: name, type, syntaxes, summary, groups, locality, status, operator, aliases, paths |
 | `names.txt` | every name, one per line, with paths where they do not follow the simple rule |
@@ -273,11 +273,12 @@ accessibility, best practices, SEO and agentic browsing on the main page types).
 - one self-hosted font (JetBrains Mono, OFL) preloaded with `font-display: optional`; text uses the system font,
   so nothing shifts while loading; CSS and JS are minified at build time
 - a strict Content-Security-Policy (no inline scripts; JSON-LD blocks listed by hash)
-- canonical URLs, Open Graph and Twitter cards with a preview image, `TechArticle` and `BreadcrumbList` structured
+- canonical URLs, Open Graph and Twitter cards with a preview image drawn for each page, `TechArticle` and `BreadcrumbList` structured
   data, `sitemap.xml`, `robots.txt`, favicon, icons and a web manifest
 - headings never skip a level, every piece of content sits in a landmark, scrollable code is keyboard-focusable
 
-`scripts/make_brand_assets.py` regenerates the icons and the preview image.
+`scripts/make_brand_assets.py` regenerates the icons and the site-wide preview image; `biwiki/ogimage.py` draws
+the per-page ones during the build (`build --no-og-images` skips them).
 
 ## Code layout
 
@@ -291,6 +292,7 @@ accessibility, best practices, SEO and agentic browsing on the main page types).
 - `biwiki/report.py`: parser health report, baseline comparison and the GitHub issue
 - `biwiki/feed.py`: change feed from the data repository's history
 - `biwiki/site.py`, `biwiki/assets/`: HTML version (markdown-it-py, SQF highlighting, page templates)
+- `biwiki/ogimage.py`: the per-page preview images (Pillow, JetBrains Mono), drawn in worker processes
 - `biwiki/mediawiki/`: a Python port of the MediaWiki 1.39 parser, set up as the BI wiki (see its README);
   `python -m biwiki.mediawiki.parsertests` runs MediaWiki's own parser tests against it
 - `tests/`: unit and end-to-end build tests on a few real pages in `tests/fixtures/raw/`; `tests/mediawiki/`:

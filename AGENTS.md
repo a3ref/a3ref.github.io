@@ -33,6 +33,7 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 |---|---|---|
 | `python -m unittest` | ~6 s | parser and end-to-end build tests on `tests/fixtures/raw/` (no data clone needed) |
 | `python -m biwiki build` | ~2.5 min | full mirror from `data/raw/` into `out/` (gitignored), rendered through the MediaWiki parser port with the templates in `data/raw/templates.json` (`--templates <file>` for others); without that file it warns and uses the legacy renderer |
+| `python -m biwiki build --no-og-images` | ~2.5 min | the same without the per-page preview images (`<page>.og.png`, drawn in worker processes while the pages are parsed; images already in `out/` with unchanged inputs are kept); the pages then point at `assets/og.png`. The data repository's sync builds this way |
 | `python -m biwiki build --renderer legacy` | ~20 s | the same with the legacy renderer (`biwiki/wikitext.py`), kept for comparison |
 | `python -m biwiki report` | 1 s | new parser problems in `out/report.json` compared with `known-problems.json` |
 | `python -m biwiki --dataset data build` | ~2.5 min | also rewrite the JSON bundles in the data clone |
@@ -67,7 +68,8 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 | parser health report, GitHub issue | `biwiki/report.py`, baseline `known-problems.json` |
 | change feed | `biwiki/feed.py` |
 | deployment, schedule, watchdog | `.github/workflows/site.yml`; the data sync is `.github/workflows/sync.yml` in a3ref/data |
-| icons, preview image | `scripts/make_brand_assets.py` |
+| per-page preview images (Open Graph / Twitter) | drawing: `biwiki/ogimage.py` (`draw`; bump `VERSION` when it changes); written by `render.build` via `OgImages`; the meta tags and JSON-LD `image`: `site.py` (`Site._image`, `_head`, `_article_ld`) |
+| icons, site-wide preview image (`assets/og.png`) | `scripts/make_brand_assets.py` (run by hand, commit the output) |
 
 Data flow: `fetch.sync` → `data/raw/{commands,functions,topics}.json` (wikitext by page id) and
 `data/raw/templates.json` (the templates they transclude) → `render.build` (`parse.parse_page` / `parse_topic` cut a
@@ -94,7 +96,9 @@ sync, `wikitext.Renderer` renders the wikitext directly instead.
 - **Site constraints**: no inline scripts or styles (strict CSP; JSON-LD hashes are computed in `site.py`), no
   external requests or JS libraries, headings never skip a level, content inside landmarks, colors meet WCAG AA in
   both themes, CSS/JS minified by `site.py` at build time.
-- **Dependencies**: three runtime packages (`requirements.txt`). Do not add more without a strong reason.
+- **Dependencies**: four runtime packages (`requirements.txt`); Pillow draws a preview image per page and is pinned
+  to one version so the images do not change between builds (Windows and Linux draw the same pixels; their zlib
+  compresses them differently). Do not add more without a strong reason.
 - **Local Windows, CI Linux.** Write files as UTF-8 with `\n`. Windows and macOS file systems are case-insensitive, so
   the lower-case alias pages (`commands/setpos.md`) are only produced on Linux.
 - **Outward actions need the maintainer's consent**: pushing to `main` deploys the site; `report --issue` writes
