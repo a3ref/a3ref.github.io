@@ -28,7 +28,9 @@ is built from ``config``.
 """
 from __future__ import annotations
 
+import functools
 import importlib.util
+import inspect
 import re
 import urllib.parse
 from typing import Callable, Optional, Union
@@ -86,6 +88,15 @@ def _msg(key: str, *params) -> str:
 
 def _php_trim(s: str) -> str:
     return s.strip(" \t\n\r\0\x0b")
+
+
+@functools.lru_cache(maxsize=None)
+def _max_positional(callback: Callable) -> Optional[int]:
+    """How many positional arguments ``callback`` takes, the parser included; None if it takes any number."""
+    params = inspect.signature(callback).parameters.values()
+    if any(p.kind is p.VAR_POSITIONAL for p in params):
+        return None
+    return sum(p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) for p in params)
 
 
 def _strlen(s) -> int:
@@ -951,6 +962,10 @@ class PreprocessingMixin:
                     all_args.append(_php_trim(v))
                 else:
                     all_args.append(_php_trim(f"{k}={v}"))
+            # PHP drops the arguments a userland function does not declare ({{#explode:a|b|0|0|extra}})
+            limit = _max_positional(callback)
+            if limit is not None:
+                all_args = all_args[:limit - 1]
             result = callback(self, *all_args)
 
         # The interface for function hooks allows them to return a wikitext string or a dict containing the string

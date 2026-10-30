@@ -55,6 +55,12 @@ class FunctionsTest(unittest.TestCase):
             with self.subTest(pos=pos):
                 self.assertEqual(render("{{#explode:a b c| |" + pos + "}}", config), expected)
 
+    def test_extra_arguments_are_dropped(self):
+        # as PHP drops the arguments a function does not declare (the BI wiki's Template:Link passes one more)
+        config = TEST.with_(pf_enable_string_functions=True)
+        self.assertEqual(render("{{#explode:a#b#c|#|1|0|2}}", config), render("{{#explode:a#b#c|#|1|0}}", config))
+        self.assertEqual(render("{{#explode:a#b#c|#|1|0|2}}", config), "b")
+
     def test_time_year_range(self):
         too_big = '<strong class="error">Error: #time only supports years up to 9999.</strong>'
         self.assertEqual(render("{{#time:Y|9999-12-31 23:00 -05:00}}"), too_big)
