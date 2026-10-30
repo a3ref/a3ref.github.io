@@ -408,7 +408,9 @@ def parse_topic(raw: dict, r: Renderer) -> dict:
     """A free-form concept page (data type, event handler list, ...): Markdown plus its sections."""
     title = raw["title"]
     r.page_title = title
-    md = r.md(parse_wikitext(preprocess(raw["wikitext"])))
+    # a string, not Wikicode: Renderer parses it the same way, and the port, which needs no mwparserfromhell tree,
+    # is spared a parse of the whole page for each of the three flavours
+    md = r.md(preprocess(raw["wikitext"]))
     return {
         "name": title,
         "title": title,
