@@ -7,7 +7,7 @@ from pathlib import Path
 from biwiki import docblock, typeexpr
 from biwiki.fetch import load_cache
 from biwiki.parse import parse_page, split_param, syntax_form
-from biwiki.render import page_slug, slug, summary, topic_group
+from biwiki.render import page_markdown, page_slug, slug, summary, topic_group
 from biwiki.report import leftover_markup, load_known, position, save_known
 from biwiki.site import ANCHOR, Site, _description, _place_anchors, _toc, heading_id
 from biwiki.wikitext import Renderer, wiki_anchor
@@ -218,6 +218,30 @@ class PageTest(unittest.TestCase):
         rec = parse_page(fixture("functions", "BIS fnc taskHandler"), "functions", Renderer(None))
         self.assertTrue(rec["filled_from_docblock"])
         self.assertTrue(rec["description"])
+    def test_legacy_notes(self):
+        # notes from before {{Note}}: raw <dl> HTML after {{RV}}, often with unclosed tags
+        raw = {"title": "weapons", "wikitext": (
+            "{{RV|type=command\n|game1= arma3\n|s1= [[weapons]] vehicle\n|r1= [[Array]]\n}}\n\n"
+            '<dl class="command_description">\n\n<dt></dt>\n'
+            '<dd class="notedate">Posted on 12:07, 20 January 2007</dd>\n'
+            '<dt class="note">[[User:Bdfy|Bdfy]]</dt>\n<dd class="note">\nOnly the primary turret, see [[weaponsTurret]].\n</dd>\n\n'
+            '<dt><dt>\n<dd class="notedate">Posted on 2016-12-03 - 21:35 (UTC)</dd>\n'
+            '<dt class="note">[[User:Killzone_Kid|Killzone_Kid]]</dt>\n<dd class="note">\n'
+            "''weapons'' skips \"Throw\".\n<sqf>player weapons;</sqf>\n"
+            '<dt><dt>\n<dd class="notedate">Posted: Sep 10 2014</dd>\n<dt class="note">Unknown </dt>\n'
+            '<dd class="note">No link.\n</dl>\n\n'
+            "{{Note\n|user= Sa-Matra\n|timestamp= 20220828050658\n|text= A newer note.\n}}\n"
+            "{{Note\n|user= Sa-Matra\n|timestamp= 20220828050658\n|text= Only the primary turret, see [[weaponsTurret]].\n}}")}
+        notes = parse_page(raw, "commands", Renderer(None))["notes"]
+        self.assertEqual([(n["user"], n["date"]) for n in notes], [
+            ("Bdfy", "2007-01-20"), ("Killzone_Kid", "2016-12-03T21:35:00Z"), ("Unknown", "2014-09-10"),
+            ("Sa-Matra", "2022-08-28T05:06:58Z")])  # page order; the note given both ways is kept once
+        self.assertEqual(notes[0]["text"], "Only the primary turret, see weaponsTurret.")
+        self.assertEqual(notes[1]["text"], '*weapons* skips "Throw".\n\n```sqf\nplayer weapons;\n```')
+        self.assertEqual(notes[2]["text"], "No link.")
+        md = page_markdown(parse_page(raw, "commands", Renderer(None)), lambda t, a: None)
+        self.assertIn("**Bdfy** — 2007-01-20\n\nOnly the primary turret", md)
+
 
 
 class TypeExprTest(unittest.TestCase):

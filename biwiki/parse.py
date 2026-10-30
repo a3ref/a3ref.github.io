@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import html
 import re
+from datetime import date
 from typing import Optional
 from urllib.parse import quote
 
@@ -256,10 +257,7 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
         if text.strip():  # placeholder pages have "|x1=" with only a comment
             examples.append({"text": text, "code": snippets})
 
-    notes = []
-    for t in code.filter_templates():
-        if _name(t) == "Note" and t.has("text"):
-            notes.append(parse_note(t, r))
+    notes = _notes(code, r)
 
     arg = _text(p, "arg").lower() or None
     eff = _text(p, "eff").lower() or None
@@ -324,6 +322,96 @@ def _is_sqf(tag) -> bool:
     if name in ("sqf", "sqs"):
         return True
     return name == "syntaxhighlight" and tag.has("lang") and str(tag.get("lang").value).strip().lower() in ("sqf", "sqs")
+
+
+_LEGACY_NOTES = re.compile(r'(?is)<dl\s+class="?command_description"?\s*>(.*?)(?:</dl>|$)')
+_NOTE_TAG = re.compile(r"(?i)<(/?)(dt|dd)\b([^>]*)>")
+_MONTH = re.compile(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b", re.I)
+_MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+
+
+def _notes(code: mw.wikicode.Wikicode, r: Renderer) -> list[dict]:
+    """Community notes in page order: ``{{Note}}`` templates and the older notes written as raw HTML after
+    ``{{RV}}`` (see _legacy_notes). A note given both ways is kept once."""
+    text = str(code)
+    found: list[tuple[int, dict]] = _legacy_notes(text, r)
+    at = 0
+    for t in code.filter_templates():
+        if _name(t) == "Note" and t.has("text"):
+            pos = text.find(str(t), at)
+            at = pos + 1 if pos != -1 else at
+            found.append((pos if pos != -1 else len(text), parse_note(t, r)))
+    notes: list[dict] = []
+    seen: set[str] = set()
+    for _, note in sorted(found, key=lambda x: x[0]):
+        key = re.sub(r"\s+", " ", note["text"]).strip()
+        if key and key not in seen:
+            seen.add(key)
+            notes.append(note)
+    return notes
+
+
+def _legacy_notes(text: str, r: Renderer) -> list[tuple[int, dict]]:
+    """Notes from before the ``{{Note}}`` template, as the wiki still shows them on about 200 pages::
+
+        <dl class="command_description">
+        <dt></dt>
+        <dd class="notedate">Posted on 2016-12-03 - 21:35 (UTC)</dd>
+        <dt class="note">[[User:Killzone_Kid|Killzone_Kid]]</dt>
+        <dd class="note">text ...</dd>
+        </dl>
+
+    The tags are often left unclosed (``<dt><dt>`` as a spacer, a ``<dd class="note">`` ended by the next
+    ``<dt>``); each element runs to the next tag. Returns (offset in the page, note) pairs; the note has the
+    fields of ``wikitext.parse_note``."""
+    out: list[tuple[int, dict]] = []
+    for block in _LEGACY_NOTES.finditer(text):
+        body = block.group(1)
+        tags = list(_NOTE_TAG.finditer(body))
+        posted = ""
+        for i, t in enumerate(tags):
+            if t.group(1):  # a closing tag ends the element; nothing stands between it and the next tag
+                continue
+            content = body[t.end() : tags[i + 1].start() if i + 1 < len(tags) else len(body)].strip()
+            cls = re.search(r"class\s*=\s*\"?([\w-]+)", t.group(3))
+            kind = (t.group(2).lower(), cls.group(1).lower() if cls else "")
+            if kind == ("dd", "notedate"):
+                posted = _legacy_date(content)
+            elif kind == ("dt", "note"):
+                user = re.search(r"\[\[\s*User\s*:\s*([^|\]]+)", content, re.I)
+                out.append((block.start(1) + t.start(),
+                            {"user": user.group(1).strip() if user else r.plain(content).strip(), "date": posted,
+                             "text": ""}))
+                posted = ""
+            elif kind == ("dd", "note") and content:
+                if not out or out[-1][1]["text"]:  # a note without an author line
+                    out.append((block.start(1) + t.start(), {"user": "", "date": posted, "text": ""}))
+                    posted = ""
+                out[-1][1]["text"] = r.md(content)
+    return [x for x in out if x[1]["text"]]
+
+
+def _legacy_date(text: str) -> str:
+    """The day of "Posted on 2016-12-03 - 21:35 (UTC)", "Posted on 12:07, 20 January 2007 (CET)",
+    "Posted: Sep 10 2014" as ISO 8601; with the time only when it is given in UTC, as {{Note}}'s timestamps
+    are. Empty if there is no date."""
+    m = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", text)
+    if m:
+        y, mo, d = map(int, m.groups())
+    else:
+        month, year = _MONTH.search(text), re.search(r"(?<!\d)(\d{4})(?!\d)", text)
+        day = re.search(r"(?<![\d:])(\d{1,2})(?:st|nd|rd|th)?(?![\d:])", text)
+        if not (month and year and day):
+            return ""
+        y, mo, d = int(year.group(1)), _MONTHS.index(month.group(1).lower()) + 1, int(day.group(1))
+    try:
+        day_iso = date(y, mo, d).isoformat()
+    except ValueError:
+        return ""
+    tm = re.search(r"(?<![\d:])(\d{1,2}):(\d{2})(?![\d:])", text)
+    if tm and re.search(r"\bUTC\b", text):
+        return f"{day_iso}T{int(tm.group(1)):02d}:{tm.group(2)}:00Z"
+    return day_iso
 
 
 def _description(p: dict, kind: str, r: Renderer) -> tuple[str, Optional[dict]]:
