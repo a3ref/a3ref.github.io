@@ -230,14 +230,18 @@ class Site:
 
     @staticmethod
     def _ids(body: str) -> tuple[str, list[tuple[int, str, str]]]:
-        """Give headings ids, and never skip a level (h2 followed by h4 becomes h2, h3) for accessibility."""
+        """Give headings ids, and never skip a level (h2 followed by h4 becomes h2, h3) for accessibility. A heading's
+        level is its depth among the open headings above it, as the wiki numbers its contents: h2, h4, h4 is h2, h3,
+        h3 (siblings stay siblings), and a later h2 is back at the top."""
         toc, seen = [], set()
-        last = 1  # the page's h1 is in the header
+        open_levels: list[int] = []  # the written levels of the headings that hold the current one; h1 is the header
 
         def sub(m):
-            nonlocal last
-            level, inner = min(int(m.group(1)), last + 1), m.group(2)
-            last = level
+            written, inner = int(m.group(1)), m.group(2)
+            while open_levels and open_levels[-1] >= written:
+                open_levels.pop()
+            open_levels.append(written)
+            level = len(open_levels) + 1
             text = _ANCHOR.sub("", re.sub(r"<[^>]+>", "", inner))
             base = heading_id(html.unescape(text)) or "section"
             ident, n = base, 2

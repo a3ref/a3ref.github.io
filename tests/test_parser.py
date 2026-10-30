@@ -354,6 +354,16 @@ class SiteHtmlTest(unittest.TestCase):
             'aria-controls="toc--d" aria-label="D: subsections"></button><ol id="toc--d">'
             '<li class="toc-3"><a href="#e">E</a></li></ol></li>')  # a skipped level is closed up
 
+    def test_heading_levels_follow_nesting(self):
+        # Description.ext: "== Respawn ==" then "{{ArgTitle|4|...}}" entries; siblings stay siblings and the next
+        # h2 is back at the top, as in the wiki's contents
+        body, heads = self.site._ids("<h3>Info</h3><h5>author</h5><h5>onLoadName</h5><h3>Respawn</h3><h5>respawn</h5>"
+                                     "<h5>respawnDelay</h5><h6>deep</h6><h4>Mid</h4>")
+        self.assertEqual([(lvl, t) for lvl, _, t in heads],
+                         [(2, "Info"), (3, "author"), (3, "onLoadName"), (2, "Respawn"), (3, "respawn"),
+                          (3, "respawnDelay"), (4, "deep"), (3, "Mid")])
+        self.assertIn('<h3 id="respawndelay">respawnDelay</h3>', body)
+
     def test_arg_title_anchor_is_the_name(self):
         # {{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}: the wiki's anchor is #allowProfileGlasses
         md = Renderer(None, anchors=True).md("{{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}\ntext")
