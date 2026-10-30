@@ -509,7 +509,8 @@ class Language:
                 seconds=parts[5])
         except (OverflowError, ValueError):
             return ts
-        return date.strftime("%Y%m%d%H%M%S").rjust(14, "0")
+        # The year by hand: glibc's strftime('%Y') does not pad years below 1000, Windows' does
+        return f"{date.year:04d}" + date.strftime("%m%d%H%M%S")
 
     def sprintf_date(self, format_: str, ts: str) -> str:
         """A subset of Language::sprintfDate(): the date() letters dDjlNwzWFmMntLoYyaAgGhHis of a TS_MW

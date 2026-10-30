@@ -1593,8 +1593,10 @@ class _RemexTokenizer(HTMLParser):
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self._pending: Optional[tuple[str, str, dict[str, str], bool]] = None
-        self._in_tag = False
+        # Prefixed names: HTMLParser has private attributes of its own; its _pending list (new in Python 3.12.15)
+        # once was overwritten by our _pending token, and feed() crashed on the None
+        self._remex_token: Optional[tuple[str, str, dict[str, str], bool]] = None
+        self._remex_in_tag = False
 
     def run(self, text: str) -> None:
         self.feed(text)
@@ -1609,20 +1611,20 @@ class _RemexTokenizer(HTMLParser):
         return self._parse_tag(super().parse_endtag, i)
 
     def _parse_tag(self, parse: Callable[[int], int], i: int) -> int:
-        self._pending = None
-        self._in_tag = True
+        self._remex_token = None
+        self._remex_in_tag = True
         try:
             j = parse(i)
         finally:
-            self._in_tag = False
-        pending, self._pending = self._pending, None
+            self._remex_in_tag = False
+        pending, self._remex_token = self._remex_token, None
         if pending is not None:
             self._dispatch(pending, self.rawdata[i:j] if j > i else "")
         return j
 
     def _queue(self, token: tuple[str, str, dict[str, str], bool]) -> None:
-        if self._in_tag:
-            self._pending = token
+        if self._remex_in_tag:
+            self._remex_token = token
         else:
             name = token[1]
             self._dispatch(token, f"</{name}>" if token[0] == "end" else f"<{name}>")

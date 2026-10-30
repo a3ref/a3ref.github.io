@@ -53,8 +53,10 @@ def time_(format_: str, date: str = "", now: datetime = FAKE_NOW) -> str:
 
 
 def parsed(text: str, now: datetime = NOW) -> str:
-    """The instant a string means, in UTC."""
-    return parse_datetime(text, UTC, now).astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
+    """The instant a string means, in UTC. The year is formatted by hand: glibc's strftime('%Y') does not pad
+    years below 1000 to four digits, Windows' does."""
+    dt = parse_datetime(text, UTC, now).astimezone(UTC)
+    return f"{dt.year:04d}-" + dt.strftime("%m-%d %H:%M:%S")
 
 
 class FuncsParserTests(unittest.TestCase):
