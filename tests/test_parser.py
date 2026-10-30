@@ -213,6 +213,15 @@ class PageTest(unittest.TestCase):
         self.assertEqual(lines["type_expr"], "Array<String> | Array<Array<String>>")
         self.assertFalse(lines["optional"], "the (Optional, ...) of an array element is not the parameter's")
 
+    def test_icon_before_the_param_name(self):
+        raw = {"title": "setDamage", "wikitext": (
+            "{{RV|type=command\n|game1= arma3\n|s1= object [[setDamage]] [damage, killer]\n"
+            "|p1= damage: [[Number]]\n"
+            "|p2= {{Icon|serverExec|28}} killer: [[Object]] - (Optional, default [[objNull]]) the entity\n}}")}
+        p = parse_page(raw, "commands", Renderer(None))["syntaxes"][0]["params"][1]
+        self.assertEqual((p["name"], p["type_expr"], p["default"], p["description"]), ("killer", "Object", "objNull", "the entity"))
+        self.assertIn("killer", p["text"])
+
     def test_return_value_without_its_syntax(self):
         raw = {"title": "a / b", "wikitext": (
             "{{RV|type=command\n|game1= arma3\n|s1= a [[a / b|/]] b\n|r1= [[Number]] - quotient\n"

@@ -261,10 +261,15 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
                     pv = parse_wikitext(source[table.end():])
                     if not str(pv).strip():
                         continue
+                md = r.md(pv)  # the text keeps the icons
+                # "{{Icon|serverExec|28}} killer: [[Object]]": an icon is no part of the name ("Server execution
+                # killer"); records have no field for it per parameter, so it stays only in the text
+                pv = parse_wikitext(str(pv))
+                for t in [t for t in pv.filter_templates(recursive=False) if _name(t) == "Icon"]:
+                    pv.remove(t)
                 plain = r.plain_lines(pv)
                 if _NO_PARAM.fullmatch(plain):  # "|p1= -" on pages of functions without parameters
                     continue
-                md = r.md(pv)
                 item = split_param(plain)
                 if item["type"] and _ONE_OF.fullmatch(item["type"]):
                     item["type"] = None  # "group: One of" + a list of types: no type of its own, read the list
