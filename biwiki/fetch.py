@@ -5,7 +5,8 @@ We drive a real Chrome (via patchright) to pass the challenge once, then call th
 MediaWiki API with ``fetch()`` from inside the page, where the clearance cookie applies.
 
 A normal sync reads only the wiki's recent changes since the newest edit in the cache (``sync_recent``);
-``--walk`` and ``--full`` list every member page instead (``sync_walk``).
+``--walk`` and ``--full`` list every member page instead (``sync_walk``). Either then brings the templates those
+pages transclude up to date (``sync_templates``, ``raw/templates.json``), which the MediaWiki parser port renders with.
 """
 from __future__ import annotations
 
@@ -56,6 +57,8 @@ RC_OVERLAP = timedelta(days=1)
 # day of margin, falls back to the full walk.
 RC_MAX_AGE = timedelta(days=89)
 _TS = "%Y-%m-%dT%H:%M:%SZ"
+# the raw file of the templates the mirrored pages transclude, next to {commands,functions,topics}.json
+TEMPLATES = "templates.json"
 
 _FETCH_JS = """async (params) => {
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -184,11 +187,12 @@ class WikiSession:
                     out.setdefault(p["pageid"], []).extend(r["title"] for r in p.get("redirects", []))
         return {pid: sorted(set(v)) for pid, v in out.items()}
 
-    async def recent_changes(self, start: str) -> list[dict]:
-        """Edits, new pages and log entries (moves, deletions) in the main namespace from ``start`` until now."""
+    async def recent_changes(self, start: str, namespaces: str = "0") -> list[dict]:
+        """Edits, new pages and log entries (moves, deletions) in ``namespaces`` (ids joined by "|"; default the
+        main namespace) from ``start`` until now."""
         out: list[dict] = []
         async for q in self.query_all(
-            list="recentchanges", rcstart=start, rcdir="newer", rcnamespace=0, rctype="edit|new|log",
+            list="recentchanges", rcstart=start, rcdir="newer", rcnamespace=namespaces, rctype="edit|new|log",
             rcprop="title|ids|timestamp|loginfo", rclimit=500,
         ):
             out += q.get("recentchanges", [])
@@ -217,32 +221,53 @@ class WikiSession:
                 out += [r["to"] for r in q.get("redirects", [])]
         return out
 
-    async def fetch_content(self, pageids: list[int]) -> dict[int, dict]:
-        """Fetch latest wikitext for the given pages, 50 per request (API limit for non-bots)."""
+    async def page_templates(self, pageids: list[int]) -> dict[int, dict]:
+        """{pageid: {title, revid}} of the existing templates the given pages transclude, 50 pages per request.
+
+        A page's template links already hold the templates its templates transclude, so no recursion is needed.
+        As a generator, the templates module returns the templates of the 50 pages once each and with their
+        revision, where prop=templates lists them per page, in more requests."""
         out: dict[int, dict] = {}
+        for i in range(0, len(pageids), 50):
+            async for q in self.query_all(
+                pageids="|".join(map(str, pageids[i : i + 50])), generator="templates", gtlnamespace=10,
+                gtllimit="max", prop="info",
+            ):
+                for p in q.get("pages", []):
+                    if not p.get("missing") and p.get("pageid"):
+                        out[p["pageid"]] = {"title": p["title"], "revid": p["lastrevid"]}
+        return out
+
+    async def fetch_content(self, pageids: list[int], categories: bool = True) -> dict[int, dict]:
+        """Fetch latest wikitext for the given pages, 50 per request (API limit for non-bots); with
+        ``categories``, also their visible categories."""
+        out: dict[int, dict] = {}
+        extra = {"prop": "revisions|categories", "cllimit": "max", "clshow": "!hidden"} if categories else {
+            "prop": "revisions"}
         for i in range(0, len(pageids), 50):
             chunk = pageids[i : i + 50]
             async for q in self.query_all(
                 pageids="|".join(map(str, chunk)),
-                prop="revisions|categories",
                 rvprop="ids|timestamp|content",
                 rvslots="main",
-                cllimit="max",
-                clshow="!hidden",
+                **extra,
             ):
                 for p in q.get("pages", []):
                     if p.get("missing"):
                         continue
                     # a continued block carries the rest of the categories of pages without their revisions
                     rev = (p.get("revisions") or [{}])[0]
-                    entry = out.setdefault(p["pageid"], {"title": p["title"], "categories": []})
+                    entry = out.setdefault(p["pageid"], {"title": p["title"]})
+                    if categories:
+                        entry.setdefault("categories", [])
                     if "slots" in rev:
                         entry.update(
                             revid=rev["revid"],
                             timestamp=rev["timestamp"],
                             wikitext=rev["slots"]["main"]["content"],
                         )
-                    entry["categories"] += [c["title"].removeprefix("Category:") for c in p.get("categories", [])]
+                    if categories:
+                        entry["categories"] += [c["title"].removeprefix("Category:") for c in p.get("categories", [])]
             print(f"  fetched {min(i + 50, len(pageids))}/{len(pageids)}", flush=True)
         return {pid: entry for pid, entry in out.items() if "wikitext" in entry}
 
@@ -306,8 +331,10 @@ async def sync(raw_dir: Path, profile_dir: Path, kinds: list[str], hidden: bool 
 
 async def sync_with(wiki: WikiSession, raw_dir: Path, kinds: list[str], full: bool = False, walk: bool = False,
                     now: datetime | None = None):
-    """Read the recent changes, or walk every category with ``walk``/``full`` or when they do not reach back."""
+    """Read the recent changes, or walk every category with ``walk``/``full`` or when they do not reach back;
+    then update the templates."""
     caches = {kind: load_cache(raw_dir / f"{kind}.json") for kind in CATEGORIES}
+    templates = load_cache(raw_dir / TEMPLATES)
     start = None
     if not (full or walk):
         start = recent_start([caches[k] for k in kinds], now or datetime.now(timezone.utc))
@@ -315,18 +342,31 @@ async def sync_with(wiki: WikiSession, raw_dir: Path, kinds: list[str], full: bo
             print("recent changes do not reach back to the cache: listing every page")
     if start is None:
         await sync_walk(wiki, raw_dir, kinds, caches, full)
+        await sync_templates(wiki, raw_dir, caches, templates, full=full)
     else:
-        await sync_recent(wiki, raw_dir, kinds, caches, start)
+        changes, fetched = await sync_recent(wiki, raw_dir, kinds, caches, start)
+        if templates:
+            await sync_templates(wiki, raw_dir, caches, templates, changes=changes, pages=fetched)
+        else:  # the first sync since templates are mirrored lists them all once
+            print("no template cache: listing the templates of every page")
+            await sync_templates(wiki, raw_dir, caches, templates)
 
 
-async def sync_recent(wiki: WikiSession, raw_dir: Path, kinds: list[str], caches: dict[str, dict], start: str):
+async def sync_recent(wiki: WikiSession, raw_dir: Path, kinds: list[str], caches: dict[str, dict],
+                      start: str) -> tuple[list[dict], set[int]]:
     """Refetch the cached pages changed since ``start``, add new members, drop deleted pages.
 
     Left to the weekly walk: pages that leave a category, pages that join one through a template or a category
     page, pages moved into the main namespace, and pages that move from one kind to another.
+
+    The same request reads the template namespace's changes: they are returned for ``sync_templates``, with the
+    ids of the pages fetched here.
     """
     t0 = time.time()
-    changes = await wiki.recent_changes(start)
+    rows = await wiki.recent_changes(start, namespaces="0|10")
+    changes = [rc for rc in rows if rc.get("ns", 0) == 0]
+    template_changes = [rc for rc in rows if rc.get("ns", 0) == 10]
+    fetched_ids: set[int] = set()
     kind_of = {pid: kind for kind, cache in caches.items() for pid in cache}
     by_title = {p["title"]: pid for cache in caches.values() for pid, p in cache.items()}
     topics = caches["topics"]
@@ -395,6 +435,7 @@ async def sync_recent(wiki: WikiSession, raw_dir: Path, kinds: list[str], caches
                     refresh.add(pid)
                 entry["redirects"] = cache.get(pid, {}).get("redirects", [])
             cache[pid] = entry
+            fetched_ids.add(pid)
         for pid in gone:
             cache.pop(pid, None)
         refreshed = sorted(pid for pid in refresh if pid in cache) if kind == "topics" else []
@@ -406,6 +447,7 @@ async def sync_recent(wiki: WikiSession, raw_dir: Path, kinds: list[str], caches
         print(f"{kind}: {len(stale) - new} refetched, {new} new, {len(gone)} removed, {len(refreshed)} redirect lists")
         save_cache(path, cache)
     print(f"done in {time.time() - t0:.0f}s")
+    return template_changes, fetched_ids
 
 
 async def sync_walk(wiki: WikiSession, raw_dir: Path, kinds: list[str], caches: dict[str, dict], full: bool):
@@ -441,3 +483,47 @@ async def sync_walk(wiki: WikiSession, raw_dir: Path, kinds: list[str], caches: 
         caches[kind] = cache
         save_cache(path, cache)
         print(f"{kind}: done in {time.time() - t0:.0f}s")
+
+
+async def sync_templates(wiki: WikiSession, raw_dir: Path, caches: dict[str, dict], cache: dict[int, dict],
+                         full: bool = False, changes: list[dict] | None = None, pages: set[int] | None = None):
+    """Bring ``raw/templates.json`` ({pageid: {title, revid, timestamp, wikitext}}) up to date.
+
+    Without ``changes`` (a walk): the set is every template the cached pages transclude; those whose revision
+    differs from the cache (all with ``full``) are fetched, those no longer used dropped. With ``changes`` (the
+    template namespace's recent changes): the cached templates edited, moved or deleted are refetched, and the
+    templates of ``pages`` (those fetched in this run) that are new or changed are added. Left to the walk:
+    templates no page uses any more, and templates a page starts to use through an edit of another template.
+    """
+    t0 = time.time()
+    requests = wiki.requests
+    if changes is None:
+        used = await wiki.page_templates(sorted(pid for c in caches.values() for pid in c))
+        removed = set(cache) - set(used)
+        for pid in removed:
+            del cache[pid]
+        stale = {pid for pid, t in used.items() if full or cache.get(pid, {}).get("revid") != t["revid"]}
+    else:
+        by_title = {t["title"]: pid for pid, t in cache.items()}
+        removed, stale = set(), set()
+        for rc in changes:
+            if rc["type"] == "log" and rc.get("logtype") not in ("delete", "move"):
+                continue
+            # a log row's page id may be 0 (deleted) or another page's; the title names the cached one
+            pid = by_title.get(rc["title"]) if rc["type"] == "log" else rc.get("pageid")
+            if pid not in cache:
+                continue  # no mirrored page uses it; a page that starts to is refetched itself
+            if rc["type"] == "edit" and cache[pid].get("revid", 0) >= rc.get("revid", 0):
+                continue  # fetched already: the recent changes overlap the previous run
+            stale.add(pid)
+        used = await wiki.page_templates(sorted(pages)) if pages else {}
+        stale |= {pid for pid, t in used.items() if cache.get(pid, {}).get("revid") != t["revid"]}
+    fetched = await wiki.fetch_content(sorted(stale), categories=False) if stale else {}
+    for pid in stale:
+        if pid in fetched:
+            cache[pid] = fetched[pid]
+        elif cache.pop(pid, None) is not None:  # deleted meanwhile
+            removed.add(pid)
+    save_cache(raw_dir / TEMPLATES, cache)
+    print(f"templates: {len(cache)} cached, {len(fetched)} fetched, {len(removed)} removed; "
+          f"{wiki.requests - requests} requests in {time.time() - t0:.0f}s")

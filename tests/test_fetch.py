@@ -19,7 +19,8 @@ def run(wiki, raw, kinds, **kw):
 
 
 class FakeWiki(WikiSession):
-    """A tiny MediaWiki: ``pages`` {pageid: {title, ns, revid, timestamp, text, categories, redirect}}."""
+    """A tiny MediaWiki: ``pages`` {pageid: {title, ns, revid, timestamp, text, categories, redirect, templates}};
+    ``templates`` are the titles a page transcludes, transitively, as the wiki's template links."""
 
     def __init__(self, pages: dict[int, dict], changes: list[dict]):
         super().__init__(Path("."))
@@ -51,7 +52,14 @@ class FakeWiki(WikiSession):
         self.calls.append(params)
         prop = str(params.get("prop", ""))
         if params.get("list") == "recentchanges":
-            return {"query": {"recentchanges": [c for c in self.changes if c["timestamp"] >= params["rcstart"]]}}
+            namespaces = str(params["rcnamespace"]).split("|")
+            return {"query": {"recentchanges": [c for c in self.changes if c["timestamp"] >= params["rcstart"]
+                                                and str(c.get("ns", 0)) in namespaces]}}
+        if params.get("generator") == "templates":
+            by_title = {p["title"]: pid for pid, p in self.pages.items()}
+            titles = sorted({t for x in str(params["pageids"]).split("|") for t in self.pages[int(x)].get("templates", [])})
+            return {"query": {"pages": [self._page(by_title[t], prop) if t in by_title else
+                                        {"ns": 10, "title": t, "missing": True} for t in titles]}}
         if params.get("generator") == "categorymembers":
             cat = params["gcmtitle"]
             ids = [pid for pid, p in sorted(self.pages.items()) if cat in p.get("categories", [])]
@@ -87,12 +95,25 @@ CMD, FNC, TOPIC = "Category:Arma 3: Scripting Commands", "Category:Arma 3: Funct
 
 def wiki_pages():
     return {
-        1: page("setPos", 100, "2026-10-20T10:00:00Z", [CMD]),
-        2: page("BIS fnc spawn", 101, "2026-10-01T10:00:00Z", [FNC]),
-        3: page("Arma 3: Mission Editing", 102, "2026-10-25T10:00:00Z", [TOPIC]),
+        1: page("setPos", 100, "2026-10-20T10:00:00Z", [CMD], templates=["Template:RV", "Template:GVI"]),
+        2: page("BIS fnc spawn", 101, "2026-10-01T10:00:00Z", [FNC], templates=["Template:RV", "Template:Missing"]),
+        3: page("Arma 3: Mission Editing", 102, "2026-10-25T10:00:00Z", [TOPIC], templates=["Template:Link"]),
         4: page("Mission Editing", 103, "2026-01-01T10:00:00Z", redirect="Arma 3: Mission Editing"),
         50: page(TOPIC, 104, "2020-01-01T10:00:00Z", ["Category:Arma 3"], ns=14),
+        60: page("Template:RV", 600, "2025-01-01T10:00:00Z", ns=10),
+        61: page("Template:GVI", 601, "2025-01-01T10:00:00Z", ns=10),
+        62: page("Template:Link", 602, "2025-01-01T10:00:00Z", ns=10),
+        63: page("Template:Unused", 603, "2025-01-01T10:00:00Z", ns=10),
     }
+
+
+def template_entry(p):
+    return {"title": p["title"], "revid": p["revid"], "timestamp": p["timestamp"], "wikitext": p["text"]}
+
+
+def content_ids(wiki):
+    """The page ids whose wikitext was fetched, in order."""
+    return [int(x) for c in wiki.calls if "revisions" in str(c.get("prop")) for x in str(c["pageids"]).split("|")]
 
 
 class SyncRecentTest(unittest.TestCase):
@@ -103,6 +124,7 @@ class SyncRecentTest(unittest.TestCase):
         save_cache(self.raw / "commands.json", {1: entry(self.pages[1])})
         save_cache(self.raw / "functions.json", {2: entry(self.pages[2])})
         save_cache(self.raw / "topics.json", {3: entry(self.pages[3], ["Mission Editing"])})
+        save_cache(self.raw / "templates.json", {i: template_entry(self.pages[i]) for i in (60, 61, 62)})
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -119,9 +141,10 @@ class SyncRecentTest(unittest.TestCase):
         wiki = self.run_sync([])
         self.assertEqual(wiki.calls[0]["rcstart"], "2026-10-24T10:00:00Z")
         self.assertEqual(wiki.calls[0]["rctype"], "edit|new|log")
+        self.assertEqual(wiki.calls[0]["rcnamespace"], "0|10")
 
     def test_no_changes_writes_nothing(self):
-        before = {k: (self.raw / f"{k}.json").read_bytes() for k in ("commands", "functions", "topics")}
+        before = {k: (self.raw / f"{k}.json").read_bytes() for k in ("commands", "functions", "topics", "templates")}
         mtimes = {k: (self.raw / f"{k}.json").stat().st_mtime_ns for k in before}
         wiki = self.run_sync([])
         self.assertEqual(wiki.requests, 1)
@@ -204,6 +227,50 @@ class SyncRecentTest(unittest.TestCase):
                         "timestamp": "2026-10-29T10:00:00Z", "logtype": "delete", "logaction": "delete"}])
         self.assertEqual(self.cache("topics")[3]["redirects"], [])
 
+    def tpl_edit(self, pid, revid, ts="2026-10-29T10:00:00Z"):
+        self.pages[pid] = page(self.pages[pid]["title"], revid, ts, ns=10)
+        return {"type": "edit", "ns": 10, "title": self.pages[pid]["title"], "pageid": pid, "revid": revid,
+                "timestamp": ts}
+
+    def test_template_edit(self):
+        wiki = self.run_sync([self.tpl_edit(60, 700)])
+        self.assertEqual(self.cache("templates")[60], template_entry(self.pages[60]))
+        self.assertEqual(content_ids(wiki), [60])
+        self.assertEqual(wiki.requests, 2)  # the recent changes of both namespaces, the template
+        self.assertNotIn("categories", self.cache("templates")[60])
+
+    def test_template_edit_seen_before(self):
+        # the run overlaps the previous one by a day: an edit already in the cache is not fetched again
+        change = self.tpl_edit(60, 600)
+        wiki = self.run_sync([change])
+        self.assertEqual(wiki.requests, 1)
+
+    def test_unused_template_edit(self):
+        wiki = self.run_sync([self.tpl_edit(63, 700)])
+        self.assertEqual(sorted(self.cache("templates")), [60, 61, 62])
+        self.assertEqual(wiki.requests, 1)
+
+    def test_template_deleted(self):
+        del self.pages[62]
+        self.pages[3]["templates"] = []
+        self.run_sync([{"type": "log", "ns": 10, "title": "Template:Link", "pageid": 0, "revid": 0,
+                        "timestamp": "2026-10-29T10:00:00Z", "logtype": "delete", "logaction": "delete"}])
+        self.assertEqual(sorted(self.cache("templates")), [60, 61])
+
+    def test_refetched_page_adds_its_new_templates(self):
+        self.pages[1] = page("setPos", 200, "2026-10-29T10:00:00Z", [CMD],
+                             templates=["Template:RV", "Template:GVI", "Template:Unused"])
+        wiki = self.run_sync([{"type": "edit", "title": "setPos", "pageid": 1, "revid": 200,
+                               "timestamp": "2026-10-29T10:00:00Z"}])
+        self.assertEqual(sorted(self.cache("templates")), [60, 61, 62, 63])
+        self.assertEqual(content_ids(wiki), [1, 63])  # the unchanged templates are not fetched again
+        self.assertEqual(wiki.requests, 4)  # recent changes, the page, its templates, the new template
+
+    def test_first_sync_lists_every_template(self):
+        (self.raw / "templates.json").unlink()
+        self.run_sync([])
+        self.assertEqual(self.cache("templates"), {i: template_entry(self.pages[i]) for i in (60, 61, 62)})
+
 
 class FallbackTest(unittest.TestCase):
     def setUp(self):
@@ -215,9 +282,22 @@ class FallbackTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def walked(self, **kw):
-        wiki = FakeWiki(self.pages, [])
-        run(wiki, self.raw, ["commands", "functions", "topics"], **kw)
-        return not any(c.get("list") == "recentchanges" for c in wiki.calls)
+        self.wiki = FakeWiki(self.pages, [])
+        run(self.wiki, self.raw, ["commands", "functions", "topics"], **kw)
+        return not any(c.get("list") == "recentchanges" for c in self.wiki.calls)
+
+    def test_walk_templates(self):
+        self.walked()
+        templates = load_cache(self.raw / "templates.json")
+        self.assertEqual(templates, {i: template_entry(self.pages[i]) for i in (60, 61, 62)})
+        # an edited template is refetched, one no page uses any more dropped, a new one added
+        self.pages[60] = page("Template:RV", 700, "2026-10-29T10:00:00Z", ns=10)
+        self.pages[3]["templates"] = ["Template:Unused"]
+        self.walked(walk=True)
+        self.assertEqual(sorted(load_cache(self.raw / "templates.json")), [60, 61, 63])
+        self.assertEqual([pid for pid in content_ids(self.wiki) if pid >= 60], [60, 63])
+        self.walked(full=True)
+        self.assertEqual([pid for pid in content_ids(self.wiki) if pid >= 60], [60, 61, 63])
 
     def test_empty_cache_walks(self):
         self.assertTrue(self.walked())
@@ -240,7 +320,7 @@ class FallbackTest(unittest.TestCase):
 
     def test_walk_and_recent_write_the_same_bytes(self):
         self.walked()
-        before = {k: (self.raw / f"{k}.json").read_bytes() for k in ("commands", "functions", "topics")}
+        before = {k: (self.raw / f"{k}.json").read_bytes() for k in ("commands", "functions", "topics", "templates")}
         self.walked(walk=True)
         for k, data in before.items():
             self.assertEqual((self.raw / f"{k}.json").read_bytes(), data)
