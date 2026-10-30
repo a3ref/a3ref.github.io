@@ -18,4 +18,8 @@ fail, as the port has no Pygments). The runner reads them after the core files, 
 with its extension registered (`EXT_TEST_FILES` in `biwiki/mediawiki/parsertests.py`); duplicate names get the same
 kind of suffix (` [funcs]`, ` [cite]`, ...).
 
+`ext/SqfHighlighter/samples.json` is not a parser test file: the BI wiki's SQF Highlighter is not public, so these
+are inputs with the wiki's `action=parse` HTML for them (sampled on 2026-10-30), compared by
+`tests/test_mediawiki_ext_sqfhighlighter.py`.
+
 `passing.txt` lists the tests the port passes (written by `python -m biwiki.mediawiki.parsertests --accept`).

@@ -1,6 +1,6 @@
+# The <sqf> and <sqs> tags of the MediaWiki parser port (https://www.mediawiki.org/), (C) MediaWiki contributors.
 # Written by a3ref contributors on 2026-10-30 after the HTML of the BI wiki's SQF Highlighter extension
-# (https://community.bistudio.com/, not public), for the MediaWiki parser port (https://www.mediawiki.org/),
-# (C) MediaWiki contributors.
+# (https://community.bistudio.com/, not public), sampled with action=parse.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -89,8 +89,6 @@ _DIRECTIVE = re.compile(r"#define(?:[ \t]+[A-Za-z0-9_]+(?:\([^)\n]*\))?(?=[ \t])
                         r"|#(?:include|ifdef|ifndef|else|endif|undef|if)(?![A-Za-z0-9_])")
 _WHITESPACE = re.compile(r"[ \t\n]+")
 _SQS_SIGN = re.compile(r"[ \t]*([#~@?])")
-_KEPT_TAG = re.compile(r"<!--.*?-->|<(/?)([A-Za-z][A-Za-z0-9]*)\b[^>]*>", re.S)
-_BOLD_OPEN = re.compile(r"<b\b[^>]*>")
 
 UNEXPECTED = "Unexpected character"
 UNCLOSED_STRING = "Improperly closed string"
