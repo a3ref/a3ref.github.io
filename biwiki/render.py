@@ -314,10 +314,14 @@ class Writer:
 
 
 def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset: Path | None = None,
-          base_url: str = SITE_URL) -> None:
-    """Generate the mirror in ``out_dir``; with ``dataset``, also write the parsed JSON bundles there."""
+          base_url: str = SITE_URL, renderer: str = "legacy", templates: Path | None = None) -> None:
+    """Generate the mirror in ``out_dir``; with ``dataset``, also write the parsed JSON bundles there.
+
+    ``renderer``: "legacy" renders wikitext with wikitext.Renderer; "port" with the MediaWiki parser port and
+    htmlmd (portrender.PortRenderer), which needs the wiki's templates (``templates``, a JSON file)."""
     kinds = [k for k in (kinds or KINDS) if (raw_dir / f"{k}.json").exists()]
     raws = {k: load_cache(raw_dir / f"{k}.json") for k in kinds}
+    make = _renderer_factory(renderer, templates, raw_dir, raws)
     pages = Pages(raws)
     resolve_md, resolve_html = pages.resolver("md"), pages.resolver("html")
     site = Site(out_dir, pages.script_names(), KIND_LABEL, base_url)
@@ -344,11 +348,11 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
             s = pages.slug(raw["title"], kind)
             # One broken page must not take the whole site down: record it and move on.
             try:
-                md_r = Renderer(resolve_md)
+                md_r = make(resolve_md)
                 if kind == "topics":
-                    rec, page_md, render_html, short = _topic(raw, md_r, resolve_html, site, s)
+                    rec, page_md, render_html, short = _topic(raw, md_r, make, resolve_html, site, s)
                 else:
-                    rec, page_md, render_html, short = _reference(raw, kind, md_r, pages, resolve_md, resolve_html, site, s)
+                    rec, page_md, render_html, short = _reference(raw, kind, md_r, make, pages, resolve_md, resolve_html, site, s)
                 if rec is None:
                     report.add("skipped", raw["title"], kind)
                     continue
@@ -415,13 +419,26 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     print("problems:", {k: n for k, n in health["counts"].items() if n} or "none")
 
 
-def _reference(raw, kind, md_r, pages: Pages, resolve_md, resolve_html, site: Site, s: str):
+def _renderer_factory(renderer: str, templates: Path | None, raw_dir: Path, raws: dict):
+    """A callable (resolve, **options) -> renderer with wikitext.Renderer's interface."""
+    if renderer == "legacy":
+        return Renderer
+    if renderer != "port":
+        raise ValueError(f"unknown renderer {renderer!r}")
+    if templates is None or not Path(templates).is_file():
+        raise FileNotFoundError(f"the port renderer needs the wiki's templates file; not found: {templates}")
+    from .portrender import PortContext
+
+    return PortContext.load(templates, raw_dir, raws).renderer
+
+
+def _reference(raw, kind, md_r, make, pages: Pages, resolve_md, resolve_html, site: Site, s: str):
     """A command or function page: (JSON record, Markdown, HTML, summary)."""
     rec_md = parse_page(raw, kind, md_r)
     if rec_md is None:
         return None, "", "", ""
-    rec = parse_page(raw, kind, Renderer(None, hard_breaks=False))  # JSON: plain newlines
-    rec_html = parse_page(raw, kind, Renderer(resolve_html, code_links=True))
+    rec = parse_page(raw, kind, make(None, hard_breaks=False))  # JSON: plain newlines
+    rec_html = parse_page(raw, kind, make(resolve_html, code_links=True))
     for r in (rec, rec_md, rec_html):
         _fix_references(r, pages)
     short = summary(rec["description"])
@@ -446,10 +463,10 @@ def topic_group(raw: dict) -> str:
     return "General"
 
 
-def _topic(raw, md_r, resolve_html, site: Site, s: str):
+def _topic(raw, md_r, make, resolve_html, site: Site, s: str):
     rec_md = parse_topic(raw, md_r)
-    rec = parse_topic(raw, Renderer(None, hard_breaks=False))  # JSON: plain newlines
-    rec_html = parse_topic(raw, Renderer(resolve_html, code_links=True))
+    rec = parse_topic(raw, make(None, hard_breaks=False))  # JSON: plain newlines
+    rec_html = parse_topic(raw, make(resolve_html, code_links=True))
     group = topic_group(raw)
     for r in (rec, rec_md, rec_html):
         r["groups"] = [group]

@@ -33,6 +33,7 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 |---|---|---|
 | `python -m unittest` | <1 s | parser and end-to-end build tests on `tests/fixtures/raw/` (no data clone needed) |
 | `python -m biwiki build` | ~20 s | full mirror from `data/raw/` into `out/` (gitignored) |
+| `python -m biwiki --out <dir> build --renderer port [--templates <file>]` | ~3 min | the same through the MediaWiki parser port and `htmlmd` (`biwiki/portrender.py`; templates default `../wiki-fetch/templates.json`); not yet the default |
 | `python -m biwiki report` | 1 s | new parser problems in `out/report.json` compared with `known-problems.json` |
 | `python -m biwiki --dataset data build` | ~25 s | also rewrite the JSON bundles in the data clone |
 | `python -m biwiki feed` | ~5 s | `changes.*` and `feed.xml` from the git history of the data clone |

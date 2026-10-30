@@ -11,6 +11,8 @@ from .fetch import CATEGORIES
 ROOT = Path(__file__).resolve().parent.parent
 # The a3ref/data clone: ./data (where the deploy workflow checks it out), else ../data; anywhere else via --raw/--data.
 DATA = next((p for p in (ROOT / "data", ROOT.parent / "data") if p.is_dir()), ROOT / "data")
+# the wiki's templates for --renderer port (a JSON object "Template:X" -> {wikitext, ...}), from a3ref/wiki-fetch
+TEMPLATES = ROOT.parent / "wiki-fetch" / "templates.json"
 
 
 def main(argv=None) -> None:
@@ -26,6 +28,12 @@ def main(argv=None) -> None:
     def kinds_arg(p):
         p.add_argument("--only", choices=list(CATEGORIES), action="append", help="limit to commands or functions")
 
+    def renderer_args(p):
+        p.add_argument("--renderer", choices=("legacy", "port"), default="legacy",
+                       help="wikitext renderer: legacy (wikitext.Renderer) or port (MediaWiki parser port + htmlmd)")
+        p.add_argument("--templates", type=Path, default=TEMPLATES,
+                       help="the wiki's templates JSON for --renderer port (default: ../wiki-fetch/templates.json)")
+
     for name, help_ in (("sync", "download/refresh raw wikitext (opens Chrome)"),
                         ("update", "sync + build")):
         p = sub.add_parser(name, help=help_)
@@ -33,7 +41,11 @@ def main(argv=None) -> None:
         p.add_argument("--full", action="store_true", help="ignore cache and re-download everything")
         p.add_argument("--hidden", action="store_true", help="move the Chrome window off-screen")
         p.add_argument("--profile", type=Path, default=ROOT / ".browser-profile", help="Chrome profile directory")
-    kinds_arg(sub.add_parser("build", help="generate Markdown/JSON from the raw cache"))
+        if name == "update":
+            renderer_args(p)
+    p = sub.add_parser("build", help="generate Markdown/JSON from the raw cache")
+    kinds_arg(p)
+    renderer_args(p)
     p = sub.add_parser("feed", help="write changes.json, changes.md and feed.xml from the data repository's git history")
     p.add_argument("--data", type=Path, default=DATA, help="clone of a3ref/data, with history (default: ./data)")
     p = sub.add_parser("report", help="compare the last build's report.json with known-problems.json")
@@ -55,7 +67,8 @@ def main(argv=None) -> None:
     if a.cmd in ("build", "update"):
         from .render import build
 
-        build(a.raw, a.out, kinds, dataset=a.dataset, base_url=a.base_url.rstrip("/") + "/")
+        build(a.raw, a.out, kinds, dataset=a.dataset, base_url=a.base_url.rstrip("/") + "/", renderer=a.renderer,
+              templates=a.templates)
     if a.cmd == "feed":
         from .feed import write
         from .render import page_slug
