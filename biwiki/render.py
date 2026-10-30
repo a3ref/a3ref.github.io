@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .fetch import CATEGORIES, TEMPLATES, TOPIC_TITLES, load_cache
+from .ogimage import SUFFIX as OG_SUFFIX
+from .ogimage import OgImages
 from .parse import parse_page, parse_topic, script_name, wiki_url
 from .report import Report
 from .site import PLACEHOLDER, Site, _anchor, heading_id, plain_text, redirect_page
@@ -360,18 +362,24 @@ def _redirect_stub(rec: dict, target: tuple[str, str], pages: Pages, base: str) 
 
 
 def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset: Path | None = None,
-          base_url: str = SITE_URL, renderer: str = "auto", templates: Path | None = None) -> None:
+          base_url: str = SITE_URL, renderer: str = "auto", templates: Path | None = None,
+          og_images: bool = True) -> None:
     """Generate the mirror in ``out_dir``; with ``dataset``, also write the parsed JSON bundles there.
 
     ``renderer``: "legacy" renders wikitext with wikitext.Renderer; "port" with the MediaWiki parser port and
     htmlmd (portrender.PortRenderer), which needs the wiki's templates (``templates``, a JSON file; default
-    ``<raw_dir>/templates.json``, written by the sync); "auto" is "port" when that file exists, else "legacy"."""
+    ``<raw_dir>/templates.json``, written by the sync); "auto" is "port" when that file exists, else "legacy".
+
+    ``og_images``: draw each page's preview image (ogimage.py) next to it, in worker processes while the pages
+    are parsed; images already in ``out_dir`` with the same inputs are kept. Without them the pages point at the
+    site-wide image."""
     kinds = [k for k in (kinds or KINDS) if (raw_dir / f"{k}.json").exists()]
     raws = {k: load_cache(raw_dir / f"{k}.json") for k in kinds}
     make = _renderer_factory(renderer, templates, raw_dir, raws)
     pages = Pages(raws)
     resolve_md, resolve_html = pages.resolver("md"), pages.resolver("html")
-    site = Site(out_dir, pages.script_names(), KIND_LABEL, base_url)
+    site = Site(out_dir, pages.script_names(), KIND_LABEL, base_url, og_images=og_images)
+    og = OgImages() if og_images else None
     pending: list[tuple] = []  # HTML is rendered once every record is known (the side navigation lists group siblings)
     writer = Writer(out_dir, base_url)
     redirects: dict[str, tuple[str, str]] = {}  # topic title -> (title, anchor) of the page a wiki redirect points at
@@ -389,8 +397,15 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     for kind in kinds:
         target = out_dir / kind
         if target.exists():
-            shutil.rmtree(target)
-        target.mkdir(parents=True)
+            if og:  # the preview images stay: unchanged ones are not drawn again, the others are overwritten
+                for f in target.iterdir():
+                    if f.is_dir():
+                        shutil.rmtree(f)
+                    elif not f.name.endswith(OG_SUFFIX):
+                        f.unlink()
+            else:
+                shutil.rmtree(target)
+        target.mkdir(parents=True, exist_ok=True)
         records[kind] = []
         for raw in sorted(raws[kind].values(), key=lambda v: v["title"].lower()):
             s = pages.slug(raw["title"], kind)
@@ -413,6 +428,10 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
             pending.append((target, s, rec, render_html))
             if kind == "topics" and (to := redirect_target(raw["wikitext"])):
                 redirects[rec["title"]] = to
+            elif og:  # drawn by the pool while the next pages are parsed
+                syntax = next((x["syntax"] for x in rec.get("syntaxes", []) if x["syntax"]), "")
+                og.submit(target / f"{s}{OG_SUFFIX}", rec["name"], "topic" if kind == "topics" else rec["type"],
+                          syntax, short)
             slugs[rec["title"]] = s
             summaries[rec["title"]] = short
             search.append([rec["name"], rec["type"][0], f"{kind}/{s}", _short(short, 110), rec.get("operator") or ""])
@@ -474,6 +493,9 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     health = report.to_json(updated)
     (out_dir / "report.json").write_text(json.dumps(health, ensure_ascii=False, indent=1), encoding="utf-8")
     print("problems:", {k: n for k, n in health["counts"].items() if n} or "none")
+    if og:
+        drawn, kept = og.close([out_dir / k for k in kinds])
+        print(f"preview images: {drawn} drawn, {kept} unchanged")
 
 
 def _renderer_factory(renderer: str, templates: Path | None, raw_dir: Path, raws: dict):

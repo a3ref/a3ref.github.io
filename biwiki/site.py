@@ -20,6 +20,8 @@ from pathlib import Path
 
 from markdown_it import MarkdownIt
 
+from .ogimage import SUFFIX as OG_SUFFIX
+
 ASSETS = Path(__file__).parent / "assets"
 SITE_NAME = "a3ref"
 SITE_TITLE = "Arma 3 scripting reference"
@@ -182,8 +184,9 @@ class CodeLinker:
 
 class Site:
     def __init__(self, out_dir: Path, pages: dict[str, tuple[str, str]], kind_labels: dict[str, str],
-                 base_url: str = "https://a3ref.github.io/"):
+                 base_url: str = "https://a3ref.github.io/", og_images: bool = False):
         self.out = out_dir
+        self.og_images = og_images  # pages point at their own preview image (ogimage.py), else at assets/og.png
         self.linker = CodeLinker(pages)
         self.kind_labels = kind_labels
         self.base = base_url
@@ -281,8 +284,9 @@ class Site:
 </div>"""
 
     def _head(self, root: str, path: str, title: str, description: str, og_type: str, jsonld: list, extra: str,
-              canonical: bool = True) -> str:
+              canonical: bool = True, image: tuple[str, str] | None = None) -> str:
         url = self.base + (path if path != "index.html" else "")
+        image_url, image_alt = image or (f"{self.base}assets/og.png", "a3ref, the Arma 3 scripting reference")
         light, dark = THEME_COLOR
         preload = "".join(
             f'<link rel="preload" href="{root}assets/fonts/{f}.woff2" as="font" type="font/woff2" crossorigin>'
@@ -314,18 +318,23 @@ class Site:
 <meta property="og:title" content="{html.escape(title)}">
 <meta property="og:description" content="{desc}">
 <meta property="og:url" content="{url}">
-<meta property="og:image" content="{self.base}assets/og.png">
+<meta property="og:image" content="{image_url}">
+<meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="a3ref, the Arma 3 scripting reference">
+<meta property="og:image:alt" content="{html.escape(image_alt)}">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{image_url}">
+<meta name="twitter:image:alt" content="{html.escape(image_alt)}">
 {preload}
 <link rel="stylesheet" href="{root}assets/style.css">
 {extra}{ld}</head>"""
 
     def shell(self, *, path: str, title: str, description: str, header: str, main: str, crumbs: list,
               toc: str = "", side: str = "", jsonld: list | None = None, extra_head: str = "", footer: str = "",
-              page_class: str = "", og_type: str = "article", root: str | None = None, canonical: bool = True) -> str:
+              page_class: str = "", og_type: str = "article", root: str | None = None, canonical: bool = True,
+              image: tuple[str, str] | None = None) -> str:
+        """``image``: (absolute URL, alt text) of the page's preview image; default the site-wide one."""
         root = root if root is not None else "../" * path.count("/")
         title = _fit_title(title)
         jsonld = list(jsonld or [])
@@ -367,7 +376,7 @@ class Site:
 </div>"""
         doc = f"""<!DOCTYPE html>
 <html lang="en">
-{self._head(root, path, title, description, og_type, jsonld, extra_head, canonical)}
+{self._head(root, path, title, description, og_type, jsonld, extra_head, canonical, image)}
 <body data-root="{root}" class="{page_class}">
 <a class="skip" href="#content">Skip to content</a>
 {body}
@@ -438,11 +447,12 @@ class Site:
         crumbs.append((rec["name"], f"{kind}/{s}.html"))
         footer = _site_footer(rec=rec)
         desc = _description(summary, rec)
+        image = self._image(f"{kind}/{s}", rec)
         return self.shell(path=f"{kind}/{s}.html", title=f"{rec['name']} – Arma 3 {label.lower()}",
                           description=desc, header=header, main=body,
                           crumbs=crumbs, toc=toc, side=self._side(kind, group, siblings, rec["name"]),
-                          jsonld=[_article_ld(self.base, f"{kind}/{s}", rec, desc)], extra_head=_alternates(s),
-                          footer=footer, page_class=f"page-{rec['type']}")
+                          jsonld=[_article_ld(self.base, f"{kind}/{s}", rec, desc, image[0])], extra_head=_alternates(s),
+                          footer=footer, page_class=f"page-{rec['type']}", image=image)
 
     def topic(self, s: str, rec: dict, summary: str, siblings: list | None = None) -> str:
         body, heads = self._ids(self.html(rec["markdown"]))
@@ -459,11 +469,22 @@ class Site:
                   (group, f"topics/index.html#{_anchor(group)}"), (rec["name"], f"topics/{s}.html")]
         footer = _site_footer(rec=rec)
         desc = _description(summary, rec)
+        image = self._image(f"topics/{s}", rec)
         return self.shell(path=f"topics/{s}.html", title=f"{rec['name']} – Arma 3 scripting",
                           description=desc, header=header, main=body, crumbs=crumbs,
                           toc=toc if len(heads) > 1 else "", side=self._side("topics", group, siblings, rec["name"]),
-                          jsonld=[_article_ld(self.base, f"topics/{s}", rec, desc)], extra_head=_alternates(s),
-                          footer=footer, page_class="page-topic")
+                          jsonld=[_article_ld(self.base, f"topics/{s}", rec, desc, image[0])], extra_head=_alternates(s),
+                          footer=footer, page_class="page-topic", image=image)
+
+    def _image(self, path: str, rec: dict) -> tuple[str, str]:
+        """(absolute URL, alt text) of a page's preview image: its own, which render.build draws next to the page
+        with ogimage, or the site-wide one when the build draws none."""
+        if not self.og_images:
+            return f"{self.base}assets/og.png", "a3ref, the Arma 3 scripting reference"
+        label = {"command": "Arma 3 scripting command", "function": "Arma 3 function"}.get(rec["type"], "Arma 3 scripting topic")
+        form = next((x["syntax"] for x in rec.get("syntaxes", []) if x.get("syntax")), "")
+        alt = f"{rec['name']}, {label}" + (f": {_short(plain_text(form), 200)}" if form else "")
+        return f"{self.base}{path}{OG_SUFFIX}", alt
 
     def _side(self, kind: str, group: str | None, siblings: list | None, current: str) -> str:
         """The other pages of the current group, around the current one."""
@@ -822,7 +843,7 @@ def _alternates(s: str) -> str:
             f'<link rel="alternate" type="application/json" href="{s}.json">\n')
 
 
-def _article_ld(base: str, path: str, rec: dict, description: str) -> dict:
+def _article_ld(base: str, path: str, rec: dict, description: str, image: str) -> dict:
     return {
         "@context": "https://schema.org",
         "@type": "TechArticle",
@@ -831,6 +852,7 @@ def _article_ld(base: str, path: str, rec: dict, description: str) -> dict:
         "url": f"{base}{path}.html",
         "mainEntityOfPage": {"@type": "WebPage", "@id": f"{base}{path}.html"},
         "dateModified": rec["updated"],
+        "image": image,
         "inLanguage": "en",
         "isBasedOn": rec["url"],
         "license": WIKI_TERMS,

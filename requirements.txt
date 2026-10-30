@@ -1,3 +1,4 @@
 mwparserfromhell>=0.6
 patchright>=1.50
 markdown-it-py>=3.0
+Pillow==12.2.0

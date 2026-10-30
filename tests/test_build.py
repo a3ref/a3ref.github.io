@@ -84,6 +84,19 @@ class BuildTest(unittest.TestCase):
         # served at every missing address, so it names none as its own
         self.assertNotIn('rel="canonical"', (self.out / "404.html").read_text(encoding="utf-8"))
 
+    def test_preview_images(self):
+        url = "https://a3ref.github.io/commands/setPos.og.png"
+        page = (self.out / "commands" / "setPos.html").read_text(encoding="utf-8")
+        self.assertIn(f'<meta property="og:image" content="{url}">', page)
+        self.assertIn(f'<meta name="twitter:image" content="{url}">', page)
+        self.assertIn('<meta property="og:image:width" content="1200">', page)
+        self.assertIn('<meta property="og:image:alt" content="setPos, Arma 3 scripting command: object setPos pos">', page)
+        self.assertIn(f'"image": "{url}"', page)
+        for path in ("commands/setPos", "functions/BIS_fnc_spawnGroup", "topics/Position"):
+            self.assertEqual((self.out / f"{path}.og.png").read_bytes()[:8], b"\x89PNG\r\n\x1a\n", path)
+        home = (self.out / "index.html").read_text(encoding="utf-8")
+        self.assertIn('<meta property="og:image" content="https://a3ref.github.io/assets/og.png">', home)
+
     def test_no_crashes(self):
         report = json.loads((self.out / "report.json").read_text(encoding="utf-8"))
         self.assertEqual((report["counts"]["error"], report["counts"]["skipped"]), (0, 0), report["problems"])

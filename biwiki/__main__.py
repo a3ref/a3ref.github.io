@@ -32,6 +32,8 @@ def main(argv=None) -> None:
                             "default auto: port if the templates file exists, else legacy with a warning")
         p.add_argument("--templates", type=Path,
                        help="the wiki's templates JSON for the port (default: <raw>/templates.json, written by sync)")
+        p.add_argument("--no-og-images", dest="og_images", action="store_false",
+                       help="skip the per-page preview images (pages then point at the site-wide one); quicker")
 
     for name, help_ in (("sync", "download/refresh raw wikitext (opens Chrome)"),
                         ("update", "sync + build")):
@@ -69,7 +71,7 @@ def main(argv=None) -> None:
         from .render import build
 
         build(a.raw, a.out, kinds, dataset=a.dataset, base_url=a.base_url.rstrip("/") + "/", renderer=a.renderer,
-              templates=a.templates)
+              templates=a.templates, og_images=a.og_images)
     if a.cmd == "feed":
         from .feed import write
         from .render import page_slug
