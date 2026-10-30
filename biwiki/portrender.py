@@ -1,4 +1,4 @@
-"""A renderer with the interface of ``wikitext.Renderer`` that renders through the MediaWiki parser port.
+"""The renderer of the build: wikitext fragments through the MediaWiki parser port to Markdown and plain text.
 
 ``parse.parse_page`` / ``parse_topic`` cut a page into fragments (parameter values, notes, the whole topic page)
 and ask a renderer for their Markdown or plain text. ``PortRenderer`` parses each fragment with the port
@@ -6,8 +6,7 @@ and ask a renderer for their Markdown or plain text. ``PortRenderer`` parses eac
 ``htmlmd.HtmlMarkdown``. The build renders every page three times (JSON plain text, Markdown, HTML flavours), so
 the HTML of a fragment is cached per (page title, fragment) and parsed once.
 
-Unlike Renderer no ``preprocess()`` / ``close_tables()`` step is needed: the port reads unknown tags, tables
-written with ``{{!}}`` and tables left open as MediaWiki does. Fragments are stripped, as MediaWiki trims a named
+The port reads unknown tags, tables written with ``{{!}}`` and tables left open as MediaWiki does. Fragments are stripped, as MediaWiki trims a named
 template parameter before it is used, so the first line of "|p1= name: Type" is no preformatted line.
 
 Original a3ref code (MIT): it only calls the port (GPL, ``biwiki/mediawiki/``) and translates no MediaWiki code.
@@ -77,7 +76,9 @@ class PortContext:
 
 
 class PortRenderer:
-    """``wikitext.Renderer``'s interface (md, plain, plain_lines, unknown, page_title) over the port."""
+    """What ``parse`` asks of a renderer (md, plain, plain_lines, unknown, page_title), over the port.
+
+    ``unknown`` counts the templates and tags the conversion had no rule for (report.json)."""
 
     def __init__(self, ctx: PortContext, resolve: Optional[LinkResolver] = None, page_title: str = "",
                  preformat: bool = True, emphasis: bool = True, inline: bool = False, hard_breaks: bool = True,

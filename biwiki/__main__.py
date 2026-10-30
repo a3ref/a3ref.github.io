@@ -26,12 +26,10 @@ def main(argv=None) -> None:
     def kinds_arg(p):
         p.add_argument("--only", choices=list(CATEGORIES), action="append", help="limit to commands or functions")
 
-    def renderer_args(p):
-        p.add_argument("--renderer", choices=("auto", "legacy", "port"), default="auto",
-                       help="wikitext renderer: port (MediaWiki parser port + htmlmd) or legacy (wikitext.Renderer); "
-                            "default auto: port if the templates file exists, else legacy with a warning")
+    def build_args(p):
         p.add_argument("--templates", type=Path,
-                       help="the wiki's templates JSON for the port (default: <raw>/templates.json, written by sync)")
+                       help="the wiki's templates JSON the pages are rendered with (default: <raw>/templates.json, "
+                            "written by sync)")
         p.add_argument("--no-og-images", dest="og_images", action="store_false",
                        help="skip the per-page preview images (pages then point at the site-wide one); quicker")
 
@@ -45,10 +43,10 @@ def main(argv=None) -> None:
         p.add_argument("--hidden", action="store_true", help="move the Chrome window off-screen")
         p.add_argument("--profile", type=Path, default=ROOT / ".browser-profile", help="Chrome profile directory")
         if name == "update":
-            renderer_args(p)
+            build_args(p)
     p = sub.add_parser("build", help="generate Markdown/JSON from the raw cache")
     kinds_arg(p)
-    renderer_args(p)
+    build_args(p)
     p = sub.add_parser("feed", help="write changes.json, changes.md and feed.xml from the data repository's git history")
     p.add_argument("--data", type=Path, default=DATA, help="clone of a3ref/data, with history (default: ./data)")
     p = sub.add_parser("report", help="compare the last build's report.json with known-problems.json")
@@ -68,10 +66,13 @@ def main(argv=None) -> None:
 
         asyncio.run(sync(a.raw, a.profile, kinds, hidden=a.hidden, full=a.full, walk=a.walk))
     if a.cmd in ("build", "update"):
-        from .render import build
+        from .render import MissingTemplates, build
 
-        build(a.raw, a.out, kinds, dataset=a.dataset, base_url=a.base_url.rstrip("/") + "/", renderer=a.renderer,
-              templates=a.templates, og_images=a.og_images)
+        try:
+            build(a.raw, a.out, kinds, dataset=a.dataset, base_url=a.base_url.rstrip("/") + "/",
+                  templates=a.templates, og_images=a.og_images)
+        except MissingTemplates as e:
+            sys.exit(f"error: {e}")
     if a.cmd == "feed":
         from .feed import write
         from .render import page_slug

@@ -1,10 +1,9 @@
 """Convert the HTML of the MediaWiki parser port (biwiki/mediawiki/) to Markdown in a3ref's conventions.
 
-The port renders wikitext as the BI Community Wiki does; this module turns that HTML into the Markdown that
-``wikitext.Renderer`` writes: GitHub alerts for the wiki's notes, fenced code with a language, pipe tables,
-"- " lists, headings one level down, ``**``/``*`` emphasis, "Arma 3 v2.00" for game versions, ``\\`` hard breaks.
-Links go through a resolver (title, anchor) -> URL or None, as with the Renderer, so Markdown links only to
-mirrored pages. Images are never emitted.
+The port renders wikitext as the BI Community Wiki does; this module turns that HTML into a3ref's Markdown:
+GitHub alerts for the wiki's notes, fenced code with a language, pipe tables, "- " lists, headings one level
+down, ``**``/``*`` emphasis, "Arma 3 v2.00" for game versions, ``\\`` hard breaks. Links go through a resolver
+(title, anchor) -> URL or None, so Markdown links only to mirrored pages. Images are never emitted.
 
 The input is the port's output, not arbitrary HTML: the shapes of the wiki's templates are recognised by the
 class names they emit (biki-messagebox feature-*, gvi2, sqfhighlighter-block, command_description, ...).
@@ -19,7 +18,10 @@ from typing import Optional, Union
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .markdown import CODE_LINK, MD_BACKSLASH, LinkResolver, inline_code, quote, split_ws, unspan
-from .wikitext import FEATURE_ALERT, GAME_NAMES, anchor_mark, game_name, wiki_anchor
+from .wikitext import GAME_NAMES, anchor_mark, game_name, wiki_anchor
+
+# {{Feature|type|...}} -> the GitHub alert it is written as
+FEATURE_ALERT = {"informative": "NOTE", "important": "IMPORTANT", "warning": "WARNING", "obsolete": "CAUTION"}
 
 VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track",
              "wbr"}
@@ -29,7 +31,7 @@ BLOCK_TAGS = {"address", "article", "aside", "blockquote", "center", "dd", "div"
 # never shown: interface widgets, the table of contents, images and galleries, edit links, the reference list
 # (its notes are inlined where they are cited)
 SKIP_TAGS = {"button", "img", "input", "mw:editsection", "noscript", "script", "style", "audio", "video", "map"}
-# "metadata": {{Wiki|stub}}'s notice, whose "expanding it" link is the wiki's edit form (Renderer drops it too)
+# "metadata": {{Wiki|stub}}'s notice, whose "expanding it" link is the wiki's edit form
 SKIP_CLASSES = {"toc", "toc-side", "mw-references-wrap", "references", "thumb", "gallery", "mw-editsection",
                 "bikispoiler-top", "catlinks", "printfooter", "mw-empty-elt", "metadata"}
 INLINE_CODE_TAGS = {"code", "tt", "var", "samp"}
@@ -55,7 +57,7 @@ _NOTE_ID = re.compile(r"usernote(\d{12,14})")
 # ids of the wiki's interface and references, not anchors of the text
 _SKIP_IDS = re.compile(r"cite_|mw-|toc(?:togglecheckbox)?$")
 # {{Wiki|placeholder}}, {{Wiki|TODO}} ...: maintenance message boxes, told apart by the colours Template:Wiki
-# gives Template:Messagebox; they carry no reference content (Renderer drops {{Wiki}} too)
+# gives Template:Messagebox; they carry no reference content
 MAINTENANCE_COLOURS = {"#f00", "burlywood", "blueviolet", "darkgray", "#96c", "dodgerblue"}
 
 
@@ -145,7 +147,7 @@ def link_target(href: str) -> Optional[tuple[str, str]]:
 
 
 class HtmlMarkdown:
-    """Converter of the port's HTML; options as Renderer's:
+    """Converter of the port's HTML; options:
 
     ``resolve``: wiki title, anchor -> URL, or None to keep only the link's text.
     ``page_title``: the page being rendered, for self links and "#anchor" links.
@@ -336,7 +338,7 @@ class HtmlMarkdown:
     @staticmethod
     def _escape_marks(part: str) -> str:
         """Escape the line starts that would change what a paragraph means in Markdown.
-        The first line keeps a list mark, as Renderer does ("1. Navigate to ..." written as text reads as the
+        The first line keeps a list mark ("1. Navigate to ..." written as text reads as the
         list it is meant to be), but not a heading or quote mark. A later line (after a hard break or a source
         line break) keeps the marks that cannot interrupt a paragraph: an ordered item other than "1."."""
         lines = part.split("\n")
@@ -436,7 +438,7 @@ class HtmlMarkdown:
         dd_line = False  # out[-1] is a one-line ": text" indentation, which the next one continues
         while i < len(kids):
             c = kids[i]
-            if c.tag == "dd":  # ": text" lines read as consecutive lines of one paragraph, as Renderer writes them
+            if c.tag == "dd":  # ": text" lines read as consecutive lines of one paragraph
                 body = self._flow(c.children)
                 simple = len(body) == 1 and "\n\n" not in body[0] and not re.match(r"(?:[-*+] |\d+[.)] |```|\||>)", body[0])
                 if simple and dd_line:
@@ -561,7 +563,7 @@ class HtmlMarkdown:
 
     def _arg_title(self, el: Element) -> Optional[list[str]]:
         """{{ArgTitle|3|Name|left|right}}: a <div> with the heading between a "left" and a "right" <div>, e.g.
-        {{GVI|arma3|1.00}} -> "Name (Arma 3 v1.00)". As Renderer does, only "left" goes into the heading, in
+        {{GVI|arma3|1.00}} -> "Name (Arma 3 v1.00)". Only "left" goes into the heading, in
         parentheses, and "right" is dropped: topic sections and their anchors come from these headings."""
         kids = el.elements()
         heads = el.find(lambda e: re.fullmatch(r"h[1-6]", e.tag) is not None)

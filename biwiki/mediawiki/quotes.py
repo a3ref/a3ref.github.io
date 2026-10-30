@@ -1,7 +1,7 @@
 # Ported from MediaWiki 1.39 includes/parser/Parser.php, Parser::handleAllQuotes() and Parser::doQuotes()
 # (https://www.mediawiki.org/), (C) MediaWiki contributors.
-# Changed by a3ref contributors on 2026-10-30: translated to Python; the tags written are a parameter, so the
-# Markdown renderer in biwiki/wikitext.py can use its own marks.
+# Changed by a3ref contributors on 2026-10-30: translated to Python; the tags written are a parameter (a3ref's
+# former direct Markdown renderer used its own marks).
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your

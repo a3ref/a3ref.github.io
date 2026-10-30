@@ -15,7 +15,6 @@ from .ogimage import OgImages
 from .parse import parse_page, parse_topic, script_name, wiki_url
 from .report import Report
 from .site import PLACEHOLDER, Site, _anchor, heading_id, plain_text, redirect_page
-from .wikitext import Renderer
 
 SITE_URL = "https://a3ref.github.io/"
 SCHEMA = Path(__file__).parent / "schema.json"
@@ -362,20 +361,18 @@ def _redirect_stub(rec: dict, target: tuple[str, str], pages: Pages, base: str) 
 
 
 def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset: Path | None = None,
-          base_url: str = SITE_URL, renderer: str = "auto", templates: Path | None = None,
-          og_images: bool = True) -> None:
+          base_url: str = SITE_URL, templates: Path | None = None, og_images: bool = True) -> None:
     """Generate the mirror in ``out_dir``; with ``dataset``, also write the parsed JSON bundles there.
 
-    ``renderer``: "legacy" renders wikitext with wikitext.Renderer; "port" with the MediaWiki parser port and
-    htmlmd (portrender.PortRenderer), which needs the wiki's templates (``templates``, a JSON file; default
-    ``<raw_dir>/templates.json``, written by the sync); "auto" is "port" when that file exists, else "legacy".
+    The wikitext is rendered with the MediaWiki parser port and htmlmd (portrender.PortRenderer), which needs the
+    wiki's templates: ``templates``, a JSON file; default ``<raw_dir>/templates.json``, written by the sync.
 
     ``og_images``: draw each page's preview image (ogimage.py) next to it, in worker processes while the pages
     are parsed; images already in ``out_dir`` with the same inputs are kept. Without them the pages point at the
     site-wide image."""
     kinds = [k for k in (kinds or KINDS) if (raw_dir / f"{k}.json").exists()]
     raws = {k: load_cache(raw_dir / f"{k}.json") for k in kinds}
-    make = _renderer_factory(renderer, templates, raw_dir, raws)
+    make = _renderer_factory(templates, raw_dir, raws)
     pages = Pages(raws)
     resolve_md, resolve_html = pages.resolver("md"), pages.resolver("html")
     site = Site(out_dir, pages.script_names(), KIND_LABEL, base_url, og_images=og_images)
@@ -498,23 +495,19 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
         print(f"preview images: {drawn} drawn, {kept} unchanged")
 
 
-def _renderer_factory(renderer: str, templates: Path | None, raw_dir: Path, raws: dict):
-    """A callable (resolve, **options) -> renderer with wikitext.Renderer's interface."""
+class MissingTemplates(FileNotFoundError):
+    """The build has no templates file to render the pages with."""
+
+
+def _renderer_factory(templates: Path | None, raw_dir: Path, raws: dict):
+    """A callable (resolve, **options) -> portrender.PortRenderer."""
     if templates is None:
         templates = raw_dir / TEMPLATES
-    if renderer == "auto":
-        if Path(templates).is_file():
-            renderer = "port"
-        else:
-            # a data clone the template sync has not reached yet still builds
-            print(f"warning: no templates file {templates}: rendering with the legacy renderer")
-            renderer = "legacy"
-    if renderer == "legacy":
-        return Renderer
-    if renderer != "port":
-        raise ValueError(f"unknown renderer {renderer!r}")
-    if templates is None or not Path(templates).is_file():
-        raise FileNotFoundError(f"the port renderer needs the wiki's templates file; not found: {templates}")
+    if not Path(templates).is_file():
+        raise MissingTemplates(
+            f"no templates file {templates}: the pages are rendered with the wiki's templates, which "
+            f"`python -m biwiki sync --walk` downloads (a clone of a3ref/data has them in raw/{TEMPLATES}); "
+            "or pass --templates <file>")
     from .portrender import PortContext
 
     return PortContext.load(templates, raw_dir, raws).renderer

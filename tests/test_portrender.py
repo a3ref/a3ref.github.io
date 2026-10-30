@@ -1,4 +1,4 @@
-"""biwiki.portrender: the Renderer interface over the MediaWiki parser port (no data clone needed)."""
+"""biwiki.portrender: the build's renderer over the MediaWiki parser port (no data clone needed)."""
 from __future__ import annotations
 
 import json
@@ -59,7 +59,7 @@ class PortRendererTest(unittest.TestCase):
             r = self.ctx.renderer(None, hard_breaks=False)
             r.page_title = "setThing"
             self.assertEqual(r.md(" '''bold''' {{hl|x}}"), "**bold** `x`")
-            self.assertEqual(r.plain(" '''bold''' {{hl|x}}"), "bold `x`")  # as Renderer: code keeps its marks
+            self.assertEqual(r.plain(" '''bold''' {{hl|x}}"), "bold `x`")  # code keeps its marks
         self.assertEqual(self.ctx.parses, 1)
 
     def test_unknown_templates(self):
@@ -88,7 +88,7 @@ class PortBuildTest(unittest.TestCase):
             templates = tmp / "templates.json"
             templates.write_text(json.dumps({t: {"wikitext": w} for t, w in TEMPLATES.items()}), encoding="utf-8")
             with redirect_stdout(StringIO()):
-                build(RAW, tmp / "out", renderer="port", templates=templates)
+                build(RAW, tmp / "out", templates=templates)
             report = json.loads((tmp / "out" / "report.json").read_text(encoding="utf-8"))
             self.assertEqual(report["counts"]["error"], 0, report["problems"])
             md = (tmp / "out" / "commands" / "setPos.md").read_text(encoding="utf-8")
@@ -96,27 +96,25 @@ class PortBuildTest(unittest.TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
-    def test_default_renderer(self):
-        # the port when the data clone's raw/templates.json exists (keyed by page id), else legacy with a warning
-        from biwiki.render import _renderer_factory
-        from biwiki.wikitext import Renderer
+    def test_default_templates(self):
+        # the data clone's raw/templates.json (keyed by page id); without it the build stops and says how to get it
+        from biwiki.render import MissingTemplates, _renderer_factory
 
         with tempfile.TemporaryDirectory() as tmp:
             raw = Path(tmp)
             for f in ("commands.json", "functions.json", "topics.json"):
                 shutil.copyfile(RAW / f, raw / f)
-            out = StringIO()
-            with redirect_stdout(out):
-                self.assertIs(_renderer_factory("auto", None, raw, {}), Renderer)
-            self.assertIn("warning: no templates file", out.getvalue())
+            with self.assertRaises(MissingTemplates) as e:
+                build(raw, raw / "out")
+            self.assertIn("sync --walk", str(e.exception))
+            self.assertFalse((raw / "out").exists())
             (raw / "templates.json").write_text(json.dumps(
                 {str(i): {"title": t, "revid": i, "timestamp": "2026-01-01T00:00:00Z", "wikitext": w}
                  for i, (t, w) in enumerate(sorted(TEMPLATES.items()), 1)}), encoding="utf-8")
-            r = _renderer_factory("auto", None, raw, {})(None)
+            r = _renderer_factory(None, raw, {})(None)
             self.assertIsInstance(r, PortRenderer)
             r.page_title = "setThing"
             self.assertEqual(r.md("{{hl|x}}"), "`x`")
-            self.assertIs(_renderer_factory("legacy", None, raw, {}), Renderer)
 
 
 if __name__ == "__main__":

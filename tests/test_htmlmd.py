@@ -38,7 +38,7 @@ class TextTest(unittest.TestCase):
                          "a\\\n1\\. one\\\n\\- two\\\n\\# three\\\n\\> q")
         # only "1." can interrupt a paragraph: "2." needs no escape
         self.assertEqual(md("<p>1) one<br />\n2) two<br />\n10. ten</p>"), "1) one\\\n2) two\\\n10. ten")
-        # the first line keeps a list mark, as Renderer does, but not a heading or quote mark
+        # the first line keeps a list mark, but not a heading or quote mark
         self.assertEqual(md("<p>- item</p><p># no heading</p><p>&gt; no quote</p>"),
                          "- item\n\n\\# no heading\n\n\\> no quote")
 
@@ -148,7 +148,7 @@ class BlockTest(unittest.TestCase):
                          "**Type:** String\n\n**Author:** BI")
         self.assertEqual(md("<dl><dt>Boundary cases</dt><dd></dd></dl>"), "**Boundary cases**")
         self.assertEqual(md("<p>text</p><dl><dd>indented</dd></dl>"), "text\n\nindented")
-        # ": a" lines are lines of one paragraph, as Renderer writes them; a block ends the run
+        # ": a" lines are lines of one paragraph; a block ends the run
         self.assertEqual(md("<dl><dd>one</dd><dd>two <b>2</b></dd><dd><ul><li>x</li></ul></dd><dd>three</dd>"
                             "<dt>T</dt><dd>d</dd><dd>four</dd></dl>"),
                          "one\ntwo **2**\n\n- x\n\nthree\n\n**T:** d\n\nfour")
@@ -339,7 +339,7 @@ class TemplateTest(unittest.TestCase):
                '_Cold_War_Assault_version_1.85&amp;action=edit&amp;redlink=1" class="new" title="Category:Introduced '
                'with Arma: Cold War Assault version 1.85 (page does not exist)"> 1.85</a></span></span>')
         self.assertEqual(md(f"<p>{cwa}</p>"), "Arma: Cold War Assault v1.85")
-        # {{GVI|arma3}} without a version shows "?" on the wiki; Renderer writes the game only
+        # {{GVI|arma3}} without a version shows "?" on the wiki; the Markdown has the game only
         self.assertEqual(md('<p><span class="gvi2 gvi-arma3"><span class="version">?</span></span></p>'), "Arma 3")
 
     def test_arg_title(self):
@@ -347,7 +347,7 @@ class TemplateTest(unittest.TestCase):
                             '<span class="version"> 1.00</span></span></div><div style="flex-grow: 1">\n'
                             '<h3><span class="mw-headline" id="AnimChanged">AnimChanged</span></h3>\n</div></div>'),
                          "#### AnimChanged (Arma 3 v1.00)")
-        # {{ArgTitle|3|Modules||{{GVI|...}}}}: what is right of the title stays out of it, as with Renderer
+        # {{ArgTitle|3|Modules||{{GVI|...}}}}: what is right of the title stays out of it
         self.assertEqual(md('<div style="display: flex; align-items: baseline"><div style="flex-grow: 1">\n'
                             '<h3><span class="mw-headline" id="Modules">Modules</span></h3>\n</div>'
                             '<div style="margin-left: 0.5em">\n<p><span class="gvi2 gvi-arma2"><span class="version">'

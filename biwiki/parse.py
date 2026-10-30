@@ -11,7 +11,8 @@ import mwparserfromhell as mw
 from mwparserfromhell.nodes import Tag, Template
 
 from . import docblock, typeexpr
-from .wikitext import Renderer, clean_code, game_name, parse_note, parse_wikitext, preprocess
+from .portrender import PortRenderer
+from .wikitext import clean_code, game_name, parse_wikitext, preprocess
 
 WIKI_URL = "https://community.bistudio.com/wiki/"
 
@@ -220,7 +221,7 @@ def split_param(plain: str) -> dict:
     }
 
 
-def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
+def parse_page(raw: dict, kind: str, r: PortRenderer) -> Optional[dict]:
     title = raw["title"]
     r.page_title = title
     code = parse_wikitext(preprocess(raw["wikitext"]))
@@ -423,7 +424,7 @@ _MONTH = re.compile(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\
 _MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
 
 
-def _notes(code: mw.wikicode.Wikicode, r: Renderer) -> list[dict]:
+def _notes(code: mw.wikicode.Wikicode, r: PortRenderer) -> list[dict]:
     """Community notes in page order: ``{{Note}}`` templates and the older notes written as raw HTML after
     ``{{RV}}`` (see _legacy_notes). A note given both ways is kept once."""
     text = str(code)
@@ -433,7 +434,7 @@ def _notes(code: mw.wikicode.Wikicode, r: Renderer) -> list[dict]:
         if _name(t) == "Note" and t.has("text"):
             pos = text.find(str(t), at)
             at = pos + 1 if pos != -1 else at
-            found.append((pos if pos != -1 else len(text), parse_note(t, r)))
+            found.append((pos if pos != -1 else len(text), _note(t, r)))
     notes: list[dict] = []
     seen: set[str] = set()
     for _, note in sorted(found, key=lambda x: x[0]):
@@ -444,7 +445,20 @@ def _notes(code: mw.wikicode.Wikicode, r: Renderer) -> list[dict]:
     return notes
 
 
-def _legacy_notes(text: str, r: Renderer) -> list[tuple[int, dict]]:
+def _note(t: Template, r: PortRenderer) -> dict:
+    """A ``{{Note|user=...|timestamp=...|text=...}}``: user, date (ISO 8601 UTC or "") and the text's Markdown."""
+    def get(name: str) -> str:
+        return str(t.get(name).value).strip() if t.has(name) else ""
+
+    ts = get("timestamp")
+    when = ""
+    if re.fullmatch(r"\d{12,14}", ts):
+        ts = ts.ljust(14, "0")
+        when = f"{ts[0:4]}-{ts[4:6]}-{ts[6:8]}T{ts[8:10]}:{ts[10:12]}:{ts[12:14]}Z"
+    return {"user": get("user"), "date": when, "text": r.md(t.get("text").value) if t.has("text") else ""}
+
+
+def _legacy_notes(text: str, r: PortRenderer) -> list[tuple[int, dict]]:
     """Notes from before the ``{{Note}}`` template, as the wiki still shows them on about 200 pages::
 
         <dl class="command_description">
@@ -456,7 +470,7 @@ def _legacy_notes(text: str, r: Renderer) -> list[tuple[int, dict]]:
 
     The tags are often left unclosed (``<dt><dt>`` as a spacer, a ``<dd class="note">`` ended by the next
     ``<dt>``); each element runs to the next tag. Returns (offset in the page, note) pairs; the note has the
-    fields of ``wikitext.parse_note``."""
+    fields of ``_note``."""
     out: list[tuple[int, dict]] = []
     for block in _LEGACY_NOTES.finditer(text):
         body = block.group(1)
@@ -507,7 +521,7 @@ def _legacy_date(text: str) -> str:
     return day_iso
 
 
-def _description(p: dict, kind: str, r: Renderer) -> tuple[str, Optional[dict]]:
+def _description(p: dict, kind: str, r: PortRenderer) -> tuple[str, Optional[dict]]:
     """The written description, and the function header comment if the page shows one instead.
 
     Placeholder function pages put the header of the .sqf file in a <pre>/<sqf> block; it is parsed
@@ -589,12 +603,11 @@ def _infer_syntax(name: str, params: list[dict]) -> str:
     return f"[{', '.join(names)}] call {name}"
 
 
-def parse_topic(raw: dict, r: Renderer) -> dict:
+def parse_topic(raw: dict, r: PortRenderer) -> dict:
     """A free-form concept page (data type, event handler list, ...): Markdown plus its sections."""
     title = raw["title"]
     r.page_title = title
-    # a string, not Wikicode: Renderer parses it the same way, and the port, which needs no mwparserfromhell tree,
-    # is spared a parse of the whole page for each of the three flavours
+    # a string, not Wikicode: the port needs no mwparserfromhell tree, so no parse of the whole page is spent on it
     md = r.md(preprocess(raw["wikitext"]))
     return {
         "name": title,
@@ -661,7 +674,7 @@ def _md_desc(md: str, item: dict, type_md: Optional[str] = None) -> Optional[str
     return desc or None
 
 
-def _returns(code, r: Renderer) -> dict:
+def _returns(code, r: PortRenderer) -> dict:
     md = r.md(code)
     plain = r.plain(code)
     # only a " - " on the first line ends the type: "[[Array]] with [a, b]\n* a: [[Number]] - ..." is no type "Array
