@@ -165,6 +165,11 @@ MESSAGES = {
     "cite_warning_sectionpreview_no_text":
         "<code>&lt;ref&gt;</code> tag with name <code>$1</code> cannot be previewed because it is defined outside "
         "the current section or not defined at all.",
+    # SyntaxHighlight extension (i18n/en.json of the SyntaxHighlight in MediaWiki 1.39.0): the names of its
+    # tracking categories
+    "syntaxhighlight-error-category": "Pages with syntax highlighting errors",
+    "syntaxhighlight-enclose-category": "Pages using deprecated enclose attributes",
+    "syntaxhighlight-source-category": "Pages using deprecated source tags",
 }
 
 

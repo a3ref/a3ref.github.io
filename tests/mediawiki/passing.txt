@@ -325,6 +325,7 @@ Empty tag w/ raw HTML ($wgRawHtml==true)
 Empty templates should be handled properly without being redlinked
 Enabling responsive references by default should add a <div> wrapper
 Enabling responsive references in the tag should add a <div> wrapper
+Enclose with nowiki
 Ensure that HTML adoption agency algorithm is properly implemented.
 Ensure that transclusion titles are not url-decoded
 Entities in file name and attributes
@@ -652,6 +653,7 @@ Italics and possessives (2)
 Italics and possessives (3)
 Italics markup in alt attribute (T206940)
 Italics markup in link attribute (T206940)
+Just whitespace
 Langconvert tag: sr-el to sr-ec (should fail)
 Language converter over extlink
 Language converter tricky html2wt cases (2)
@@ -775,6 +777,7 @@ Mixing markup for italics and bold
 Morwen/13: Unclosed link followed by heading
 Multibyte character in padleft
 Multibyte character in padright
+Multiline <source/> in lists
 Multiple colons escaping interlanguage links
 Multiple comments should still parse as SOL-transparent
 Multiple definition (inside <references/>)
@@ -828,12 +831,16 @@ Nesting of <ruby>
 Nesting of <strong>
 Nesting tags, paragraphs on lines which begin with <div>
 No block tags
+No code
+No language specified
+No language specified (no wellformed xml)
 No p-wrappable content
 No paragraph necessary for SOL transparent template
 No regressions on internal links following category (T174639)
 Non-ASCII pseudo-tags are rendered as text
 Non-breaking spaces in title
 Non-empty attributes in th-cells
+Non-existent language
 Non-extlinks in brackets
 Non-html5 tags should be accepted
 Non-transclusion because of too many up levels
@@ -1018,6 +1025,7 @@ Self-closed noinclude, includeonly, onlyinclude tags
 Self-closed pre
 Self-closed tag hooks
 Self-closed tag with broken attribute value quoting
+Self-closing tag
 Self-link to numeric title
 Self-link to section should not be bold
 Serialization of purely hash wikilink
@@ -1427,6 +1435,8 @@ Wikitext table with a lot of comments
 Wikitext table with double-line table cell
 Wikitext tables can be nested inside HTML tables
 Wrong option for formatNum (T58199)
+XSS is escaped
+XSS is escaped (inline)
 [Before] HTML without raw HTML enabled ($wgRawHtml==false)
 __NOEDITSECTION__ keyword
 __proto__ is treated as normal wikitext (T105997)

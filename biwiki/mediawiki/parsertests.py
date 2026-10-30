@@ -40,6 +40,7 @@ EXT_TEST_FILES: dict[Path, tuple[str, ...]] = {
     **{EXT_DIR / "Cite" / n: ("Cite",) for n in (
         "citeParserTests.txt", "citeSmokeTests.txt", "citeSmokeTests2.txt", "bookReferencing.txt",
         "fragementModes.txt", "responsiveReferences.txt", "1000References.txt")},
+    EXT_DIR / "SyntaxHighlight" / "parserTests.txt": ("SyntaxHighlight",),
 }
 # What an extension's ParserTestGlobals hook sets for all parser tests while it is loaded (Config fields)
 EXT_TEST_GLOBALS: dict[str, dict[str, object]] = {

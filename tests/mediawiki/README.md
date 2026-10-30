@@ -12,7 +12,9 @@ a test name that an earlier file already has gets the suffix ` [media]`, ` [lega
 `ext/<extension>/` holds the parser test files of the ported extensions (their `tests/parser/`, unchanged, GPL as
 the extensions): `ext/ParserFunctions/` those of ParserFunctions 1.6.0 (REL1_39 as released with MediaWiki 1.39.0,
 commit `4b0abc7f9fdc4593dc9b2db0b3fd5a4e76fc8e7a`), `ext/Cite/` those of Cite (commit
-`951ea9c64b72b0bd1ed8119f8d4c8ca4e2948454`, MediaWiki 1.39.0). The runner reads them after the core files, each
+`951ea9c64b72b0bd1ed8119f8d4c8ca4e2948454`, MediaWiki 1.39.0), `ext/SyntaxHighlight/` that of SyntaxHighlight
+(commit `c0592d0d634a08481ab997469c428affe852dc8c`, MediaWiki 1.39.0; its tests that expect Pygments' token spans
+fail, as the port has no Pygments). The runner reads them after the core files, each
 with its extension registered (`EXT_TEST_FILES` in `biwiki/mediawiki/parsertests.py`); duplicate names get the same
 kind of suffix (` [funcs]`, ` [cite]`, ...).
 

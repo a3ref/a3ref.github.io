@@ -7,9 +7,9 @@
 # option) any later version. This program is distributed in the hope that it will be useful, but WITHOUT ANY
 # WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details: biwiki/mediawiki/COPYING.
-"""Parser extensions (ParserFunctions, Cite) and their registration.
+"""Parser extensions (ParserFunctions, Cite, SyntaxHighlight) and their registration.
 
-``Parser(extensions={"ParserFunctions", "Cite"})`` registers them on its first parse; their settings ($wgPF...,
+``Parser(extensions={"ParserFunctions", "Cite", "SyntaxHighlight"})`` registers them on its first parse; their settings ($wgPF...,
 $wgCite...) are fields of the parser's Config (biwiki.mediawiki.config).
 """
 from __future__ import annotations
@@ -29,10 +29,17 @@ def _register_cite(parser) -> None:
     cite.register(parser)
 
 
+def _register_syntax_highlight(parser) -> None:
+    from . import syntaxhighlight
+
+    syntaxhighlight.register(parser)
+
+
 # extension name (as in its extension.json) -> its ParserFirstCallInit handler
 EXTENSIONS: dict[str, Callable] = {
     "ParserFunctions": _register_parser_functions,
     "Cite": _register_cite,
+    "SyntaxHighlight": _register_syntax_highlight,
 }
 
 
