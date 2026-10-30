@@ -67,6 +67,9 @@ def page_slug(title: str, kind: str, topics: Collection[str] = ()) -> str:
 
 def summary(md: str, limit: int = 220) -> str:
     """First sentence(s) of a Markdown description as plain text."""
+    # code blocks go first, whole: one with a blank line in it would split into "paragraphs", and its tail
+    # ("//--- comment\n```") would read as prose
+    md = re.sub(r"(?ms)^[ \t]*(`{3,})[^\n]*\n.*?^[ \t]*\1`*[ \t]*$", "", md)
     paragraphs = [p for p in md.split("\n\n") if p.strip() and not p.lstrip().startswith(("#", ">", "```", "|", "-"))]
     # without prose, the first block that reads as text (a heading or a list); never a table or code
     rest = [p for p in md.split("\n\n") if p.strip() and not p.lstrip().startswith(("|", "```"))]

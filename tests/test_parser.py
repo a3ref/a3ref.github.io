@@ -341,6 +341,11 @@ class SlugTest(unittest.TestCase):
     def test_summary(self):
         self.assertEqual(summary("First [link](x.md) here. Second.\n\nMore."), "First link here. Second.")
 
+    def test_summary_skips_code_with_blank_lines(self):
+        # BIS_fnc_missionHandlers: a code block with a blank line in it is not split into a prose tail
+        self.assertEqual(summary("```\n#define A 1\n\n//--- Mission end type\n```"), "")
+        self.assertEqual(summary("````sqf\na\n\n```\nb\n````\n\nText after."), "Text after.")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -224,6 +224,15 @@ class TableTest(unittest.TestCase):
         self.assertEqual(md("<table><caption>Dates\n</caption><tr><th>A</th></tr><tr><td>1</td></tr></table>"),
                          "**Dates**\n\n| A |\n|---|\n| 1 |")
 
+    def test_caption_with_box(self):
+        # "|+ Edition Details {{Feature|important|...}}": the box stays a GitHub alert, not text in the bold line
+        box = ('<div class="biki-messagebox feature-important"><div>!</div><div>Note that <b>no</b> CDLCs.'
+               '</div></div>')
+        self.assertEqual(md(f"<table><caption>Edition Details\n{box}</caption><tr><th>A</th></tr></table>"),
+                         "**Edition Details**\n\n> [!IMPORTANT]\n> Note that **no** CDLCs.\n\n| A |\n|---|")
+        self.assertEqual(md(f"<table><caption>\n{box}</caption><tr><th>A</th></tr></table>"),
+                         "> [!IMPORTANT]\n> Note that **no** CDLCs.\n\n| A |\n|---|")
+
 
 class TemplateTest(unittest.TestCase):
     @staticmethod

@@ -350,12 +350,17 @@ class HtmlMarkdown:
                 lines[i] = m.group(1) + mark + ln[m.end():]
         return "\n".join(lines)
 
-    def _line(self, nodes) -> str:
-        """Inline content as one line (headings, table titles)."""
+    def _line(self, nodes, blocks: Optional[list[str]] = None) -> str:
+        """Inline content as one line (headings, table titles). With `blocks`, the blocks found inside it go
+        there instead of into the line."""
         hard, self._hard = self._hard, False
         try:
-            text = " ".join(self._paragraphs("".join(self._text(n) if isinstance(n, str) else
-                                                     ("" if self._skip(n) else self._inline(n)) for n in nodes)))
+            raw = "".join(self._text(n) if isinstance(n, str) else ("" if self._skip(n) else self._inline(n))
+                          for n in nodes)
+            if blocks is not None:
+                blocks += [b for m in _SLOT.finditer(raw) for b in self._blocks[int(m.group(1))]]
+                raw = _SLOT.sub(" ", raw)
+            text = " ".join(self._paragraphs(raw))
         finally:
             self._hard = hard
         return re.sub(r"\s*\n\s*", " ", text).strip()
@@ -481,10 +486,10 @@ class HtmlMarkdown:
             return text.strip(), c.tag == "th", span(c, "rowspan"), span(c, "colspan")
 
         walk(el)
-        captions = [self._line(c.children) for c in el.elements("caption")]
+        captions = [b for c in el.elements("caption") for b in self._caption(c)]
         grid = _unspan([r for r in rows if r])
         if not grid:
-            return [c for c in captions if c]
+            return [b for c in el.elements("caption") for b in self._caption(c, bold=False)]
         width = max(len(r) for r in grid)
         header = grid[0] if all(is_th for _, is_th in grid[0]) else [("", True)] * width
         body = grid[1:] if header is grid[0] else grid
@@ -494,7 +499,15 @@ class HtmlMarkdown:
             return "| " + " | ".join(vals) + " |"
 
         table = "\n".join([line(header), "|" + "---|" * width] + [line(r) for r in body])
-        return [self._bold(c) for c in captions if c] + [table]
+        return captions + [table]
+
+    def _caption(self, el: Element, bold: bool = True) -> list[str]:
+        """A table's <caption>: its text as one bold line, then the blocks inside it ({{Feature}} boxes in
+        "|+ {{Feature|informative|...}}") as blocks of their own: flattened into the line, a box's "> [!NOTE]"
+        would show as text."""
+        blocks: list[str] = []
+        text = self._line(el.children, blocks)
+        return ([self._bold(text) if bold else text] if text else []) + blocks
 
     # ---- the wiki's templates ---------------------------------------------------------------
 
