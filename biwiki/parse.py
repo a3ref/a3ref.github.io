@@ -459,8 +459,12 @@ def _fill_from_docblock(header: dict, name: str, syntaxes: list[dict], examples:
         ret = syntaxes[0]["returns"]
         if not ret or not ret["text"].strip():
             types = header["returns"]["types"]
+            # "BOOL - true if added": what follows the type on the first line, and the lines below
+            first, nl, more = header["returns"]["text"].partition("\n")
+            head, sep, rest = first.partition(" - ")
+            desc = (rest + nl + more).strip() if sep and docblock.types_in(head) else ""
             syntaxes[0]["returns"] = {"type": ", ".join(types) or None, "types": types,
-                                      "type_expr": header["returns"]["type_expr"], "description": None,
+                                      "type_expr": header["returns"]["type_expr"], "description": desc or None,
                                       "text": header["returns"]["text"], "source": "docblock"}
             filled.append("returns")
     if header["examples"] and not examples:
@@ -573,13 +577,50 @@ def _returns(code, r: Renderer) -> dict:
     if not expr:
         expr = _listed_types(code, from_first=True)
         types = types or typeexpr.names(expr)
+    type_ = type_.strip() if sep or len(plain) < 60 else None
+    if not sep:
+        # "Number in range 0..1, -1 in case of error": the type is the leading run of type names
+        first, nl, more = plain.partition("\n")
+        end = _type_prefix(first, types)
+        if end:
+            type_, desc = first[:end].strip(), (first[end:].lstrip(" ,;:") + nl + more).strip()
     return {
-        "type": type_.strip() if sep or len(plain) < 60 else None,
+        "type": type_,
         "types": types,
         "type_expr": expr,
         "description": desc.strip() or None,
         "text": md,
     }
+
+
+_TYPE_NAMES = sorted(set(typeexpr.TYPE_WORDS.values()), key=len, reverse=True)
+_TYPE_JOINERS = re.compile(r"\s*(?:,|/|(?:and/or|and|or|of|in format|format|an?|the|empty|non-empty)\b)", re.I)
+
+
+def _type_prefix(line: str, types: list[str]) -> int:
+    """Where the type names at the start of a plain-text line end, with the words joining them ("Array of
+    Numbers", "Number, String, Boolean or Array", "Color (RGBA)"); 0 if the line does not start with one.
+    Known are the linked types, the data type names and the unlinked words the wiki uses as types. When a
+    joining word follows ("Array of created Objects", "Array of units in ..."), the type goes on in words that
+    are no type name; 0 then too."""
+    known = {t for t in types if t[:1].isupper()} | set(_TYPE_NAMES)
+    names = "|".join(re.escape(n) + (f"|{re.escape(n[:-1])}ies" if n.endswith("y") else "")
+                     for n in sorted(known, key=len, reverse=True))
+    words = "|".join(sorted(typeexpr.WIKI_WORDS, key=len, reverse=True))
+    name = re.compile(rf"\s*(?:(?:{names})|(?i:{words}))s?(?!\w)(?:\s*\([A-Z0-9]+\))?")
+    pos = end = 0
+    while True:
+        m = name.match(line, pos)
+        if m:
+            pos = end = m.end()
+            continue
+        m = _TYPE_JOINERS.match(line, pos)
+        if not m or m.end() == pos:
+            break
+        pos = m.end()
+    if end and re.match(r"\s*(?:of|or|and)\b", line[end:], re.I):
+        return 0
+    return end
 
 
 def _mask_links(s: str) -> str:

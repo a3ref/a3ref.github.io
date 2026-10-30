@@ -111,6 +111,9 @@ def parse(body: str) -> dict:
     description = body_of("description")
     intro = body_of("intro")
     author = body_of("author")
+    name, _, rest = author.partition("\n")
+    if not description and rest.strip() and not rest.lstrip().startswith("-"):
+        author, description = name, rest.strip()  # "Author: Zozo" with the description on the lines below
     if not author and description and intro and "\n" not in intro and len(intro) <= 40 and len(intro.split()) <= 4:
         author, intro = intro, ""  # a bare name above "Description:" is the author
     if not description and intro:
@@ -197,6 +200,9 @@ def parse_params(text: str, first_on_label: bool = True) -> list[dict]:
 def _param(index, lines: list[str]) -> dict:
     head = lines[0].strip()
     more = textwrap.dedent("\n".join(lines[1:])).strip("\n")
+    if not head and re.match(r"_\w+\s*(?::|\s-\s)", more):
+        head, _, more = more.partition("\n")  # "0:" with "_input - Unit, vehicle, group or side." below it
+        more = textwrap.dedent(more).strip("\n")
     name = None
     m = re.match(r"^(_*[A-Za-z]\w*)\s*(?::|\s-\s|\(|\s+(?=[A-Z]{3,}\b))", head)  # "_matrix ARRAY (...)" too
     if m and m.group(1).lower() not in TYPE_WORDS and m.group(1).lower().rstrip("s") not in TYPE_WORDS:

@@ -218,6 +218,9 @@ class PageTest(unittest.TestCase):
         rec = parse_page(fixture("functions", "BIS fnc taskHandler"), "functions", Renderer(None))
         self.assertTrue(rec["filled_from_docblock"])
         self.assertTrue(rec["description"])
+        # "return value:" in lower case is the returns label too
+        self.assertEqual(rec["syntaxes"][0]["returns"]["types"], ["Nothing"])
+
     def test_legacy_notes(self):
         # notes from before {{Note}}: raw <dl> HTML after {{RV}}, often with unclosed tags
         raw = {"title": "weapons", "wikitext": (
@@ -241,6 +244,29 @@ class PageTest(unittest.TestCase):
         self.assertEqual(notes[2]["text"], "No link.")
         md = page_markdown(parse_page(raw, "commands", Renderer(None)), lambda t, a: None)
         self.assertIn("**Bdfy** — 2007-01-20\n\nOnly the primary turret", md)
+
+    def test_return_without_dash(self):
+        def returns(text: str) -> dict:
+            raw = {"title": "x", "wikitext": f"{{{{RV|type=command\n|game1= arma3\n|s1= [[x]]\n|r1= {text}\n}}}}"}
+            return parse_page(raw, "commands", Renderer(None))["syntaxes"][0]["returns"]
+
+        r = returns("[[Array]] of [[Number]]s in format [airTemperature, blackSurfaceTemperature, whiteSurfaceTemperature]")
+        self.assertEqual((r["type"], r["description"]), ("Array of Numbers", "in format [airTemperature, "
+                                                         "blackSurfaceTemperature, whiteSurfaceTemperature]"))
+        r = returns("[[Number]] in range 0..1, -1 in case of error (e.g provided a non-human)")
+        self.assertEqual((r["type"], r["description"]), ("Number", "in range 0..1, -1 in case of error (e.g provided a non-human)"))
+        r = returns("[[Number]], [[String]] or [[Array]], depending on the attribute value type")
+        self.assertEqual((r["type"], r["description"]), ("Number, String or Array", "depending on the attribute value type"))
+        self.assertEqual((returns("[[Boolean]]")["type"], returns("[[Boolean]]")["description"]), ("Boolean", None))
+        r = returns("true when the unit is ready, false while it is still loading its weapons")  # no type: as before
+        self.assertEqual((r["type"], r["description"]), (None, None))
+
+    def test_docblock_return_description(self):
+        raw = {"title": "BIN fnc test", "wikitext": (
+            "{{RV|type=function\n|game1= arma3\n|descr= <pre>/*\n\tDescription:\n\t\tRegister entities to a site.\n\n"
+            "\tReturns:\n\t\tBOOL - true if added\n*/</pre>\n{{Wiki|placeholder}}\n|s1=\n|r1=\n}}")}
+        r = parse_page(raw, "functions", Renderer(None))["syntaxes"][0]["returns"]
+        self.assertEqual((r["type"], r["description"], r["source"]), ("Boolean", "true if added", "docblock"))
 
 
 
@@ -296,6 +322,29 @@ class DocblockTest(unittest.TestCase):
         self.assertEqual([p["types"] for p in d["params"]], [["Object"], ["Array", "String"]])
         self.assertEqual((d["params"][1]["optional"], d["params"][1]["default"]), (True, "[]"))
         self.assertEqual(d["returns"]["types"], ["Boolean"])
+
+    def test_labels_and_names_on_their_own_line(self):
+        d = docblock.parse("""
+             * Author: Zozo
+             * Multiplies the square matrix by a vector: A(m,m) x V(m)
+             *
+             * Arguments:
+             * 0: _matrix ARRAY (multi-dimensional)
+             *
+             * Return Value:
+             * ARRAY [x,y,z]
+        """)
+        # the line below "Author:" is the description when there is no "Description:"
+        self.assertEqual((d["author"], d["description"]), ("Zozo", "Multiplies the square matrix by a vector: A(m,m) x V(m)"))
+        self.assertEqual((d["params"][0]["name"], d["returns"]["text"]), ("_matrix", "ARRAY [x,y,z]"))
+        d = docblock.parse("\tInput:\n\t\t0:\n\t\t\t_input - Unit, vehicle, group or side.\n\t\t1:\n"
+                           "\t\t\t_value - scalar above 0 - weight\n\treturn value:\tnone")
+        self.assertEqual([(p["name"], p["types"], p["description"]) for p in d["params"]],
+                         [("_input", [], "Unit, vehicle, group or side."), ("_value", ["Number"], "weight")])
+        self.assertEqual(d["returns"]["types"], ["Nothing"])
+        # a list of authors below "Author:" stays the author
+        d = docblock.parse("Author:\n    Bravo Zero One development\n    - John_Spartan\nDescription:\n    Does things.")
+        self.assertEqual((d["author"], d["description"]), ("Bravo Zero One development, John_Spartan", "Does things."))
 
 
 class ReportTest(unittest.TestCase):
