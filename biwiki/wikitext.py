@@ -13,6 +13,13 @@ from typing import Callable, Optional
 import mwparserfromhell as mw
 
 from .mediawiki.quotes import do_quotes
+from .markdown import CODE_LINK, LinkResolver
+from .markdown import MD_BACKSLASH as _MD_BACKSLASH
+from .markdown import MD_BLOCK as _MD_BLOCK
+from .markdown import inline_code as _inline_code
+from .markdown import quote as _quote
+from .markdown import split_ws as _split_ws
+from .markdown import unspan as _unspan
 from .site import ANCHOR, heading_id
 from mwparserfromhell.nodes import (
     Argument,
@@ -25,9 +32,6 @@ from mwparserfromhell.nodes import (
     Text,
     Wikilink,
 )
-
-# Returns a URL for a wiki page title (+ optional anchor), or None to render the link as plain text.
-LinkResolver = Callable[[str, str], Optional[str]]
 
 GAME_NAMES = {
     "arma": "Arma",
@@ -804,39 +808,6 @@ class Renderer:
         return "\n".join(out)
 
 
-def _unspan(rows: list[list[tuple[str, bool, int, int]]]) -> list[list[tuple[str, bool]]]:
-    """Markdown tables have no row/column spans. A row-spanning cell is repeated in every row it covers, so
-    each row reads on its own ("Arma 3 v2.00 | Location", not "Location" under the version column); a
-    column-spanning cell keeps its first column and leaves the others empty (titles across the whole table)."""
-    out: list[list[tuple[str, bool]]] = []
-    pending: dict[int, tuple[tuple[str, bool], int]] = {}  # column -> (cell, rows still covered)
-    for row in rows:
-        line: list[tuple[str, bool]] = []
-        cells = iter(row)
-        while True:
-            col = len(line)
-            if col in pending:
-                c, left = pending.pop(col)
-                line.append(c)
-                if left > 1:
-                    pending[col] = (c, left - 1)
-                continue
-            nxt = next(cells, None)
-            if nxt is None:
-                if pending and max(pending) > col:
-                    line.append(("", False))
-                    continue
-                break
-            text, is_th, rowspan, colspan = nxt
-            for k in range(colspan):
-                c = (text if k == 0 else "", is_th)
-                if rowspan > 1:
-                    pending[len(line)] = (c, rowspan - 1)
-                line.append(c)
-        out.append(line)
-    return out
-
-
 def parse_note(t: Template, r: Renderer) -> dict:
     def get(name: str) -> str:
         return str(t.get(name).value).strip() if t.has(name) else ""
@@ -882,41 +853,11 @@ def _emphasis(text: str) -> str:
         text = new
 
 
-def _quote(body: str, alert: Optional[str] = None, label: Optional[str] = None) -> str:
-    lines = []
-    if alert:
-        lines.append(f"[!{alert}]")
-    if label:
-        if _MD_BLOCK.match(body):  # a code block, table or list cannot continue the label's line
-            body = f"**{label}:**\n\n{body}"
-        else:
-            body = f"**{label}:** {body}" if body else f"**{label}**"
-    lines += body.split("\n")
-    return "\n".join(("> " + l) if l.strip() else ">" for l in lines)
-
-
-def _inline_code(code: str) -> str:
-    if code and not code.strip():  # {{hl|&nbsp;}}: a space shown as code
-        return "` `"
-    code = re.sub(r"\s*\n\s*", " ", code).strip()
-    if not code:
-        return ""
-    ticks = "``" if "`" in code else "`"
-    pad = " " if code.startswith("`") or code.endswith("`") else ""
-    return f"{ticks}{pad}{code}{pad}{ticks}"
-
-
 _MD_LINK = re.compile(r"\[((?:\\.|[^\]\\])*)\]\([^)\s]*\)")
 # a run of <br>, then what starts the next line: a mark that Markdown would read as a list, heading or quote
 _BREAK_RUN = re.compile(BR + r"(?:[ \t]*\n?[ \t]*" + BR + r")*[ \t]*(\n?)([ \t]*)((?:[*+-](?=[ \t])|#{1,6}(?=[ \t]|$)|>|\d{1,9}[.)](?=[ \t]|$)))?")
-# a backslash that Markdown would not show as is: before ASCII punctuation or at the end of a line
-_MD_BACKSLASH = re.compile(r"\\(?=[!-/:-@\[-`{-~]|\n|$)")
-# a line Markdown reads as a block of its own
-_MD_BLOCK = re.compile(r"[ \t]*(?:[*+-][ \t]|\d+[.)][ \t]|#{1,6}[ \t]|>|\||`{3,}|~{3,})")
 
 
-# A link inside a code block, for the site only: CODE_LINK[0] text CODE_LINK[1] url CODE_LINK[2]
-CODE_LINK = ("\ue030", "\ue031", "\ue032")
 # MediaWiki's legacy anchor encoding (Sanitizer::escapeIdLegacy, still in old links and in the fallback <span>
 # before a heading): urlencode with "%" written as ".", so ".23include" is "#include". urlencode leaves letters,
 # digits and "_.-" alone, and ":" is put back, so only the other bytes are escapes.
@@ -969,11 +910,3 @@ def _pre_line(line: str, slots: list[str], keep_links: bool = False) -> str:
 
 def _dedent(code: str) -> str:
     return code.replace("\t", "    ")
-
-
-def _split_ws(s: str) -> tuple[str, str, str]:
-    core = s.strip()
-    if not core:
-        return s, "", ""
-    start = s.index(core[0])
-    return s[:start], core, s[start + len(core):]

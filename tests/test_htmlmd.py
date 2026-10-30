@@ -5,7 +5,7 @@ import unittest
 
 from biwiki.htmlmd import HtmlMarkdown, html_to_md, html_to_plain, link_target
 from biwiki.site import ANCHOR
-from biwiki.wikitext import CODE_LINK
+from biwiki.markdown import CODE_LINK
 
 PAGES = {"setPos": "../commands/setPos.md", "Multiplayer Scripting": "../topics/Multiplayer_Scripting.md",
          "Array": "../topics/Array.md"}

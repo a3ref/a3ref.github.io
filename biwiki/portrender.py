@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Mapping, Optional, Union
 
 from .htmlmd import HtmlMarkdown
-from .wikitext import LinkResolver
+from .markdown import LinkResolver
 
 _ISO = re.compile(r"(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)Z?")
 

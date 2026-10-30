@@ -146,7 +146,7 @@ class CodeLinker:
             body = self.config(code)
         else:
             body = html.escape(code)
-        # links the wiki shows inside preformatted lines (see wikitext.CODE_LINK); text and URL are escaped above
+        # links the wiki shows inside preformatted lines (see markdown.CODE_LINK); text and URL are escaped above
         body = re.sub("(.*?)(.*?)", r'<a href="\2">\1</a>', body)
         cls = f' class="language-{lang}"' if lang else ""
         # tabindex: long lines scroll sideways, and keyboard users need to be able to focus the block to scroll it

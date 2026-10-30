@@ -18,9 +18,8 @@ from html.parser import HTMLParser
 from typing import Optional, Union
 from urllib.parse import parse_qs, unquote, urlsplit
 
-# shared with the wikitext renderer while both exist
-from .wikitext import (CODE_LINK, FEATURE_ALERT, GAME_NAMES, LinkResolver, _inline_code, _MD_BACKSLASH, _quote,
-                       _split_ws, _unspan, anchor_mark, game_name, wiki_anchor)
+from .markdown import CODE_LINK, MD_BACKSLASH, LinkResolver, inline_code, quote, split_ws, unspan
+from .wikitext import FEATURE_ALERT, GAME_NAMES, anchor_mark, game_name, wiki_anchor
 
 VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track",
              "wbr"}
@@ -154,7 +153,7 @@ class HtmlMarkdown:
     ``emphasis``: bold/italic as ``**``/``*`` (off: text only).
     ``inline``: the result continues a line, so a <br> is a plain newline.
     ``hard_breaks``: a <br> as a Markdown hard break; off for plain text, where it is a newline.
-    ``code_links``: links in <pre> blocks kept as wikitext.CODE_LINK marks for the site.
+    ``code_links``: links in <pre> blocks kept as markdown.CODE_LINK marks for the site.
     ``anchors``: the wiki's anchors (id= of a <span>, a heading's headline, a table row or cell) kept as
     site.ANCHOR marks for the site, which makes them ids, so links to them land.
     ``plain``: no Markdown links and no emphasis (plain()/plain_lines() use it).
@@ -261,7 +260,7 @@ class HtmlMarkdown:
         if tag == "code":  # <code style="display: block">
             return self._code_block(self._code_text(el), "")
         if tag == "blockquote":
-            return [_quote(self._join(self._flow(el.children)))]
+            return [quote(self._join(self._flow(el.children)))]
         if tag == "div":
             for name, lang in HIGHLIGHT_BLOCKS.items():
                 if name in cls:
@@ -385,7 +384,7 @@ class HtmlMarkdown:
             return []
         code = code.replace("\t", "    ").replace(" ", " ")  # code is copied: no non-breaking spaces
         if self._in_cell and "\n" not in code:  # a fence cannot live in a table cell; one line reads as code
-            return [_inline_code(code)]
+            return [inline_code(code)]
         fence = "````" if "```" in code else "```"
         return [f"{fence}{lang}\n{code}\n{fence}"]
 
@@ -497,7 +496,7 @@ class HtmlMarkdown:
 
         walk(el)
         captions = [b for c in el.elements("caption") for b in self._caption(c)]
-        grid = _unspan([r for r in rows if r])
+        grid = unspan([r for r in rows if r])
         if not grid:
             return [b for c in el.elements("caption") for b in self._caption(c, bold=False)]
         width = max(len(r) for r in grid)
@@ -532,17 +531,17 @@ class HtmlMarkdown:
         if ftype is None and "messagebox-bi" not in cls and colour and colour.group(1).lower() in MAINTENANCE_COLOURS:
             return []
         if ftype is None or ftype == "quote":
-            return [_quote(body)]
+            return [quote(body)]
         if ftype in FEATURE_ALERT:
-            return [_quote(body, FEATURE_ALERT[ftype])]
+            return [quote(body, FEATURE_ALERT[ftype])]
         gvi = icon.find(lambda e: "gvi2" in e.classes) if icon is not None else []
         if gvi:
-            return [_quote(body, "NOTE", "Since " + self._gvi(gvi[0]))]
+            return [quote(body, "NOTE", "Since " + self._gvi(gvi[0]))]
         label = GAME_NAMES.get(ftype.lower())
         if label is None and icon is not None:  # the icon's caption, e.g. "Advanced Helicopter Flight Model"
             text = re.sub(r"\s+", " ", icon.text()).strip()
             label = text if re.search(r"\w{2}", text) and not text.lower().startswith(FILE_PREFIXES) else None
-        return [_quote(body, "NOTE", label if label and body and not body.startswith("This ") else None)]
+        return [quote(body, "NOTE", label if label and body and not body.startswith("This ") else None)]
 
     def _tabs(self, el: Element) -> list[str]:
         """{{Tabview}}: the titles, then the contents; each content under its title in bold."""
@@ -590,7 +589,7 @@ class HtmlMarkdown:
             head += f" ({ts[0:4]}-{ts[4:6]}-{ts[6:8]})"
         text = next((c for c in el.elements("dd") if "note" in c.classes), None)
         body = self._join(self._flow(text.children)) if text is not None else ""
-        return [_quote(head + ":\n\n" + body)]
+        return [quote(head + ":\n\n" + body)]
 
     def _gvi(self, el: Element) -> str:
         """{{GVI|arma3|2.00}}: class "gvi2 gvi-arma3" and a "version" span -> "Arma 3 v2.00"."""
@@ -612,7 +611,7 @@ class HtmlMarkdown:
         s = _FRENCH_NBSP.sub(" ", s)
         # a backslash of the wiki text ("P:\") is literal; Markdown would read it as an escape or a line break
         if self.hard_breaks and self.emphasis:
-            s = _MD_BACKSLASH.sub(r"\\\\", s)
+            s = MD_BACKSLASH.sub(r"\\\\", s)
         return s
 
     def _inline_children(self, el: Element) -> str:
@@ -620,7 +619,7 @@ class HtmlMarkdown:
                        for c in el.children)
 
     def _code(self, code: str) -> str:
-        md = _inline_code(code.replace(" ", " "))  # code is copied: no non-breaking spaces
+        md = inline_code(code.replace(" ", " "))  # code is copied: no non-breaking spaces
         if not md:
             return ""
         self._codes.append(md)
@@ -720,7 +719,7 @@ class HtmlMarkdown:
                 return href
             return f"[{text.strip()}]({href})" if text.strip() else f"<{href}>"
         url = self._link_url(a)
-        lead, core, trail = _split_ws(text)  # [[Group | group]]: the spaces stay outside the brackets
+        lead, core, trail = split_ws(text)  # [[Group | group]]: the spaces stay outside the brackets
         if not core:  # an icon-only link: the anchor or the page's name
             if target is None:
                 return ""
