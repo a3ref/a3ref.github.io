@@ -199,8 +199,19 @@
     }
   }
 
+  // Keep the entry being read in view in a contents list taller than its box: the entry itself, or the entry of
+  // the folded branch holding it.
+  var tocList = document.getElementById("toc-list");
+  function reveal(a) {
+    if (!a || !tocList || tocList.scrollHeight <= tocList.clientHeight) return;
+    var t = a;
+    for (var ol = a.closest("ol[hidden]"); ol; ol = t.closest("ol[hidden]")) t = ol.parentNode.children[0];
+    var box = tocList.getBoundingClientRect(), r = t.getBoundingClientRect();
+    if (r.top < box.top || r.bottom > box.bottom) tocList.scrollTop += r.top - box.top - tocList.clientHeight / 3;
+  }
+
   // Mark the contents entry of the section being read. The scroll handler only reads positions, once per
-  // frame, and touches the DOM only when the section changes; it never scrolls anything.
+  // frame, and touches the DOM only when the section changes; then it may scroll the contents list, never the page.
   var links = document.querySelectorAll('.toc a[href^="#"]'), heads = [], byId = {}, current = null, pending = false;
   for (i = 0; i < links.length; i++) {
     var h = document.getElementById(decodeURIComponent(links[i].getAttribute("href").slice(1)));
@@ -218,6 +229,7 @@
     current = a;
     if (a) a.setAttribute("aria-current", "location");
     follow(a);
+    reveal(a);
   }
   window.addEventListener("scroll", function () { if (!pending) { pending = true; requestAnimationFrame(update); } }, { passive: true });
   requestAnimationFrame(update);
