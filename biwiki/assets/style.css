@@ -130,7 +130,7 @@ a:hover { text-decoration-thickness: 2px; }
 }
 .side > .toc { flex: none; display: flex; flex-direction: column; max-height: 42vh; }
 .side > .sidenav { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.side .toc ol, .side-body { min-height: 0; overflow-y: auto; padding-bottom: .25rem; }
+.side .toc > ol, .side-body { min-height: 0; overflow-y: auto; padding-bottom: .25rem; }
 .side > nav + nav { margin-top: 1rem; padding-top: .8rem; border-top: 1px solid var(--rule); }
 .side-title, .toc-title { margin: 0 0 .5rem; font-size: .8rem; font-weight: 650; letter-spacing: .02em; color: var(--muted); }
 
@@ -150,7 +150,22 @@ a:hover { text-decoration-thickness: 2px; }
 .side-list a:hover, .toc a:hover { color: var(--ink); border-left-color: var(--rule-strong); }
 /* the current page, and the section being read (aria-current="location", set by site.js while scrolling) */
 .side-list a[aria-current], .toc a[aria-current] { color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
-.toc .toc-3 a { padding-left: 1.4rem; }
+/* nested contents: the links share one rail and indent .7rem per level; an entry with subsections has a toggle
+   at its right (chevron down = open, right = closed). A branch folded over the section being read marks its entry. */
+.toc li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+.toc li > ol { grid-column: 1 / -1; }
+.toc .toc-3 > a { padding-left: 1.3rem; }
+.toc .toc-4 > a { padding-left: 2rem; }
+.toc .toc-5 > a { padding-left: 2.7rem; }
+.toc .toc-6 > a { padding-left: 3.4rem; }
+.toc :is(.toc-4, .toc-5, .toc-6) > a { font-size: .95em; }
+.toc-fold { display: flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; margin: .1rem 0 0;
+  padding: 0; color: var(--muted); background: none; border: 0; border-radius: 4px; cursor: pointer; }
+.toc-fold:hover { color: var(--ink); background: var(--rule); }
+.toc-fold::after { content: ""; width: .38rem; height: .38rem; margin-top: -.2rem;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
+.toc-fold[aria-expanded="false"]::after { margin: 0 0 0 -.15rem; transform: rotate(-45deg); }
+.toc li:has(> ol[hidden] a[aria-current]) > a { color: var(--accent); border-left-color: var(--accent); }
 .side-more { margin: .6rem 0 0 .6rem; font-size: .85rem; }
 
 /* The content column takes the room the side column leaves. Running text keeps the reading measure; tables use
@@ -163,11 +178,11 @@ a:hover { text-decoration-thickness: 2px; }
   .frame-one { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
   .side { position: static; max-height: none; padding: .35rem .9rem; border: 1px solid var(--rule); border-radius: 8px; }
   .side > .toc { max-height: none; }
-  .side .toc ol, .side-body { overflow: visible; }
+  .side .toc > ol, .side-body { overflow: visible; }
   .side > nav + nav { margin-top: .35rem; padding-top: .35rem; }
   .side-title, .toc-title { margin: 0; }
   .fold { min-height: 2.5rem; font-size: .9rem; }
-  .side-body, .toc ol { padding-bottom: .5rem; }
+  .side-body, .toc > ol { padding-bottom: .5rem; }
 }
 
 /* ---- page head --------------------------------------------------------------------------------- */

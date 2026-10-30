@@ -9,7 +9,7 @@ from biwiki.fetch import load_cache
 from biwiki.parse import parse_page, split_param, syntax_form
 from biwiki.render import page_slug, slug, summary, topic_group
 from biwiki.report import leftover_markup, load_known, position, save_known
-from biwiki.site import ANCHOR, Site, _place_anchors, heading_id
+from biwiki.site import ANCHOR, Site, _place_anchors, _toc, heading_id
 from biwiki.wikitext import Renderer, wiki_anchor
 
 RAW = Path(__file__).parent / "fixtures" / "raw"
@@ -339,6 +339,20 @@ class SiteHtmlTest(unittest.TestCase):
         self.assertEqual(doc.count('id="content"'), 1)
         # never inside an attribute
         self.assertEqual(_place_anchors(f'<a title="{a}t{b}x">y{a}t{b}</a>'), '<a title="x">y<span id="t"></span></a>')
+
+    def test_nested_contents(self):
+        # nested lists follow the levels; an entry with subsections gets a toggle for its sublist
+        toc = _toc([(2, "a", "A &amp; B"), (3, "b", "B"), (4, "c", "C"), (2, "d", "D"), (4, "e", "E")])
+        self.assertEqual(
+            toc,
+            '<li class="toc-2"><a href="#a">A &amp; B</a><button type="button" class="toc-fold" aria-expanded="true" '
+            'aria-controls="toc--a" aria-label="A &amp; B: subsections"></button><ol id="toc--a">'
+            '<li class="toc-3"><a href="#b">B</a><button type="button" class="toc-fold" aria-expanded="true" '
+            'aria-controls="toc--b" aria-label="B: subsections"></button><ol id="toc--b">'
+            '<li class="toc-4"><a href="#c">C</a></li></ol></li></ol></li>'
+            '<li class="toc-2"><a href="#d">D</a><button type="button" class="toc-fold" aria-expanded="true" '
+            'aria-controls="toc--d" aria-label="D: subsections"></button><ol id="toc--d">'
+            '<li class="toc-3"><a href="#e">E</a></li></ol></li>')  # a skipped level is closed up
 
     def test_arg_title_anchor_is_the_name(self):
         # {{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}: the wiki's anchor is #allowProfileGlasses

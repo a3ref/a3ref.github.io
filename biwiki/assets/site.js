@@ -154,6 +154,51 @@
     fitSide();
   }
 
+  // Contents subsections fold. The HTML ships them open, so without scripts nothing is hidden; here they fold
+  // to the top level. A lone top entry (a page with one h2) is no level to choose from: open it, and so on down.
+  var tocBtns = document.querySelectorAll("button.toc-fold[aria-controls]"), touched = [], opened = [];
+  function setBranch(b, open) {
+    if ((b.getAttribute("aria-expanded") === "true") === open) return;
+    b.setAttribute("aria-expanded", open ? "true" : "false");
+    document.getElementById(b.getAttribute("aria-controls")).hidden = !open;
+  }
+  for (i = 0; i < tocBtns.length; i++) {
+    setBranch(tocBtns[i], false);
+    // A branch the reader opened or closed stays as left: the section being read no longer moves it.
+    tocBtns[i].addEventListener("click", function () {
+      setBranch(this, this.getAttribute("aria-expanded") !== "true");
+      if (touched.indexOf(this) < 0) touched.push(this);
+      var k = opened.indexOf(this);
+      if (k > -1) opened.splice(k, 1);
+    });
+  }
+  for (var lone = document.getElementById("toc-list"); lone && lone.children.length === 1;) {
+    var only = lone.children[0].children;
+    if (only.length < 3) break;
+    setBranch(only[1], true);
+    lone = only[2];
+  }
+  // The toggles of the entry being read and of the entries holding it, innermost first.
+  function branchesOf(a) {
+    var out = [];
+    for (var li = a.parentNode; li && li.tagName === "LI"; li = li.parentNode.parentNode) {
+      if (li.children.length > 2) out.push(li.children[1]);
+    }
+    return out;
+  }
+  // Open the branches holding the section being read (and its own subsections); fold again those this opened
+  // earlier and the reader has left.
+  function follow(a) {
+    var want = a ? branchesOf(a) : [], k;
+    for (k = opened.length - 1; k >= 0; k--) {
+      if (want.indexOf(opened[k]) < 0) { setBranch(opened[k], false); opened.splice(k, 1); }
+    }
+    for (k = 0; k < want.length; k++) {
+      var b = want[k];
+      if (touched.indexOf(b) < 0 && b.getAttribute("aria-expanded") !== "true") { setBranch(b, true); opened.push(b); }
+    }
+  }
+
   // Mark the contents entry of the section being read. The scroll handler only reads positions, once per
   // frame, and touches the DOM only when the section changes; it never scrolls anything.
   var links = document.querySelectorAll('.toc a[href^="#"]'), heads = [], byId = {}, current = null, pending = false;
@@ -172,6 +217,7 @@
     if (current) current.removeAttribute("aria-current");
     current = a;
     if (a) a.setAttribute("aria-current", "location");
+    follow(a);
   }
   window.addEventListener("scroll", function () { if (!pending) { pending = true; requestAnimationFrame(update); } }, { passive: true });
   requestAnimationFrame(update);

@@ -375,9 +375,9 @@ class Site:
             notes = '<section class="notes"><h2 id="community-notes">Community notes</h2>' + "".join(items) + "</section>"
             heads.append((2, "community-notes", "Community notes"))
 
-        toc = "".join(
-            f'<li class="toc-{lvl}"><a href="#{i}">{t}</a></li>' for lvl, i, t in heads if lvl == 2 or t.startswith("Syntax")
-        )
+        # The sections, and of their subsections only the syntax forms: the other h3 are "Example 1", "Example 2", ...,
+        # numbered blocks a contents entry tells nothing about, and the Examples entry leads there.
+        toc = _toc([h for h in heads if h[0] == 2 or h[2].startswith("Syntax")])
 
         label = "Command" if rec["type"] == "command" else "Function"
         facts = []
@@ -426,7 +426,7 @@ class Site:
 
     def topic(self, s: str, rec: dict, summary: str, siblings: list | None = None) -> str:
         body, heads = self._ids(self.html(rec["markdown"]))
-        toc = "".join(f'<li class="toc-{lvl}"><a href="#{i}">{t}</a></li>' for lvl, i, t in heads if lvl <= 3)
+        toc = _toc(heads)
         facts = ""
         if rec["aliases"]:
             facts = ('<ul class="facts"><li class="fact fact-muted">Also known as '
@@ -726,6 +726,34 @@ def _fold(controls: str, label: str) -> str:
     """A side column heading's disclosure button. Open in the HTML: site.js folds the sections on narrow screens,
     and without scripts everything stays visible."""
     return f'<button type="button" class="fold" aria-expanded="true" aria-controls="{controls}">{label}</button>'
+
+
+def _toc(heads: list[tuple[int, str, str]]) -> str:
+    """The contents as nested lists that follow the heading levels; an entry with subsections gets a disclosure
+    button beside its link. Open in the HTML: site.js folds the subsections, so without scripts nothing is hidden.
+    A sublist's id is "toc--" and its heading's id: no heading or page id contains "--", so it is unique."""
+    root: list = []
+    stack: list[tuple[int, list]] = [(1, root)]
+    for level, ident, text in heads:
+        level = min(level, stack[-1][0] + 1)  # a filtered list may skip a level
+        while stack[-1][0] >= level:
+            stack.pop()
+        node = (level, ident, text, [])
+        stack[-1][1].append(node)
+        stack.append((level, node[3]))
+
+    def render(nodes: list) -> str:
+        out = []
+        for level, ident, text, kids in nodes:
+            sub = ""
+            if kids:
+                label = html.escape(f"{html.unescape(text)}: subsections")
+                sub = (f'<button type="button" class="toc-fold" aria-expanded="true" aria-controls="toc--{ident}" '
+                       f'aria-label="{label}"></button><ol id="toc--{ident}">{render(kids)}</ol>')
+            out.append(f'<li class="toc-{level}"><a href="#{ident}">{text}</a>{sub}</li>')
+        return "".join(out)
+
+    return render(root)
 
 
 def _anchor(heading: str) -> str:
