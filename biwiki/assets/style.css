@@ -52,6 +52,10 @@
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scroll-padding-top: 4.5rem; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 400 1rem/1.65 var(--f-text); }
+/* the footer stays at the bottom of the window on a short page */
+body { min-height: 100vh; display: flex; flex-direction: column; }
+body > .frame { width: 100%; }  /* its auto side margins would otherwise shrink it to its content in the column */
+body > .footer { margin-top: auto; }
 
 a { color: var(--accent); text-underline-offset: .18em; text-decoration-thickness: 1px; }
 a:hover { text-decoration-thickness: 2px; }
