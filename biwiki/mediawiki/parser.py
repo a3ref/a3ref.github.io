@@ -2,6 +2,8 @@
 # Parser::parse(), internalParse(), internalParseHalfParsed(), handleDoubleUnderscore(), handleHeadings().
 # Changed by a3ref contributors on 2026-10-30: translated to Python, the stages ported so far; pages and templates
 # come from the ``pages`` mapping instead of a database; ParserOutput keeps only what the stages record.
+# Changed by a3ref contributors on 2026-10-30: handleDoubleUnderscore() without alias recording and the
+# bad-double-underscore-category check (T407289), getExternalLinkAttribs() always sets rel, as in 1.39.0.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -206,12 +208,9 @@ class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
         """Fills the double-underscore magic words (__NOTOC__ ...) found in the text, and removes them."""
         # The position of __TOC__ needs to be recorded
         mw = self.magic_words.get("toc")
-        toc_alias = None
         if mw.match(text):
             self.show_toc = True
             self.force_toc_position = True
-            # record the alias used
-            toc_alias = mw.regex.search(text).group(0)
             # Set a placeholder. At the end we'll fill it in with the TOC.
             text = mw.replace(TOC_PLACEHOLDER, text, 1)
             # Only keep the first one.
@@ -219,10 +218,7 @@ class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
 
         # Now match and remove the rest of them
         mwa = self.magic_words.get_double_underscore_array()
-        self.double_underscores, text = mwa.match_and_remove(text, True)
-        if toc_alias:
-            # For consistency with all other double-underscores (see below)
-            self.double_underscores["toc"] = toc_alias
+        self.double_underscores, text = mwa.match_and_remove(text)
 
         if "nogallery" in self.double_underscores:
             self.output.no_gallery = True
@@ -238,14 +234,9 @@ class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
             self.output.index_policy = "index"
             self.output.tracking_categories.append("index-category")
 
-        for key, alias in self.double_underscores.items():
-            # Cache all double underscores in the database
+        # Cache all double underscores in the database
+        for key in self.double_underscores:
             self.output.page_properties[key] = ""
-            # Check for deprecated local aliases (T407289)
-            ascii_ = isinstance(alias, str) and alias.startswith("__") and alias.endswith("__")
-            wide = isinstance(alias, str) and alias.startswith("＿＿") and alias.endswith("＿＿")
-            if not (ascii_ or wide):
-                self.output.tracking_categories.append("bad-double-underscore-category")
         return text
 
     @staticmethod
@@ -323,18 +314,19 @@ class Parser(HeadingsMixin, LinksMixin, PreprocessingMixin):
         This currently may include rel => nofollow (depending on configuration, namespace, and the URL's domain)
         and/or a target attribute (depending on configuration)."""
         attribs = {}
-        rel = self.get_external_link_rel(url) or ""
+        rel = self.get_external_link_rel(url)
         target = self.config.external_link_target
         if target:
             attribs["target"] = target
             if target not in ("_self", "_parent", "_top"):
                 # T133507. New windows can navigate parent cross-origin. Including noreferrer due to lacking browser
                 # support of noopener. Eventually noreferrer should be removed.
+                # (PHP: null !== '' and null . ' ' is ' ', so a null rel gets a leading space)
                 if rel != "":
-                    rel += " "
+                    rel = (rel or "") + " "
                 rel += "noreferrer noopener"
-        if rel != "":
-            attribs["rel"] = rel
+        # always set, even when null (an attribute whose value is null is not output)
+        attribs["rel"] = rel
         return attribs
 
     def maybe_make_external_image(self, url: str):

@@ -5,6 +5,8 @@
 # Changed by a3ref contributors on 2026-10-30: translated to Python; the galleries always render through the parser
 # (files, link renderer, bad image list); no hooks, no ResourceLoader modules (so the slideshow's client-side
 # script is not added).
+# Changed by a3ref contributors on 2026-10-30: TraditionalImageGallery::toHTML() without the thumb->isError()
+# handling and the thumbnail_error/toText() labels, as in 1.39.0.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -188,7 +190,7 @@ class TraditionalImageGallery(ImageGalleryBase):
             is_bad_file = bool(img and thumb and self.hide_bad_images
                                and bad_file_lookup.is_bad_file(nt.db_key, self.context_title))
 
-            if not img or not thumb or (not enable_legacy_media_dom and thumb.is_error()) or is_bad_file:
+            if not img or not thumb or is_bad_file:
                 rdfa_type = "mw:Error " + rdfa_type
                 if enable_legacy_media_dom:
                     if is_bad_file:
@@ -196,15 +198,8 @@ class TraditionalImageGallery(ImageGalleryBase):
                     else:
                         thumbhtml = htmlspecialchars(img.get_last_error() if img else nt.text)
                 else:
-                    current_exists = bool(img and img.exists())
-                    if current_exists and not thumb:
-                        label = "Error creating thumbnail: "
-                    elif thumb and thumb.is_error():
-                        label = thumb.to_text()
-                    else:
-                        label = ""
-                    thumbhtml = make_broken_image_link_obj(parser, nt, label, "", "", "", False, transform_options,
-                                                           current_exists)
+                    # FIXME: BadFile is known
+                    thumbhtml = make_broken_image_link_obj(parser, nt, "", "", "", "", False, transform_options)
                     thumbhtml = raw_element("span", {"typeof": rdfa_type}, thumbhtml)
 
                 thumbhtml = ("\n\t\t\t" + '<div class="thumb" style="height: '

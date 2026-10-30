@@ -8,6 +8,8 @@
 # Changed by a3ref contributors on 2026-10-30: translated to Python as a mixin of Parser; the content language is
 # English (no link prefixes, no variants); page existence comes from the parser's pages (linkrenderer.LinkCache),
 # files from the parser's files (files.FileRepo); no hooks.
+# Changed by a3ref contributors on 2026-10-30: handleInternalLinks2() renders a bad file as a plain link instead of
+# an image, as in 1.39.0.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -435,20 +437,21 @@ class LinksMixin:
                     continue
 
                 if ns == NS_FILE:
-                    if wasblank:
-                        # if no parameters were passed, text becomes something like "File:Foo.png", which we don't
-                        # want to pass on to the image generator
-                        text = ""
-                    else:
-                        # recursively parse links inside the image caption actually, this will parse them in any
-                        # other parameters, too, but it might be hard to fix that, and it doesn't matter ATM
-                        text = self.handle_external_links(text)
-                        text, inner = self.handle_internal_links2(text)
-                        holders.merge(inner)
-                    # cloak any absolute URLs inside the image markup, so handleExternalLinks() won't touch them
-                    s += prefix + self.armor_links(self.make_image(nt, text, holders)) + trail
-                    i += 1
-                    continue
+                    if not self.get_bad_file_lookup().is_bad_file(nt.db_key, self.get_title_object()):
+                        if wasblank:
+                            # if no parameters were passed, text becomes something like "File:Foo.png", which we
+                            # don't want to pass on to the image generator
+                            text = ""
+                        else:
+                            # recursively parse links inside the image caption actually, this will parse them in
+                            # any other parameters, too, but it might be hard to fix that, and it doesn't matter ATM
+                            text = self.handle_external_links(text)
+                            text, inner = self.handle_internal_links2(text)
+                            holders.merge(inner)
+                        # cloak any absolute URLs inside the image markup, so handleExternalLinks() won't touch them
+                        s += prefix + self.armor_links(self.make_image(nt, text, holders)) + trail
+                        i += 1
+                        continue
                 elif ns == NS_CATEGORY:
                     # Strip the whitespace Category links produce, see T2087
                     s = (s + prefix).rstrip(" \t\n\r\0\x0b") + trail  # T2087, T87753

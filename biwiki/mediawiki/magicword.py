@@ -3,6 +3,8 @@
 # Changed by a3ref contributors on 2026-10-30: translated to Python; English only (the content language of the
 # BI wiki), magic words from magicwords_en.py and extensions; no hooks. Python group names cannot hold magic word
 # IDs such as "!" or "img_width", so MagicWordArray numbers its groups and keeps the IDs aside.
+# Changed by a3ref contributors on 2026-10-30: MagicWordArray::parseMatch() (public, returns [ID, parameter]) and
+# matchAndRemove() without $returnAlias, as in 1.39.0.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -196,24 +198,24 @@ class MagicWordArray:
         return self._compiled("^(?:{})$", True)
 
     @staticmethod
-    def _parse_match(m: re.Match, groups: dict[str, str]) -> tuple[str, str, Union[str, bool]]:
-        """(magic word ID, matched synonym, parameter value, or False if there is none)"""
+    def parse_match(m: re.Match, groups: dict[str, str]) -> tuple[str, Union[str, bool]]:
+        """Returns array(magic word ID, parameter value). If there is no parameter value, that element will be
+        false."""
         for group, name in groups.items():
             if group in m.re.groupindex and m.group(group):  # each regex holds the groups of one case only
                 index = m.re.groupindex[group]
                 # PHP's match array leaves out unmatched groups at the end: no parameter is False there
                 last = max((i for i in range(1, m.re.groups + 1) if m.group(i) is not None), default=0)
                 param: Union[str, bool] = (m.group(index + 1) or "") if index + 1 <= last else False
-                return name, m.group(group), param
-        raise ValueError("MagicWordArray: parameter not found")
+                return name, param
+        raise ValueError("MagicWordArray::parseMatch: parameter not found")
 
     def match_variable_start_to_end(self, text: str) -> tuple[Union[str, bool], Union[str, bool]]:
         """Match some text, with parameter capture: (magic word ID, parameter), both False if there was no match."""
         for regex, groups in self.get_variable_start_to_end_regex():
             m = regex.search(text)
             if m:
-                id_, _alias, param = self._parse_match(m, groups)
-                return id_, param
+                return self.parse_match(m, groups)
         return False, False
 
     def match_start_to_end(self, text: str) -> Union[str, bool]:
@@ -223,17 +225,14 @@ class MagicWordArray:
             return hash_[1][text]
         return hash_[0].get(lc(text), False)
 
-    def match_and_remove(self, text: str, return_alias: bool = False) -> tuple[dict[str, Union[str, bool]], str]:
-        """ID -> parameter value (or the alias matched, ``return_alias``) for all items that match, and the text
-        with the matched items removed."""
+    def match_and_remove(self, text: str) -> tuple[dict[str, Union[str, bool]], str]:
+        """ID -> parameter value for all items that match, and the text with the matched items removed."""
         found: dict[str, Union[str, bool]] = {}
         for regex, groups in self.get_regex():
-            def sub(m: re.Match) -> str:
-                name, alias, param = self._parse_match(m, groups)
-                found[name] = alias if return_alias else param
-                return ""
-
-            text = regex.sub(sub, text)
+            for m in regex.finditer(text):
+                name, param = self.parse_match(m, groups)
+                found[name] = param
+            text = regex.sub("", text)
         return found, text
 
     def match_start_and_remove(self, text: str) -> tuple[Union[str, bool], str]:
@@ -241,7 +240,7 @@ class MagicWordArray:
         for regex, groups in self.get_regex_start():
             m = regex.search(text)
             if m:
-                id_, _alias, _param = self._parse_match(m, groups)
+                id_, _param = self.parse_match(m, groups)
                 return id_, text[len(m.group(0)):]
         return False, text
 

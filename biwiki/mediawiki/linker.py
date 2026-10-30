@@ -7,6 +7,8 @@
 # validAbsoluteProtocols(), matchesDomainList().
 # Changed by a3ref contributors on 2026-10-30: translated to Python; no hooks; the content language is English
 # (its link trail is MessagesEn's $linkTrail); UrlUtils::parse() uses Python's urllib instead of PHP's parse_url().
+# Changed by a3ref contributors on 2026-10-30: makeImageLink()/makeThumbLink2() without the bad-file and
+# thumb->isError() "mw:Error" handling, makeBrokenImageLinkObj() without $currentExists, as in 1.39.0.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -440,14 +442,13 @@ def make_image_link(parser, title, file, frame_params: Optional[dict] = None, ha
 
     rdfa_type = "mw:File"
 
-    if "frameless" in frame_params:
+    if file and "frameless" in frame_params:
         rdfa_type += "/Frameless"
-        if file:
-            src_width = file.get_width(page)
-            # For "frameless" option: do not present an image bigger than the source (for bitmap-style images).
-            # This is the same behavior as the "thumb" option does it already.
-            if src_width and not file.must_render() and handler_params["width"] > src_width:
-                handler_params["width"] = src_width
+        src_width = file.get_width(page)
+        # For "frameless" option: do not present an image bigger than the source (for bitmap-style images).
+        # This is the same behavior as the "thumb" option does it already.
+        if src_width and not file.must_render() and handler_params["width"] > src_width:
+            handler_params["width"] = src_width
 
     if file and "width" in handler_params:
         # Create a resized image, without the additional thumbnail features
@@ -455,23 +456,13 @@ def make_image_link(parser, title, file, frame_params: Optional[dict] = None, ha
     else:
         thumb = None
 
-    is_bad_file = bool(file and thumb and parser.get_bad_file_lookup().is_bad_file(
-        title.db_key, parser.get_title_object()))
-
-    if not thumb or (not enable_legacy_media_dom and thumb.is_error()) or is_bad_file:
+    if not thumb:
         rdfa_type = "mw:Error " + rdfa_type
-        current_exists = bool(file and file.exists())
+        label = ""
         if enable_legacy_media_dom:
             # This is the information for tooltips for inline images which Parsoid stores in data-mw. See T273014
             label = frame_params["title"]
-        else:
-            if current_exists and not thumb:
-                label = "Error creating thumbnail: "
-            elif thumb and thumb.is_error():
-                label = thumb.to_text()
-            else:
-                label = ""
-        s = make_broken_image_link_obj(parser, title, label, "", "", "", bool(time), handler_params, current_exists)
+        s = make_broken_image_link_obj(parser, title, label, "", "", "", bool(time), handler_params)
     else:
         process_responsive_images(parser, file, thumb, handler_params)
         params = {"alt": frame_params["alt"], "title": frame_params["title"]}
@@ -577,13 +568,9 @@ def make_thumb_link2(title, file, frame_params: Optional[dict] = None, handler_p
     thumb = None
     noscale = False
     manualthumb = False
-    manual_title = None
     rdfa_type = "mw:File/Thumb"
 
     if not exists:
-        # Same precedence as the exists case
-        if "manualthumb" not in frame_params and "framed" in frame_params:
-            rdfa_type = "mw:File/Frame"
         outer_width = handler_params["width"] + 2
     else:
         if "manualthumb" in frame_params:
@@ -594,6 +581,8 @@ def make_thumb_link2(title, file, frame_params: Optional[dict] = None, handler_p
                 if manual_img:
                     thumb = manual_img.get_unscaled_thumb(handler_params)
                     manualthumb = True
+                else:
+                    exists = False
         elif "framed" in frame_params:
             # Use image dimensions, don't scale
             thumb = file.get_unscaled_thumb(handler_params)
@@ -639,28 +628,15 @@ def make_thumb_link2(title, file, frame_params: Optional[dict] = None, handler_p
         s += (f'<div class="thumb t{frame_params["align"]}">'
               f'<div class="thumbinner" style="width:{_php_number(outer_width)}px;">')
 
-    is_bad_file = bool(exists and thumb and parser is not None and parser.get_bad_file_lookup().is_bad_file(
-        manual_title.db_key if manualthumb else title.db_key, parser.get_title_object()))
-
     if not exists:
-        rdfa_type = "mw:Error " + rdfa_type
-        s += make_broken_image_link_obj(parser, title, "", "", "", "", bool(time), handler_params, False)
+        label = ""
+        s += make_broken_image_link_obj(parser, title, label, "", "", "", bool(time), handler_params)
         zoom_icon = ""
-    elif not thumb or (not enable_legacy_media_dom and thumb.is_error()) or is_bad_file:
-        rdfa_type = "mw:Error " + rdfa_type
+    elif not thumb:
         if enable_legacy_media_dom:
-            if not thumb:
-                s += htmlspecialchars("Error creating thumbnail: ")
-            else:
-                s += make_broken_image_link_obj(parser, title, "", "", "", "", bool(time), handler_params, True)
+            s += htmlspecialchars("Error creating thumbnail: ")  # thumbnail_error
         else:
-            if thumb and thumb.is_error():
-                label = thumb.to_text()
-            elif not thumb:
-                label = "Error creating thumbnail: "
-            else:
-                label = ""
-            s += make_broken_image_link_obj(parser, title, label, "", "", "", bool(time), handler_params, True)
+            s += make_broken_image_link_obj(parser, title, "", "", "", "", bool(time), handler_params)
         zoom_icon = ""
     else:
         if not noscale and not manualthumb:
@@ -682,6 +658,10 @@ def make_thumb_link2(title, file, frame_params: Optional[dict] = None, handler_p
         return s.replace("\n", " ")
 
     s += html_raw_element("figcaption", {}, frame_params.get("caption") or "")
+
+    if not exists or not thumb:
+        rdfa_type = "mw:Error " + rdfa_type
+
     s = html_raw_element("figure", {"class": classes, "typeof": rdfa_type}, s)
     return s.replace("\n", " ")
 
@@ -714,8 +694,7 @@ def process_responsive_images(parser, file, thumb, hp: dict) -> None:
 
 
 def make_broken_image_link_obj(parser, title, label: str = "", query: str = "", unused1: str = "",
-                               unused2: str = "", time: bool = False, handler_params: Optional[dict] = None,
-                               current_exists: bool = False) -> str:
+                               unused2: str = "", time: bool = False, handler_params: Optional[dict] = None) -> str:
     """Make a "broken" link to an image: to the upload form for a missing file (uploads enabled), otherwise to the
     file page. ``label``: link label (plain text)."""
     from .site import NS_FILE
@@ -736,7 +715,7 @@ def make_broken_image_link_obj(parser, title, label: str = "", query: str = "", 
         html = htmlspecialchars(label, False)
 
     link_cache = parser.get_link_cache()
-    current_exists = current_exists or bool(time and link_cache.find_file(title) is not None)
+    current_exists = bool(time and link_cache.find_file(title) is not None)
 
     if config.enable_uploads and not current_exists:
         if title.in_namespace(NS_FILE) and link_cache.check_redirect(title):

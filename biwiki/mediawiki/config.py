@@ -3,6 +3,7 @@
 # (C) MediaWiki contributors.
 # Changed by a3ref contributors on 2026-10-30: the settings the port needs, as a Python dataclass; BIKI holds the
 # values of the Bohemia Interactive Community wiki (from its API, meta=siteinfo).
+# Changed by a3ref contributors on 2026-10-30: $wgUrlProtocols default without "matrix:", as in 1.39.0.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -18,7 +19,7 @@ from typing import Optional
 # $wgUrlProtocols (MainConfigSchema default)
 URL_PROTOCOLS = (
     "bitcoin:", "ftp://", "ftps://", "geo:", "git://", "gopher://", "http://", "https://", "irc://", "ircs://",
-    "magnet:", "mailto:", "matrix:", "mms://", "news:", "nntp://", "redis://", "sftp://", "sip:", "sips:", "sms:",
+    "magnet:", "mailto:", "mms://", "news:", "nntp://", "redis://", "sftp://", "sip:", "sips:", "sms:",
     "ssh://", "svn://", "tel:", "telnet://", "urn:", "worldwind://", "xmpp:", "//",
 )
 

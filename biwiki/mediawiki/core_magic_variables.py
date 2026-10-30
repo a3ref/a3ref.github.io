@@ -3,6 +3,7 @@
 # Changed by a3ref contributors on 2026-10-30: translated to Python; English only; the time comes from
 # ``parser.timestamp`` (the parser tests' ParserGetVariableValueTs hook fixes it), settings from the parser's Config;
 # no hooks, logger or SpecialVersion (CURRENTVERSION is MediaWiki's version string).
+# Changed by a3ref contributors on 2026-10-30: MW_VERSION is 1.39.0 (includes/Defines.php), as in 1.39.0.
 #
 # This program is free software; you can redistribute it and/or modify it under the terms of the GNU General
 # Public License as published by the Free Software Foundation; either version 2 of the License, or (at your
@@ -28,8 +29,8 @@ from . import coreparserfunctions as cpf
 from .parser_preprocess import wf_escape_wiki_text
 from .site import wf_urlencode
 
-# MW_VERSION (includes/Defines.php at the ported commit), for {{CURRENTVERSION}} (SpecialVersion::getVersion())
-MW_VERSION = "1.39.17"
+# MW_VERSION (includes/Defines.php of 1.39.0, which the BI wiki runs), for {{CURRENTVERSION}} (SpecialVersion::getVersion())
+MW_VERSION = "1.39.0"
 
 # Assume that no output will later be saved this many seconds after parsing
 MAX_TTS = 900
