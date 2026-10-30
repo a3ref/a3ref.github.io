@@ -364,6 +364,17 @@ class SiteHtmlTest(unittest.TestCase):
                           (3, "respawnDelay"), (4, "deep"), (3, "Mid")])
         self.assertIn('<h3 id="respawndelay">respawnDelay</h3>', body)
 
+    def test_notes_levelled_with_the_page(self):
+        # playSound: a note's own "=== ... ===" heading came out as h5 under the author's h3
+        body, heads = self.site._ids('<h2>Examples</h2><h3>Example 1</h3><section class="notes">'
+                                     '<h2 id="community-notes">Community notes</h2><article class="note"><header>'
+                                     '<h3 class="note-author">Kk</h3></header><h5>Sound</h5></article></section>')
+        self.assertEqual([(lvl, i) for lvl, i, _ in heads],
+                         [(2, "examples"), (3, "example-1"), (2, "community-notes"), (3, "kk"), (4, "sound")])
+        self.assertIn('<h2 id="community-notes">Community notes</h2>', body)
+        self.assertIn('<h3 id="kk" class="note-author">Kk</h3>', body)
+        self.assertIn('<h4 id="sound">Sound</h4>', body)
+
     def test_arg_title_anchor_is_the_name(self):
         # {{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}: the wiki's anchor is #allowProfileGlasses
         md = Renderer(None, anchors=True).md("{{ArgTitle|4|allowProfileGlasses|{{GVI|arma3|2.04}}}}\ntext")

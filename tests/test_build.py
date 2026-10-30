@@ -76,6 +76,13 @@ class BuildTest(unittest.TestCase):
         page = (self.out / "commands" / "setPos.html").read_text(encoding="utf-8")
         self.assertIn(f'"license": "{terms}"', page)
 
+    def test_seo_metadata(self):
+        page = (self.out / "commands" / "setPos.html").read_text(encoding="utf-8")
+        self.assertIn('<link rel="canonical" href="https://a3ref.github.io/commands/setPos.html">', page)
+        self.assertIn('"mainEntityOfPage": {"@type": "WebPage", "@id": "https://a3ref.github.io/commands/setPos.html"}', page)
+        # served at every missing address, so it names none as its own
+        self.assertNotIn('rel="canonical"', (self.out / "404.html").read_text(encoding="utf-8"))
+
     def test_no_crashes(self):
         report = json.loads((self.out / "report.json").read_text(encoding="utf-8"))
         self.assertEqual((report["counts"]["error"], report["counts"]["skipped"]), (0, 0), report["problems"])

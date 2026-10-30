@@ -247,21 +247,25 @@ class Site:
         open_levels: list[int] = []  # the written levels of the headings that hold the current one; h1 is the header
 
         def sub(m):
-            written, inner = int(m.group(1)), m.group(2)
+            written, attrs, inner = int(m.group(1)), m.group(2), m.group(3)
             while open_levels and open_levels[-1] >= written:
                 open_levels.pop()
             open_levels.append(written)
             level = len(open_levels) + 1
             text = _ANCHOR.sub("", re.sub(r"<[^>]+>", "", inner))
-            base = heading_id(html.unescape(text)) or "section"
-            ident, n = base, 2
-            while ident in seen:
-                ident, n = f"{base}-{n}", n + 1
+            given = re.search(r'\sid="([^"]*)"', attrs)  # the page's own headings (Community notes) keep theirs
+            if given:
+                ident, attrs = given.group(1), attrs.replace(given.group(0), "")
+            else:
+                base = heading_id(html.unescape(text)) or "section"
+                ident, n = base, 2
+                while ident in seen:
+                    ident, n = f"{base}-{n}", n + 1
             seen.add(ident)
             toc.append((level, ident, text))
-            return f'<h{level} id="{ident}">{inner}</h{level}>'
+            return f'<h{level} id="{ident}"{attrs}>{inner}</h{level}>'
 
-        return re.sub(r"<h([2-6])>(.*?)</h\1>", sub, body), toc
+        return re.sub(r"<h([2-6])((?:\s[^>]*)?)>(.*?)</h\1>", sub, body), toc
 
     # ---- page shell ---------------------------------------------------------------------------
 
@@ -276,7 +280,8 @@ class Site:
   <p id="{ident}-status" class="vh" aria-live="polite"></p>
 </div>"""
 
-    def _head(self, root: str, path: str, title: str, description: str, og_type: str, jsonld: list, extra: str) -> str:
+    def _head(self, root: str, path: str, title: str, description: str, og_type: str, jsonld: list, extra: str,
+              canonical: bool = True) -> str:
         url = self.base + (path if path != "index.html" else "")
         light, dark = THEME_COLOR
         preload = "".join(
@@ -289,14 +294,14 @@ class Site:
         hashes = " ".join(f"'sha256-{base64.b64encode(hashlib.sha256(b.encode()).digest()).decode()}'" for b in blocks)
         csp = CSP.format(origin=self.base.rstrip("/"), hashes=hashes)
         desc = html.escape(description)
+        canon = f'<link rel="canonical" href="{url}">\n' if canonical else ""
         return f"""<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="{csp}">
 <title>{html.escape(title)}</title>
 <meta name="description" content="{desc}">
-<link rel="canonical" href="{url}">
-<meta name="color-scheme" content="light dark">
+{canon}<meta name="color-scheme"content="light dark">
 <meta name="theme-color" content="{light}" media="(prefers-color-scheme: light)" data-scheme="light">
 <meta name="theme-color" content="{dark}" media="(prefers-color-scheme: dark)" data-scheme="dark">
 <script src="{root}assets/theme.js"></script>
@@ -320,7 +325,7 @@ class Site:
 
     def shell(self, *, path: str, title: str, description: str, header: str, main: str, crumbs: list,
               toc: str = "", side: str = "", jsonld: list | None = None, extra_head: str = "", footer: str = "",
-              page_class: str = "", og_type: str = "article", root: str | None = None) -> str:
+              page_class: str = "", og_type: str = "article", root: str | None = None, canonical: bool = True) -> str:
         root = root if root is not None else "../" * path.count("/")
         title = _fit_title(title)
         jsonld = list(jsonld or [])
@@ -362,7 +367,7 @@ class Site:
 </div>"""
         doc = f"""<!DOCTYPE html>
 <html lang="en">
-{self._head(root, path, title, description, og_type, jsonld, extra_head)}
+{self._head(root, path, title, description, og_type, jsonld, extra_head, canonical)}
 <body data-root="{root}" class="{page_class}">
 <a class="skip" href="#content">Skip to content</a>
 {body}
@@ -378,7 +383,6 @@ class Site:
 
     def page(self, kind: str, s: str, rec: dict, body_md: str, summary: str, status_note: str = "",
              siblings: list | None = None) -> str:
-        body, heads = self._ids(self.html((status_note + "\n\n" if status_note else "") + body_md))
         notes = ""
         if rec["notes"]:
             items = []
@@ -389,7 +393,8 @@ class Site:
                     f'{self.html(n["text"])}</article>'
                 )
             notes = '<section class="notes"><h2 id="community-notes">Community notes</h2>' + "".join(items) + "</section>"
-            heads.append((2, "community-notes", "Community notes"))
+        # levelled together, so the headings in a note follow its author's, as the page's follow its sections
+        body, heads = self._ids(self.html((status_note + "\n\n" if status_note else "") + body_md) + notes)
 
         # The sections, and of their subsections only the syntax forms: the other h3 are "Example 1", "Example 2", ...,
         # numbered blocks a contents entry tells nothing about, and the Examples entry leads there.
@@ -434,7 +439,7 @@ class Site:
         footer = _site_footer(rec=rec)
         desc = _description(summary, rec)
         return self.shell(path=f"{kind}/{s}.html", title=f"{rec['name']} – Arma 3 {label.lower()}",
-                          description=desc, header=header, main=body + notes,
+                          description=desc, header=header, main=body,
                           crumbs=crumbs, toc=toc, side=self._side(kind, group, siblings, rec["name"]),
                           jsonld=[_article_ld(self.base, f"{kind}/{s}", rec, desc)], extra_head=_alternates(s),
                           footer=footer, page_class=f"page-{rec['type']}")
@@ -491,6 +496,7 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
                          description="There is no page at this address of the Arma 3 scripting reference.",
                          header=header, main=main, crumbs=[("Home", "index.html")], page_class="page-index",
                          extra_head='<meta name="robots" content="noindex">\n<script src="/assets/404.js" defer></script>\n',
+                         canonical=False,  # served at every missing address: no one address is its own
                          og_type="website")
         (self.out / "404.html").write_text(doc, encoding="utf-8")
 
@@ -823,6 +829,7 @@ def _article_ld(base: str, path: str, rec: dict, description: str) -> dict:
         "headline": rec["name"],
         "description": description,
         "url": f"{base}{path}.html",
+        "mainEntityOfPage": {"@type": "WebPage", "@id": f"{base}{path}.html"},
         "dateModified": rec["updated"],
         "inLanguage": "en",
         "isBasedOn": rec["url"],

@@ -462,6 +462,9 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     (out_dir / "llms.txt").write_text(_llms_txt(base_url, index, groups, records), encoding="utf-8")
     (out_dir / "llms-full.txt").write_text(_llms_full(base_url, index), encoding="utf-8")
     (out_dir / "names.txt").write_text(_names_txt(base_url, index), encoding="utf-8")
+    # Everything is allowed, the .md and .json next to each page too, though they duplicate its HTML: AI crawlers
+    # and agents are who they are for, and the HTML carries the canonical link. Revisit if Search Console shows the
+    # .md pages indexed in place of the HTML.
     (out_dir / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {base_url}sitemap.xml\n", encoding="utf-8")
     (out_dir / "sitemap.xml").write_text(_sitemap(base_url, records, slugs, groups, set(redirects)), encoding="utf-8")
     (out_dir / "index.md").write_text(_root_index(kinds, index, now), encoding="utf-8")
