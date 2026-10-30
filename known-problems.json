@@ -3,6 +3,8 @@
  {"key": "markup|topics/Config Properties Megalist|{{", "md": "1137:74", "context": "…mplete and (some) obsolete information: {{Link|http://tactical.nekromantix.com/wiki/doku.php?id=arma…", "wiki": "1017:76"},
  {"key": "no-syntax|functions/BIS fnc basicTask"},
  {"key": "no-syntax|functions/BIS fnc execRemote"},
+ {"key": "untyped-param|commands/createSoundSourceLocal|syntax 1: see createSoundSource"},
+ {"key": "untyped-param|commands/remoteExecCall|syntax 1: see remoteExec"},
  {"key": "untyped-param|functions/BIN fnc isExtensionError|syntax 1: Extension", "wiki": "17:3"},
  {"key": "untyped-param|functions/BIN fnc probeVeinHitpoint|syntax 1: arg"},
  {"key": "untyped-param|functions/BIN fnc setTargetWeight|syntax 1: _input", "wiki": "14:4"},
