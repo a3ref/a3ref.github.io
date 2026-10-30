@@ -165,7 +165,7 @@ a:hover { text-decoration-thickness: 2px; }
 .toc-fold::after { content: ""; width: .38rem; height: .38rem; margin-top: -.2rem;
   border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
 .toc-fold[aria-expanded="false"]::after { margin: 0 0 0 -.15rem; transform: rotate(-45deg); }
-.toc li:has(> ol[hidden] a[aria-current]) > a { color: var(--accent); border-left-color: var(--accent); }
+.toc li:has(> ol[hidden] a[aria-current]) > a { color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
 .side-more { margin: .6rem 0 0 .6rem; font-size: .85rem; }
 
 /* The content column takes the room the side column leaves. Running text keeps the reading measure; tables use
