@@ -41,6 +41,14 @@ def _register_enforce_highlighter(parser) -> None:
     enforcehighlighter.register(parser)
 
 
+def _register_sqf_highlighter(parser) -> None:
+    # without the command and function names no token links to a page; a3ref calls sqfhighlighter.register()
+    # itself with the names of its mirrored pages
+    from . import sqfhighlighter
+
+    sqfhighlighter.register(parser)
+
+
 def _register_spoiler(parser) -> None:
     from . import spoiler
 
@@ -53,6 +61,7 @@ EXTENSIONS: dict[str, Callable] = {
     "Cite": _register_cite,
     "SyntaxHighlight": _register_syntax_highlight,
     # Bohemia Interactive's own, written after the wiki's HTML
+    "SQFHighlighter": _register_sqf_highlighter,
     "EnforceScriptHighlighter": _register_enforce_highlighter,
     "BIKISpoiler": _register_spoiler,
 }
