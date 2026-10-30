@@ -573,15 +573,23 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
                 ("https://github.com/a3ref/data", "a3ref/data", "has the same data with daily git history."),
             ]
         )
+        # topics by group, as commands and functions are; each group is a section of topics/index.html
+        topic_groups: dict[str, int] = defaultdict(int)
+        for r in all_records.get("topics", []):
+            for g in r["groups"] or ["General"]:
+                topic_groups[g] += 1
         topics = "".join(
-            f'<li><a href="topics/{slugs[r["title"]]}.html">{html.escape(r["name"])}</a></li>'
-            for r in sorted(all_records.get("topics", []), key=lambda r: (r["groups"][0] == "Data Types", r["name"].lower()))
+            f'<li><a href="topics/index.html#{heading_id(g)}">{html.escape(g)}</a> <span class="count">{n}</span></li>'
+            for g, n in sorted(topic_groups.items(), key=lambda x: x[0].lower())
         )
-        main = f"""<div class="home-grid">{''.join(columns)}
-<aside class="home-side" aria-label="Topics, recent edits and machine-readable data">
-<section><h2><a href="topics/index.html">Topics</a></h2><ul class="group-list">{topics}</ul></section>
-<section><h2>Recently edited on the wiki</h2><ul class="recent">{recent_items}</ul></section>
+        # the machine-readable data and the recent edits sit above the columns, so no one scrolls to find them
+        main = f"""<div class="home-strip">
 <section><h2>For AI agents and tools</h2><p>Every page also exists as <code>.md</code> and <code>.json</code> next to its <code>.html</code>, with no API key, no rate limit and CORS open.</p><ul class="data-list">{data_items}</ul></section>
+<section><h2>Recently edited on the wiki</h2><ul class="recent">{recent_items}</ul></section>
+</div>
+<div class="home-grid">{''.join(columns)}
+<aside class="home-side" aria-label="Topics">
+<section><h2><a href="topics/index.html">Topics</a></h2><ul class="group-list">{topics}</ul></section>
 </aside></div>"""
         website = {
             "@context": "https://schema.org", "@type": "WebSite", "name": SITE_TITLE, "alternateName": SITE_NAME,
