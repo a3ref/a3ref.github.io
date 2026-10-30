@@ -218,6 +218,7 @@ a:hover { text-decoration-thickness: 2px; }
 /* ---- content ------------------------------------------------------------------------------------- */
 
 .content { min-width: 0; }
+.content.redirect { width: 100%; max-width: 46rem; margin: 0 auto; padding: 2rem 1.25rem; }  /* redirect stubs */
 .content h2 { margin: 2.4rem 0 .8rem; font-size: 1.4rem; line-height: 1.3; font-weight: 650; letter-spacing: -.01em; }
 .content h3 { margin: 1.8rem 0 .5rem; font-size: 1.1rem; font-weight: 650; }
 .content :where(h4, h5, h6) { margin: 1.6rem 0 .4rem; font-size: 1rem; font-weight: 650; }

@@ -781,6 +781,39 @@ def _description(summary: str, rec: dict) -> str:
     return text if len(text) <= 160 else text[:159].rsplit(" ", 1)[0].rstrip(",;:") + "…"
 
 
+def redirect_page(*, title: str, text: str, href: str, link: str, description: str, canonical: str = "",
+                  root: str = "../") -> str:
+    """A stub that only points elsewhere: a lower-case alias, or a wiki redirect mirrored as a topic. With
+    ``canonical`` (an absolute URL on this site) people are sent on at once and search engines index the target
+    instead; without (the target is not mirrored) it stays a page with a link, kept out of the index."""
+    esc = html.escape
+    if canonical:
+        meta = (f'<link rel="canonical" href="{esc(canonical)}">\n'
+                f'<meta http-equiv="refresh" content="0; url={esc(href)}">')
+    else:
+        meta = '<meta name="robots" content="noindex">'
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{esc(title)}</title>
+<meta name="description" content="{esc(description)}">
+{meta}
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="{root}favicon.ico" sizes="32x32">
+<link rel="stylesheet" href="{root}assets/style.css">
+</head>
+<body>
+<main id="content" class="content redirect">
+<h1 class="name">{esc(title)}</h1>
+<p>{esc(text)} <a href="{esc(href)}">{esc(link)}</a>.</p>
+</main>
+</body>
+</html>
+"""
+
+
 def _alternates(s: str) -> str:
     return (f'<link rel="alternate" type="text/markdown" href="{s}.md">\n'
             f'<link rel="alternate" type="application/json" href="{s}.json">\n')

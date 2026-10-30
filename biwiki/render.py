@@ -1,7 +1,6 @@
 """Write the mirror: per-page Markdown + JSON + HTML, combined JSON dumps, and the entry points for agents."""
 from __future__ import annotations
 
-import html
 import json
 import re
 import shutil
@@ -13,7 +12,7 @@ from pathlib import Path
 from .fetch import CATEGORIES, TEMPLATES, TOPIC_TITLES, load_cache
 from .parse import parse_page, parse_topic, script_name, wiki_url
 from .report import Report
-from .site import PLACEHOLDER, Site, _anchor, heading_id, plain_text
+from .site import PLACEHOLDER, Site, _anchor, heading_id, plain_text, redirect_page
 from .wikitext import Renderer
 
 SITE_URL = "https://a3ref.github.io/"
@@ -308,23 +307,56 @@ class Writer:
     often guess `setpos.md` while GitHub Pages is case-sensitive. Skipped on case-insensitive filesystems
     (local Windows/macOS builds), where both names are the same file."""
 
-    def __init__(self, out_dir: Path):
+    def __init__(self, out_dir: Path, base_url: str = SITE_URL):
         probe = out_dir / ".CaseProbe"
         out_dir.mkdir(parents=True, exist_ok=True)
         probe.write_text("")
         self.aliases = not (out_dir / ".caseprobe").exists()
         probe.unlink()
+        self.base = base_url
 
-    def write(self, target: Path, s: str, ext: str, content: str, title: str = "") -> None:
+    def write(self, target: Path, s: str, ext: str, content: str, title: str = "", alias: str | None = None) -> None:
+        """``alias``: the lower-case HTML page when it should not be a redirect to this one (a redirect stub, whose
+        alias points at the same target)."""
         (target / f"{s}.{ext}").write_text(content, encoding="utf-8")
         if not self.aliases or s.lower() == s:
             return
-        if ext == "html":  # people get a redirect, search engines a canonical link
-            content = (f'<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>{html.escape(title)}</title>'
-                       f'<meta name="robots" content="noindex"><link rel="canonical" href="{s}.html">'
-                       f'<meta http-equiv="refresh" content="0; url={s}.html"></head>'
-                       f'<body><p>Moved to <a href="{s}.html">{html.escape(title)}</a>.</p></body></html>')
+        if ext == "html":
+            # people get a redirect, search engines an absolute canonical link to the page (indexable: a canonical
+            # under noindex is a mixed signal)
+            content = alias if alias is not None else redirect_page(
+                title=title, text="This page is at", href=f"{s}.html", link=title,
+                description=f"{title}: the address with the wiki's capitals.", canonical=f"{self.base}{target.name}/{s}.html")
         (target / f"{s.lower()}.{ext}").write_text(content, encoding="utf-8")
+
+
+_REDIRECT = re.compile(r"\s*#REDIRECT\s*:?\s*\[\[\s*([^\]|#]*?)\s*(?:#([^\]|]*?)\s*)?(?:\|[^\]]*)?\]\]", re.I)
+
+
+def redirect_target(wikitext: str) -> tuple[str, str] | None:
+    """(title, anchor) a wiki redirect page points at; None for a page with content."""
+    m = _REDIRECT.match(wikitext)
+    return (re.sub(r"[\s_]+", " ", m.group(1)).strip(), (m.group(2) or "").replace("_", " ").strip()) if m else None
+
+
+def _redirect_stub(rec: dict, target: tuple[str, str], pages: Pages, base: str) -> str:
+    """A wiki redirect that the topic categories pick up (CFG, EXT, ...): a stub that sends people on to the target
+    page and gives search engines its address, or, when the target is not mirrored, links to it on the wiki."""
+    title, anchor = target
+    key = title if title in pages.where else title[:1].upper() + title[1:]
+    if key in pages.where:
+        kind, s = pages.where[key]
+        page = f"../{kind}/{s}.html"
+        name = pages.name(key)
+        return redirect_page(title=rec["name"], text=f"{rec['name']} is the wiki's redirect to", link=name,
+                             href=page + (f"#{heading_id(anchor)}" if anchor else ""), canonical=f"{base}{kind}/{s}.html",
+                             description=f"{rec['name']}: the Bohemia Interactive Community Wiki's redirect to {name}.")
+    label = f"{title} § {anchor}" if anchor else title
+    return redirect_page(title=rec["name"], link=label, href=wiki_url(title, anchor),
+                         text=f"{rec['name']} redirects on the Bohemia Interactive Community Wiki to a page this mirror "
+                              "does not include:",
+                         description=f"{rec['name']}: the Bohemia Interactive Community Wiki's redirect to {label}, "
+                                     "a page this mirror does not include.")
 
 
 def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset: Path | None = None,
@@ -341,7 +373,8 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     resolve_md, resolve_html = pages.resolver("md"), pages.resolver("html")
     site = Site(out_dir, pages.script_names(), KIND_LABEL, base_url)
     pending: list[tuple] = []  # HTML is rendered once every record is known (the side navigation lists group siblings)
-    writer = Writer(out_dir)
+    writer = Writer(out_dir, base_url)
+    redirects: dict[str, tuple[str, str]] = {}  # topic title -> (title, anchor) of the page a wiki redirect points at
     if (out_dir / "groups").exists():
         shutil.rmtree(out_dir / "groups")
     report = Report()
@@ -378,6 +411,8 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
             writer.write(target, s, "md", page_md)
             writer.write(target, s, "json", json.dumps(rec, ensure_ascii=False, separators=(",", ":")))
             pending.append((target, s, rec, render_html))
+            if kind == "topics" and (to := redirect_target(raw["wikitext"])):
+                redirects[rec["title"]] = to
             slugs[rec["title"]] = s
             summaries[rec["title"]] = short
             search.append([rec["name"], rec["type"][0], f"{kind}/{s}", _short(short, 110), rec.get("operator") or ""])
@@ -396,6 +431,10 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     for target, s, rec, render_html in pending:
         kind = target.name
         group = rec["groups"][0] if rec["groups"] else None
+        if rec["title"] in redirects:  # its .md and .json stay as they are: topics.json is a contract
+            stub = _redirect_stub(rec, redirects[rec["title"]], pages, base_url)
+            writer.write(target, s, "html", stub, rec["name"], alias=stub)
+            continue
         writer.write(target, s, "html", render_html(members.get((kind, group))), rec["name"])
 
     # Stamp the data with its newest wiki edit, not the build time, so unchanged data stays byte-identical.
@@ -424,7 +463,7 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     (out_dir / "llms-full.txt").write_text(_llms_full(base_url, index), encoding="utf-8")
     (out_dir / "names.txt").write_text(_names_txt(base_url, index), encoding="utf-8")
     (out_dir / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {base_url}sitemap.xml\n", encoding="utf-8")
-    (out_dir / "sitemap.xml").write_text(_sitemap(base_url, records, slugs, groups), encoding="utf-8")
+    (out_dir / "sitemap.xml").write_text(_sitemap(base_url, records, slugs, groups, set(redirects)), encoding="utf-8")
     (out_dir / "index.md").write_text(_root_index(kinds, index, now), encoding="utf-8")
     site.home(kinds, records, slugs, now)
     site.not_found(base_url)
@@ -649,13 +688,17 @@ def _names_txt(base: str, index: list[dict]) -> str:
     return "\n".join(out)
 
 
-def _sitemap(base: str, records: dict[str, list[dict]], slugs: dict[str, str], groups) -> str:
+def _sitemap(base: str, records: dict[str, list[dict]], slugs: dict[str, str], groups,
+             redirects: Collection[str] = ()) -> str:
+    """Every indexable page; ``redirects`` (titles) are stubs whose target is listed, or that are noindex."""
     urls = [f"<url><loc>{base}</loc></url>"]
     for kind, recs in records.items():
         urls.append(f"<url><loc>{base}{kind}/index.html</loc></url>")
         if kind != "topics":  # topics have no group pages
             urls += [f"<url><loc>{base}{path[:-3]}.html</loc></url>" for _, path, _ in groups.get(kind, [])]
         for r in recs:
+            if r["title"] in redirects:
+                continue
             lastmod = f"<lastmod>{r['updated'][:10]}</lastmod>" if r["updated"] else ""
             urls.append(f"<url><loc>{base}{kind}/{slugs[r['title']]}.html</loc>{lastmod}</url>")
     return ('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
