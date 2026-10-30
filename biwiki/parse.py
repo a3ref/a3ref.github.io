@@ -298,8 +298,8 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
     examples = []
     for n, x in _numbered(p, "x"):
         xcode = parse_wikitext(str(x))
-        snippets = [html.unescape(clean_code(str(t.contents))).strip("\n") for t in xcode.filter_tags()
-                    if _is_sqf(t) and not t.has("inline") and t.contents]
+        snippets = [html.unescape(clean_code(_comment_text(str(t.contents), str(t.tag)))).strip("\n")
+                    for t in xcode.filter_tags() if _is_sqf(t) and not t.has("inline") and t.contents]
         text = r.md(x)
         if text.strip():  # placeholder pages have "|x1=" with only a comment
             examples.append({"text": text, "code": snippets})
@@ -361,6 +361,26 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
         record["docblock"] = header
         record["filled_from_docblock"] = filled
     return record
+
+
+_SQF_PARTS = re.compile(r'"(?:[^"]|"")*"?|\'(?:[^\']|\'\')*\'?|//[^\n]*|/\*.*?(?:\*/|$)', re.S)
+
+
+def _comment_text(code: str, tag: str) -> str:
+    """<sqf> code as the wiki shows it: its highlighter parses comments as wikitext, so a ``[[link]]`` or
+    ``''emphasis''`` in a comment shows as its text, while the code itself (``[[0]]`` is an array) stays.
+    As in MediaWiki, ``[[[`` and ``[<nowiki/>[`` start no link; the raw tag contents go in, before clean_code."""
+    if tag.lower() != "sqf":  # <syntaxhighlight> shows its code as written; SQS comments are lines
+        return code
+
+    def plain(m: re.Match) -> str:
+        part = m.group(0)
+        if not part.startswith("/"):  # a string
+            return part
+        part = re.sub(r"(?<!\[)\[\[(?:[^\[\]|<>{}]*\|)?([^\[\]|<>{}]*)\]\]", r"\1", part)
+        return re.sub(r"'''''|'''|''", "", part)
+
+    return _SQF_PARTS.sub(plain, code)
 
 
 def _is_sqf(tag) -> bool:

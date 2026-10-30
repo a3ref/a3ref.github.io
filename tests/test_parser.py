@@ -296,6 +296,17 @@ class PageTest(unittest.TestCase):
         r = parse_page(raw, "functions", Renderer(None))["syntaxes"][0]["returns"]
         self.assertEqual((r["type"], r["description"], r["source"]), ("Boolean", "true if added", "docblock"))
 
+    def test_example_code_as_shown(self):
+        # the <sqf> highlighter parses comments as wikitext; code outside them ([[0]] is an array) stays
+        raw = {"title": "addWaypoint", "wikitext": (
+            "{{RV|type=command\n|game1= arma3\n|s1= group [[addWaypoint]] center\n"
+            "|x1= <sqf>\n_wp = _grp addWaypoint [position player, 0];\t// placed like [[setVehiclePosition]]'s "
+            "\"NONE\" placement\n_a = [[0]] - [0]; /* ''killer'' is [[Object|an object]] */\nhint \"// [[x]]\";\n"
+            "_b = [[[1], 0]]; // [<nowiki/>[1]], [[[\"a\", 0]]]\n</sqf>\n}}")}
+        code = parse_page(raw, "commands", Renderer(None))["examples"][0]["code"]
+        self.assertEqual(code, ["_wp = _grp addWaypoint [position player, 0];\t// placed like setVehiclePosition's "
+                                "\"NONE\" placement\n_a = [[0]] - [0]; /* killer is an object */\nhint \"// [[x]]\";\n"
+                                "_b = [[[1], 0]]; // [[1]], [[[\"a\", 0]]]"])
 
 
 class TypeExprTest(unittest.TestCase):
