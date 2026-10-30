@@ -10,7 +10,7 @@ from io import StringIO
 from pathlib import Path
 
 from biwiki.parse import parse_page
-from biwiki.portrender import PortContext, mw_timestamp
+from biwiki.portrender import PortContext, PortRenderer, mw_timestamp
 from biwiki.render import build
 
 RAW = Path(__file__).parent / "fixtures" / "raw"
@@ -95,6 +95,28 @@ class PortBuildTest(unittest.TestCase):
             self.assertIn("object setPos pos", md)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_default_renderer(self):
+        # the port when the data clone's raw/templates.json exists (keyed by page id), else legacy with a warning
+        from biwiki.render import _renderer_factory
+        from biwiki.wikitext import Renderer
+
+        with tempfile.TemporaryDirectory() as tmp:
+            raw = Path(tmp)
+            for f in RAW.glob("*.json"):
+                shutil.copyfile(f, raw / f.name)
+            out = StringIO()
+            with redirect_stdout(out):
+                self.assertIs(_renderer_factory("auto", None, raw, {}), Renderer)
+            self.assertIn("warning: no templates file", out.getvalue())
+            (raw / "templates.json").write_text(json.dumps(
+                {str(i): {"title": t, "revid": i, "timestamp": "2026-01-01T00:00:00Z", "wikitext": w}
+                 for i, (t, w) in enumerate(sorted(TEMPLATES.items()), 1)}), encoding="utf-8")
+            r = _renderer_factory("auto", None, raw, {})(None)
+            self.assertIsInstance(r, PortRenderer)
+            r.page_title = "setThing"
+            self.assertEqual(r.md("{{hl|x}}"), "`x`")
+            self.assertIs(_renderer_factory("legacy", None, raw, {}), Renderer)
 
 
 if __name__ == "__main__":

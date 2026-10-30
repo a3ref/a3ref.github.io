@@ -10,7 +10,7 @@ from collections.abc import Collection
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .fetch import CATEGORIES, TOPIC_TITLES, load_cache
+from .fetch import CATEGORIES, TEMPLATES, TOPIC_TITLES, load_cache
 from .parse import parse_page, parse_topic, script_name, wiki_url
 from .report import Report
 from .site import Site, _anchor, heading_id
@@ -317,11 +317,12 @@ class Writer:
 
 
 def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset: Path | None = None,
-          base_url: str = SITE_URL, renderer: str = "legacy", templates: Path | None = None) -> None:
+          base_url: str = SITE_URL, renderer: str = "auto", templates: Path | None = None) -> None:
     """Generate the mirror in ``out_dir``; with ``dataset``, also write the parsed JSON bundles there.
 
     ``renderer``: "legacy" renders wikitext with wikitext.Renderer; "port" with the MediaWiki parser port and
-    htmlmd (portrender.PortRenderer), which needs the wiki's templates (``templates``, a JSON file)."""
+    htmlmd (portrender.PortRenderer), which needs the wiki's templates (``templates``, a JSON file; default
+    ``<raw_dir>/templates.json``, written by the sync); "auto" is "port" when that file exists, else "legacy"."""
     kinds = [k for k in (kinds or KINDS) if (raw_dir / f"{k}.json").exists()]
     raws = {k: load_cache(raw_dir / f"{k}.json") for k in kinds}
     make = _renderer_factory(renderer, templates, raw_dir, raws)
@@ -424,6 +425,15 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
 
 def _renderer_factory(renderer: str, templates: Path | None, raw_dir: Path, raws: dict):
     """A callable (resolve, **options) -> renderer with wikitext.Renderer's interface."""
+    if templates is None:
+        templates = raw_dir / TEMPLATES
+    if renderer == "auto":
+        if Path(templates).is_file():
+            renderer = "port"
+        else:
+            # a data clone the template sync has not reached yet still builds
+            print(f"warning: no templates file {templates}: rendering with the legacy renderer")
+            renderer = "legacy"
     if renderer == "legacy":
         return Renderer
     if renderer != "port":

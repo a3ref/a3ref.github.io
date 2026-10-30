@@ -11,8 +11,6 @@ from .fetch import CATEGORIES
 ROOT = Path(__file__).resolve().parent.parent
 # The a3ref/data clone: ./data (where the deploy workflow checks it out), else ../data; anywhere else via --raw/--data.
 DATA = next((p for p in (ROOT / "data", ROOT.parent / "data") if p.is_dir()), ROOT / "data")
-# the wiki's templates for --renderer port (a JSON object "Template:X" -> {wikitext, ...}), from a3ref/wiki-fetch
-TEMPLATES = ROOT.parent / "wiki-fetch" / "templates.json"
 
 
 def main(argv=None) -> None:
@@ -29,10 +27,11 @@ def main(argv=None) -> None:
         p.add_argument("--only", choices=list(CATEGORIES), action="append", help="limit to commands or functions")
 
     def renderer_args(p):
-        p.add_argument("--renderer", choices=("legacy", "port"), default="legacy",
-                       help="wikitext renderer: legacy (wikitext.Renderer) or port (MediaWiki parser port + htmlmd)")
-        p.add_argument("--templates", type=Path, default=TEMPLATES,
-                       help="the wiki's templates JSON for --renderer port (default: ../wiki-fetch/templates.json)")
+        p.add_argument("--renderer", choices=("auto", "legacy", "port"), default="auto",
+                       help="wikitext renderer: port (MediaWiki parser port + htmlmd) or legacy (wikitext.Renderer); "
+                            "default auto: port if the templates file exists, else legacy with a warning")
+        p.add_argument("--templates", type=Path,
+                       help="the wiki's templates JSON for the port (default: <raw>/templates.json, written by sync)")
 
     for name, help_ in (("sync", "download/refresh raw wikitext (opens Chrome)"),
                         ("update", "sync + build")):

@@ -52,14 +52,15 @@ def _read_json(path: Union[str, Path]) -> dict:
 
 
 def load_pages(templates: Optional[Union[str, Path]], raw: Optional[Union[str, Path]]) -> dict[str, str]:
-    """Title -> wikitext of the templates (a JSON object "Template:X" -> {wikitext, ...}) and of the mirrored
-    pages in ``raw`` ({commands,functions,topics}.json, page id -> {title, wikitext, redirects, ...}). The titles
-    a topic's ``redirects`` lists become redirect pages to it, as on the wiki, so links to them are blue too.
-    Either source may be None."""
+    """Title -> wikitext of the templates and of the mirrored pages in ``raw`` ({commands,functions,topics}.json,
+    page id -> {title, wikitext, redirects, ...}). The templates file is the data clone's ``raw/templates.json``
+    (page id -> {title, wikitext, ...}) or a JSON object "Template:X" -> {wikitext, ...}. The titles a topic's
+    ``redirects`` lists become redirect pages to it, as on the wiki, so links to them are blue too. Either source
+    may be None."""
     pages: dict[str, str] = {}
     if templates is not None:
-        for title, page in _read_json(templates).items():
-            pages[title] = page["wikitext"]
+        for key, page in _read_json(templates).items():
+            pages[page.get("title") or key] = page["wikitext"]
     if raw is not None:
         redirects: dict[str, str] = {}
         for name in RAW_FILES:
