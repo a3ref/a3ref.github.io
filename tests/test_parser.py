@@ -213,6 +213,17 @@ class PageTest(unittest.TestCase):
         self.assertEqual(lines["type_expr"], "Array<String> | Array<Array<String>>")
         self.assertFalse(lines["optional"], "the (Optional, ...) of an array element is not the parameter's")
 
+    def test_notes_in_the_syntax_field(self):
+        raw = {"title": "addMagazine", "wikitext": (
+            "{{RV|type=command\n|game1= arma3\n|s1= unitName [[addMagazine]] magazineName<br>\n"
+            "{{GVI|arma3|1.00}} {{Icon|localArgument|32}}{{Icon|globalEffect|32}}\n"
+            "|s2= [[local]] variable = value <span style=\"margin-left: 7em\">'''From v1.00 until v1.54''' - see "
+            "'''[[private]]'''</span>\n}}")}
+        s1, s2 = parse_page(raw, "commands", Renderer(None))["syntaxes"]
+        self.assertEqual((s1["syntax"], s1["form"]), ("unitName addMagazine magazineName", "binary"))
+        self.assertIn("Arma 3 v1.00", s1["note"])
+        self.assertEqual((s2["syntax"], s2["note"]), ("local variable = value", "**From v1.00 until v1.54** - see **private**"))
+
     def test_one_of_a_list_of_types(self):
         raw = {"title": "say2D", "wikitext": (
             "{{RV|type=command\n|game1= arma3\n|s1= from [[say2D]] sound\n"

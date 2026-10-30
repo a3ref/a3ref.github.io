@@ -8,7 +8,7 @@ from typing import Optional
 from urllib.parse import quote
 
 import mwparserfromhell as mw
-from mwparserfromhell.nodes import Template
+from mwparserfromhell.nodes import Tag, Template
 
 from . import docblock, typeexpr
 from .wikitext import Renderer, clean_code, game_name, parse_note, parse_wikitext, preprocess
@@ -282,10 +282,22 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
         features = [t for t in s_code.filter_templates(recursive=False) if _name(t) == "Feature"]
         for t in features:
             s_code.remove(t)
-        syntax = r.plain(s_code)
+        notes = [r.md(str(t)) for t in features]
+        # nor are a <span> note ("From Arma 2 v1.00 until Arma 3 v1.54 - see private") and what follows a <br>
+        # (version and locality icons per game: addMagazine); they become the note
+        for t in [t for t in s_code.filter_tags(recursive=False) if str(t.tag).lower() == "span"]:
+            notes.append(r.md(str(t.contents)).strip())
+            s_code.remove(t)
+        br = next((i for i, n in enumerate(s_code.nodes) if isinstance(n, Tag) and str(n.tag).lower() == "br"), None)
+        if br is not None:
+            tail = "".join(str(n) for n in s_code.nodes[br + 1 :])
+            notes.append(r.md(re.sub(r"\}\}(?=\{\{)", "}} ", tail)).strip())  # icons side by side, not run together
+            del s_code.nodes[br:]
+        syntax = r.plain(s_code).strip()
+        notes = [n for n in notes if n]
         entry = {
             "syntax": syntax,
-            **({"note": "\n\n".join(r.md(str(t)) for t in features)} if features else {}),
+            **({"note": "\n\n".join(notes)} if notes else {}),
             "since": _text(p, f"s{n}since") or None,
             "effect": _text(p, f"s{n}effect") or None,
             "exec": _text(p, f"s{n}exec") or None,
