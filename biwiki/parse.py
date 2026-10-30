@@ -236,8 +236,16 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
     ]
 
     syntaxes = []
+    s_numbers = {n for n, _ in _numbered(p, "s")}
     # Some function pages leave s1 empty but still document the return value.
-    indexes = sorted({n for n, _ in _numbered(p, "s")} | {n for n, _ in _numbered(p, "r")})
+    rets = {n: v for n, v in _numbered(p, "r") if n in s_numbers or n == 1}
+    for n, v in _numbered(p, "r"):
+        # an rN without sN is a typo: "|r21=" numbered like the parameters is s2's return value, others are dropped
+        # (a stray "|r2=" on a page with one syntax); none makes a syntax of its own
+        k = (n - 1) // PARAMS_PER_SYNTAX + 1
+        if n not in rets and (n - 1) % PARAMS_PER_SYNTAX == 0 and k in s_numbers and k not in rets:
+            rets[k] = v
+    indexes = sorted(s_numbers | ({1} if 1 in rets else set()))
     for n in indexes:
         s = p.get(f"s{n}", "")
         params = []
@@ -276,7 +284,7 @@ def parse_page(raw: dict, kind: str, r: Renderer) -> Optional[dict]:
                     item["optional_since"] = item.pop("optional_since")
                 item["text"] = md
                 params.append(item)
-        ret = p.get(f"r{n}")
+        ret = rets.get(n, p.get(f"r{n}"))
         # a note placed in the syntax field ({{Feature|obsolete|...}}) is no part of the syntax line
         s_code = parse_wikitext(str(s))
         features = [t for t in s_code.filter_templates(recursive=False) if _name(t) == "Feature"]

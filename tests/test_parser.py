@@ -213,6 +213,18 @@ class PageTest(unittest.TestCase):
         self.assertEqual(lines["type_expr"], "Array<String> | Array<Array<String>>")
         self.assertFalse(lines["optional"], "the (Optional, ...) of an array element is not the parameter's")
 
+    def test_return_value_without_its_syntax(self):
+        raw = {"title": "a / b", "wikitext": (
+            "{{RV|type=command\n|game1= arma3\n|s1= a [[a / b|/]] b\n|r1= [[Number]] - quotient\n"
+            "|s2= config [[a / b|/]] name\n|r21= [[Config]] - config entry\n}}")}
+        syntaxes = parse_page(raw, "commands", Renderer(None))["syntaxes"]  # |r21= numbered like the parameters
+        self.assertEqual([(s["syntax"], s["returns"]["type_expr"]) for s in syntaxes],
+                         [("a / b", "Number"), ("config / name", "Config")])
+        raw = {"title": "ppEffectAdjust", "wikitext": (
+            "{{RV|type=command\n|game1= arma3\n|s1= effect [[ppEffectAdjust]] settings\n|r1= [[Nothing]]\n"
+            "|r2= [[Nothing]]\n}}")}
+        self.assertEqual(len(parse_page(raw, "commands", Renderer(None))["syntaxes"]), 1)  # a stray |r2=: no form
+
     def test_notes_in_the_syntax_field(self):
         raw = {"title": "addMagazine", "wikitext": (
             "{{RV|type=command\n|game1= arma3\n|s1= unitName [[addMagazine]] magazineName<br>\n"
