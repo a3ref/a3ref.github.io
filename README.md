@@ -104,8 +104,12 @@ The same files are also served by `raw.githubusercontent.com/a3ref/data/main/…
 The wiki sits behind a Cloudflare managed challenge, so plain HTTP clients get a 403.
 `sync` starts the locally installed Google Chrome through [patchright](https://github.com/Kaliiiiiiiiii-Vinyzu/patchright),
 lets it pass the check, then calls the MediaWiki API (`/wikidata/api.php`) with `fetch()` from inside the page:
-50 pages of wikitext per request, about 110 requests in total. Raw wikitext is cached in `raw/*.json` of the data clone;
-later runs only download pages whose `revid` changed.
+50 pages of wikitext per request, about 110 requests in total. Raw wikitext is cached in `raw/*.json` of the data clone.
+Later runs read the wiki's recent changes from the newest edit in the cache (minus a day of overlap) and download
+only the pages edited, created, moved or deleted since, deciding whether a new page belongs by its categories: a few
+requests, a few seconds. `sync --walk` lists every member page instead and downloads those whose `revid` changed; it
+also catches pages that join or leave a category through a template, and it is used automatically when the cache is
+empty or older than the wiki's 90 days of recent changes.
 
 `build` then parses each page's `{{RV}}` template with `mwparserfromhell` into structured fields
 and writes the mirror to `out/`.
@@ -117,7 +121,7 @@ Three repositories, no secrets:
 - **[a3ref/data](https://github.com/a3ref/data)** holds the data: raw wikitext (`raw/*.json`) and the parsed
   `commands.json`, `functions.json`, `topics.json`, `index.json`, `syntax.json`. Its workflow runs **twice a day, at 04:17 and 16:17 UTC**: it checks out this
   repository for the code, runs `sync` (real Chrome inside `xvfb`) and `build --dataset`, and commits only if
-  something changed.
+  something changed. A third run, on Sundays at 10:17 UTC, uses `sync --walk`.
 - **this repository** holds only the code. `.github/workflows/site.yml` builds the site from the latest
   `a3ref/data` and deploys it to GitHub Pages:
   - on every push to `main` (parser or design changes);
@@ -169,7 +173,8 @@ python -m unittest                 # tests on tests/fixtures (under a second, no
 python -m biwiki build             # regenerate out/ from the cache only (about 20 s)
 python -m biwiki report            # new parser problems compared with known-problems.json
 python -m biwiki serve --port 8000 # serve out/ over HTTP
-python -m biwiki update            # sync + build (opens a Chrome window for about a minute)
+python -m biwiki update            # sync + build (opens a Chrome window for a few seconds)
+python -m biwiki sync --walk       # list every member page instead of reading recent changes (about a minute)
 python -m biwiki update --hidden   # same, with the Chrome window moved off-screen
 python -m biwiki sync --full       # re-download everything, ignoring the cache
 python -m biwiki --dataset data build  # also refresh the parsed JSON in the data repository

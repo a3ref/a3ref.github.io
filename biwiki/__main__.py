@@ -31,6 +31,8 @@ def main(argv=None) -> None:
         p = sub.add_parser(name, help=help_)
         kinds_arg(p)
         p.add_argument("--full", action="store_true", help="ignore cache and re-download everything")
+        p.add_argument("--walk", action="store_true",
+                       help="list every member page instead of reading only the wiki's recent changes")
         p.add_argument("--hidden", action="store_true", help="move the Chrome window off-screen")
         p.add_argument("--profile", type=Path, default=ROOT / ".browser-profile", help="Chrome profile directory")
     kinds_arg(sub.add_parser("build", help="generate Markdown/JSON from the raw cache"))
@@ -51,7 +53,7 @@ def main(argv=None) -> None:
     if a.cmd in ("sync", "update"):
         from .fetch import sync
 
-        asyncio.run(sync(a.raw, a.profile, kinds, hidden=a.hidden, full=a.full))
+        asyncio.run(sync(a.raw, a.profile, kinds, hidden=a.hidden, full=a.full, walk=a.walk))
     if a.cmd in ("build", "update"):
         from .render import build
 

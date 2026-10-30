@@ -37,7 +37,7 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 | `python -m biwiki --dataset data build` | ~25 s | also rewrite the JSON bundles in the data clone |
 | `python -m biwiki feed` | ~5 s | `changes.*` and `feed.xml` from the git history of the data clone |
 | `python -m biwiki serve --port 8000` | — | serve `out/` |
-| `python -m biwiki sync` | ~1 min | download changed wiki pages: opens a real Chrome window and contacts the wiki. Do not run it unless the task needs fresh pages; `build` works from the cache |
+| `python -m biwiki sync` | ~10 s | download changed wiki pages: opens a real Chrome window and contacts the wiki. Reads the wiki's recent changes since the newest edit in the cache; `--walk` lists every member page instead (~1 min, also the fallback when the cache is empty or older than ~90 days). Do not run it unless the task needs fresh pages; `build` works from the cache |
 
 ## Verify a change
 
@@ -59,7 +59,7 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 | placeholder function pages, header comments | `biwiki/docblock.py`, `parse._fill_from_docblock` |
 | file layout, `index.json`, `syntax.json`, `llms.txt`, `names.txt`, sitemap | `biwiki/render.py` (`build` and the `_*` writers) |
 | HTML pages, CSP, SEO metadata, structured data | `biwiki/site.py`; styles and scripts in `biwiki/assets/` |
-| which pages are mirrored | `biwiki/fetch.py`: `CATEGORIES`, `TOPIC_TITLES`, `TOPIC_CATEGORIES`, `TOPIC_ROOT` with `TOPIC_SKIP_CATEGORY` / `TOPIC_SKIP_TITLE` (takes effect after a sync: once pushed, start one with `gh workflow run sync.yml -R a3ref/data`; the site follows within the hour) |
+| which pages are mirrored | `biwiki/fetch.py`: `CATEGORIES`, `TOPIC_TITLES`, `TOPIC_CATEGORIES`, `TOPIC_ROOT` with `TOPIC_SKIP_CATEGORY` / `TOPIC_SKIP_TITLE` (takes effect for existing pages only after a walk, which runs weekly: once pushed, start one with `gh workflow run sync.yml -R a3ref/data -f walk=true`; the site follows within the hour); the incremental sync is `fetch.sync_recent` |
 | topic groups | `biwiki/render.py`: `TOPIC_GROUPS`, `topic_group` |
 | JSON format documentation | `biwiki/schema.json` (copied to `out/` and the data clone) and "JSON record" in README.md |
 | parser health report, GitHub issue | `biwiki/report.py`, baseline `known-problems.json` |
