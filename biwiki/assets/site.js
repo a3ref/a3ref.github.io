@@ -178,9 +178,9 @@
     setBranch(only[1], true);
     lone = only[2];
   }
-  // the list of the entries shown at first; following the reader opens only their branches, one level deeper,
-  // as the wiki's contents do (deeper levels open by their own toggles)
-  var topList = lone;
+  // Following the reader opens only the branches of the top-level entries, so it shows two levels at most, as
+  // the wiki's contents do; deeper levels open by their own toggles.
+  var topList = document.getElementById("toc-list");
   // The toggles of the entry being read and of the entries holding it, innermost first.
   function branchesOf(a) {
     var out = [];
