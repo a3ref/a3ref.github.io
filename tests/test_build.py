@@ -54,6 +54,19 @@ class BuildTest(unittest.TestCase):
         self.assertEqual(json.loads(bundle)["count"], 9)
         self.assertGreater(bundle.count("\n"), 7, "one record per line keeps git diffs readable")
 
+    def test_theme_switcher(self):
+        page = (self.out / "commands" / "setPos.html").read_text(encoding="utf-8")
+        head, body = page.split("</head>")
+        # blocking (no defer/async) in <head>, after the metas it adjusts, so the choice applies before first paint
+        self.assertIn('<script src="../assets/theme.js"></script>', head)
+        self.assertLess(head.index('data-scheme="dark"'), head.index("theme.js"))
+        topbar = body[body.index('<header class="topbar">'):body.index("</header>")]
+        # hidden without scripts; its name carries the state
+        self.assertRegex(topbar, r'<button type="button" class="theme-switch" id="theme-switch" aria-label="Theme: Auto"[^>]* hidden>')
+        for state in ("auto", "light", "dark"):
+            self.assertIn(f'class="ti-{state}"', topbar)
+        self.assertTrue((self.out / "assets" / "theme.js").is_file())
+
     def test_no_crashes(self):
         report = json.loads((self.out / "report.json").read_text(encoding="utf-8"))
         self.assertEqual((report["counts"]["error"], report["counts"]["skipped"]), (0, 0), report["problems"])

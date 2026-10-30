@@ -5,49 +5,32 @@
 @font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: optional; src: url(fonts/jetbrains-mono-latin-400-normal.woff2) format("woff2"); }
 @font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 600; font-display: optional; src: url(fonts/jetbrains-mono-latin-600-normal.woff2) format("woff2"); }
 
+/* One palette: light-dark() takes the side of the element's color-scheme. Auto follows the system ("light dark");
+   theme.js sets data-theme on <html> for an explicit choice, which also turns form controls and scrollbars. */
 :root {
-  --bg: #ffffff;
-  --surface: #f5f6f8;
-  --surface-2: #eceef2;
-  --ink: #1b1f24;
-  --muted: #545e6a;
-  --rule: #d9dee5;
-  --rule-strong: #8a949f;
-  --accent: #0b5aa8;       /* BLUFOR: links, commands */
-  --accent-soft: #e7f0fa;
-  --indfor: #1d7136;       /* functions, local variables */
-  --opfor: #b0201a;        /* warnings */
-  --opfor-soft: #fbecea;
-  --civ: #6a35a3;          /* numbers */
-  --sand: #845000;         /* strings */
-  --note-soft: #eef4ea;
+  color-scheme: light dark;
+  --bg: light-dark(#ffffff, #16181d);
+  --surface: light-dark(#f5f6f8, #1e2128);
+  --surface-2: light-dark(#eceef2, #262a32);
+  --ink: light-dark(#1b1f24, #e5e8ec);
+  --muted: light-dark(#545e6a, #a3acb8);
+  --rule: light-dark(#d9dee5, #2e333c);
+  --rule-strong: light-dark(#8a949f, #5f6875);
+  --accent: light-dark(#0b5aa8, #7cb3ff);       /* BLUFOR: links, commands */
+  --accent-soft: light-dark(#e7f0fa, #1d2a3d);
+  --indfor: light-dark(#1d7136, #74cf8e);       /* functions, local variables */
+  --opfor: light-dark(#b0201a, #ff8f86);        /* warnings */
+  --opfor-soft: light-dark(#fbecea, #3a2224);
+  --civ: light-dark(#6a35a3, #c9a6ff);          /* numbers */
+  --sand: light-dark(#845000, #e2b766);         /* strings */
+  --note-soft: light-dark(#eef4ea, #1f2a22);
 
   --f-text: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --f-code: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
   --measure: 46rem;
-  color-scheme: light;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16181d;
-    --surface: #1e2128;
-    --surface-2: #262a32;
-    --ink: #e5e8ec;
-    --muted: #a3acb8;
-    --rule: #2e333c;
-    --rule-strong: #5f6875;
-    --accent: #7cb3ff;
-    --accent-soft: #1d2a3d;
-    --indfor: #74cf8e;
-    --opfor: #ff8f86;
-    --opfor-soft: #3a2224;
-    --civ: #c9a6ff;
-    --sand: #e2b766;
-    --note-soft: #1f2a22;
-    color-scheme: dark;
-  }
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; scroll-padding-top: 4.5rem; }
@@ -103,6 +86,16 @@ a:hover { text-decoration-thickness: 2px; }
   font: 500 .75rem/1 var(--f-code); color: var(--muted); border: 1px solid var(--rule); border-radius: 4px; padding: .15rem .35rem;
 }
 .search input:focus + .search-key { display: none; }
+
+/* the theme switcher shows the icon of the current state; [hidden] until site.js wires it */
+.theme-switch {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem;
+  margin-left: -1rem; padding: 0; color: var(--muted); background: none; border: 1px solid var(--rule); border-radius: 6px; cursor: pointer;
+}
+.theme-switch[hidden] { display: none; }
+.theme-switch:hover { color: var(--ink); background: var(--surface); }
+.theme-switch g { display: none; }
+:root:not([data-theme]) .ti-auto, :root[data-theme="light"] .ti-light, :root[data-theme="dark"] .ti-dark { display: inline; }
 .results {
   position: absolute; left: 0; right: 0; top: calc(100% + .35rem); margin: 0; padding: .3rem; list-style: none;
   background: var(--bg); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 12px 32px -14px rgb(0 0 0 / .4);
@@ -325,6 +318,7 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
   .topbar { flex-wrap: wrap; gap: .6rem 1rem; padding: .6rem 1rem; position: static; }
   .search { width: 100%; order: 3; }
   .search-key { display: none; }
+  .theme-switch { order: 2; margin-left: auto; }
   .frame, .footer-inner { padding-left: 1rem; padding-right: 1rem; }
   .entries li { grid-template-columns: 1fr; gap: .1rem; }
   .home-grid { grid-template-columns: 1fr; gap: 2rem; }

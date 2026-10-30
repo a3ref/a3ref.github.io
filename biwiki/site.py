@@ -32,6 +32,15 @@ CSP = ("default-src 'self' {origin}; script-src 'self' {origin} {hashes}; style-
 
 PRELOAD = ["jetbrains-mono-latin-600-normal", "jetbrains-mono-latin-400-normal"]  # text uses the system font
 THEME_COLOR = ("#ffffff", "#16181d")  # light, dark
+# The theme switcher (Auto, Light, Dark): hidden until site.js wires it, so without scripts the theme stays
+# automatic and no dead button shows. CSS shows the icon of the current state; site.js keeps the name in step.
+THEME_BUTTON = ('<button type="button" class="theme-switch" id="theme-switch" aria-label="Theme: Auto" title="Theme: Auto"'
+                ' hidden><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="none"'
+                ' stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+                '<g class="ti-auto"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></g>'
+                '<g class="ti-light"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4'
+                'M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g>'
+                '<g class="ti-dark"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></g></svg></button>')
 GOOGLE_SITE_VERIFICATION = "HHNWP8LwEWplPR4MXkhdQW79itoiuehWhhxliCgXj5Y"  # Search Console ownership; checked on the home page only
 
 LOCALITY_HELP = {
@@ -287,8 +296,9 @@ class Site:
 <meta name="description" content="{desc}">
 <link rel="canonical" href="{url}">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="{light}" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="{dark}" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="{light}" media="(prefers-color-scheme: light)" data-scheme="light">
+<meta name="theme-color" content="{dark}" media="(prefers-color-scheme: dark)" data-scheme="dark">
+<script src="{root}assets/theme.js"></script>
 <link rel="icon" href="{root}favicon.ico" sizes="32x32">
 <link rel="icon" href="{root}assets/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="{root}assets/icon-180.png">
@@ -326,6 +336,7 @@ class Site:
     <a href="{root}topics/index.html">Topics</a>
   </nav>
   {self._search("q-top", "Search")}
+  {THEME_BUTTON}
 </header>"""
         foot = f"""<footer class="footer"><div class="footer-inner">
 <p>{footer or _site_footer()}</p>
@@ -614,10 +625,10 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
         target = self.out / "assets"
         if target.exists():
             shutil.rmtree(target)
-        shutil.copytree(ASSETS, target, ignore=shutil.ignore_patterns("style.css", "site.js", "404.js", "favicon.ico", "site.webmanifest"))
+        shutil.copytree(ASSETS, target, ignore=shutil.ignore_patterns("style.css", "*.js", "favicon.ico", "site.webmanifest"))
         (target / "style.css").write_text(minify_css((ASSETS / "style.css").read_text(encoding="utf-8")),
                                           encoding="utf-8")
-        for js in ("site.js", "404.js"):
+        for js in ("theme.js", "site.js", "404.js"):
             (target / js).write_text(minify_js((ASSETS / js).read_text(encoding="utf-8")), encoding="utf-8")
         # The browser asks for /favicon.ico and /site.webmanifest at the root.
         shutil.copyfile(ASSETS / "favicon.ico", self.out / "favicon.ico")

@@ -115,6 +115,26 @@
   }
 })();
 
+/* ---- theme switcher: Auto, Light, Dark (theme.js applies and stores the choice) --------------------- */
+(function () {
+  "use strict";
+  var b = document.getElementById("theme-switch"), theme = window.a3theme;
+  if (!b || !theme) return;
+  var order = ["", "light", "dark"], names = { "": "Auto", light: "Light", dark: "Dark" };
+  function label(t) {
+    var name = "Theme: " + names[t];
+    b.setAttribute("aria-label", name);
+    b.title = name;
+  }
+  b.addEventListener("click", function () {
+    var t = order[(order.indexOf(theme.get()) + 1) % order.length];
+    theme.set(t);
+    label(t);
+  });
+  label(theme.get());
+  b.hidden = false;
+})();
+
 /* ---- side column: folding sections, current page, section being read ---------------------------- */
 (function () {
   "use strict";
