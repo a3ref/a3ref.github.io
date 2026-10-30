@@ -301,5 +301,8 @@ accessibility, best practices, SEO and agentic browsing on the main page types).
 
 The code is MIT-licensed ([LICENSE](LICENSE)), except `biwiki/mediawiki/` and `tests/mediawiki/`, which are derived
 from MediaWiki and licensed GPL-2.0-or-later ([COPYING](biwiki/mediawiki/COPYING)); the program as a whole is
-therefore distributed under the GPL. Content belongs to the authors of the BI Community Wiki; every generated page
-links to its source and revision.
+therefore distributed under the GPL. Neither license covers the content: it is the intellectual property of Bohemia
+Interactive and the BI Community Wiki's contributors, used under the wiki's
+[terms](https://community.bistudio.com/wiki/Meta:General_disclaimer), which allow personal, non-commercial use and
+require works derived from it to stay non-commercial (it is not Creative Commons). Every generated page links to its
+source and revision and says so in its footer.

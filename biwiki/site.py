@@ -23,6 +23,7 @@ from markdown_it import MarkdownIt
 ASSETS = Path(__file__).parent / "assets"
 SITE_NAME = "a3ref"
 SITE_TITLE = "Arma 3 scripting reference"
+WIKI_TERMS = "https://community.bistudio.com/wiki/Meta:General_disclaimer"  # the content's terms: non-commercial
 
 # Delivered as <meta>, so frame-ancestors and report-uri are not available; everything is same-origin.
 # The site's origin is listed next to 'self' so the policy also reads right for a validator given the file alone.
@@ -430,9 +431,7 @@ class Site:
         if group:
             crumbs.append((group, group_path(kind, group)))
         crumbs.append((rec["name"], f"{kind}/{s}.html"))
-        updated = (rec["updated"] or "")[:10]
-        footer = (f'Content from the <a href="{rec["url"]}">Bohemia Interactive Community Wiki</a>, '
-                  f'revision {rec["revid"]}{", edited " + updated if updated else ""}.')
+        footer = _site_footer(rec=rec)
         desc = _description(summary, rec)
         return self.shell(path=f"{kind}/{s}.html", title=f"{rec['name']} – Arma 3 {label.lower()}",
                           description=desc, header=header, main=body + notes,
@@ -453,9 +452,7 @@ class Site:
 <p class="formats">Topic · <a href="{s}.md">Markdown</a> · <a href="{s}.json">JSON</a> · <a href="{rec['url']}">original wiki page</a></p>"""
         crumbs = [("Home", "index.html"), ("Topics", "topics/index.html"),
                   (group, f"topics/index.html#{_anchor(group)}"), (rec["name"], f"topics/{s}.html")]
-        updated = (rec["updated"] or "")[:10]
-        footer = (f'Content from the <a href="{rec["url"]}">Bohemia Interactive Community Wiki</a>, '
-                  f'revision {rec["revid"]}{", edited " + updated if updated else ""}.')
+        footer = _site_footer(rec=rec)
         desc = _description(summary, rec)
         return self.shell(path=f"topics/{s}.html", title=f"{rec['name']} – Arma 3 scripting",
                           description=desc, header=header, main=body, crumbs=crumbs,
@@ -829,6 +826,7 @@ def _article_ld(base: str, path: str, rec: dict, description: str) -> dict:
         "dateModified": rec["updated"],
         "inLanguage": "en",
         "isBasedOn": rec["url"],
+        "license": WIKI_TERMS,
         "about": {"@type": "Thing", "name": "Arma 3 scripting (SQF)"},
         "author": {"@type": "Organization", "name": "Bohemia Interactive Community Wiki contributors",
                    "url": "https://community.bistudio.com/wiki"},
@@ -902,7 +900,16 @@ def _short(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
 
 
-def _site_footer(generated: str = "") -> str:
+def _site_footer(generated: str = "", rec: dict | None = None) -> str:
+    """Where the content comes from and on what terms: the wiki's, not Creative Commons (Meta:General_disclaimer):
+    the IP of Bohemia Interactive and the wiki's users, for personal, non-commercial use. A page names its source
+    page and revision; the home page its build date."""
+    if rec:
+        updated = (rec["updated"] or "")[:10]
+        source = (f'Content from the <a href="{rec["url"]}">Bohemia Interactive Community Wiki</a>, '
+                  f'revision {rec["revid"]}{", edited " + updated if updated else ""}')
+    else:
+        source = 'Content from the <a href="https://community.bistudio.com/wiki">Bohemia Interactive Community Wiki</a>'
     when = f" Generated {generated[:10]}." if generated else ""
-    return ('Content from the <a href="https://community.bistudio.com/wiki">Bohemia Interactive Community Wiki</a>.'
-            f"{when}")
+    return (f'{source}, © Bohemia Interactive and contributors, used under the <a href="{WIKI_TERMS}">wiki\'s terms</a> '
+            f"(non-commercial).{when}")

@@ -67,6 +67,15 @@ class BuildTest(unittest.TestCase):
             self.assertIn(f'class="ti-{state}"', topbar)
         self.assertTrue((self.out / "assets" / "theme.js").is_file())
 
+    def test_content_terms(self):
+        terms = "https://community.bistudio.com/wiki/Meta:General_disclaimer"
+        for path in ("index.html", "commands/setPos.html", "topics/Position.html"):
+            page = (self.out / path).read_text(encoding="utf-8")
+            foot = page[page.index('<footer class="footer">'):]
+            self.assertIn(f'<a href="{terms}">wiki\'s terms</a> (non-commercial)', foot, path)
+        page = (self.out / "commands" / "setPos.html").read_text(encoding="utf-8")
+        self.assertIn(f'"license": "{terms}"', page)
+
     def test_no_crashes(self):
         report = json.loads((self.out / "report.json").read_text(encoding="utf-8"))
         self.assertEqual((report["counts"]["error"], report["counts"]["skipped"]), (0, 0), report["problems"])
