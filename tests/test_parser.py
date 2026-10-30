@@ -9,8 +9,8 @@ from biwiki.fetch import load_cache
 from biwiki.parse import parse_page, split_param, syntax_form
 from biwiki.render import page_slug, slug, summary, topic_group
 from biwiki.report import leftover_markup, load_known, position, save_known
-from biwiki.site import Site
-from biwiki.wikitext import Renderer
+from biwiki.site import ANCHOR, Site, _place_anchors, heading_id
+from biwiki.wikitext import Renderer, wiki_anchor
 
 RAW = Path(__file__).parent / "fixtures" / "raw"
 
@@ -30,6 +30,18 @@ def function(title: str) -> dict:
 class WikitextTest(unittest.TestCase):
     def md(self, text: str) -> str:
         return Renderer(None).md(text)
+
+    def test_wiki_anchor(self):
+        self.assertEqual(wiki_anchor("Machine_Network_ID"), "Machine Network ID")
+        self.assertEqual(wiki_anchor("_this"), "_this")  # a magic variable keeps its "_"
+        # MediaWiki's legacy encoding: "." for "%" of urlencode
+        self.assertEqual(wiki_anchor(".23include"), "#include")
+        self.assertEqual(wiki_anchor("Modes.5B.5D.3D.7B.22this.22.7D"), 'Modes[]={"this"}')
+        self.assertEqual(wiki_anchor("Caf.C3.A9"), "Café")
+        # not escapes: a version number, letters or digits (urlencode leaves them alone), broken UTF-8
+        self.assertEqual(wiki_anchor("Arma_3_v1.22"), "Arma 3 v1.22")
+        self.assertEqual(wiki_anchor("a.41b"), "a.41b")
+        self.assertEqual(wiki_anchor("x.C3"), "x.C3")
 
     def test_inline_styles(self):
         self.assertEqual(self.md("'''bold''' and ''it''"), "**bold** and *it*")
@@ -310,6 +322,29 @@ class SiteHtmlTest(unittest.TestCase):
         md = Renderer(lambda t, a: f"../commands/{t}.html", code_links=True).md("x\n [[player]] setDamage 1")
         self.assertIn('<code><a href="../commands/player.html">player</a> setDamage 1', self.site.html(md))
         self.assertEqual(Renderer(lambda t, a: f"{t}.md").md("x\n [[player]] setDamage 1"), "x\n\n```\nplayer setDamage 1\n```")
+
+    def test_anchors(self):
+        # the wiki's anchors become ids, once each and never one the page has already (a heading's, the shell's)
+        a, b = ANCHOR
+        md = (f"## {a}x{b}_x\n\n## {a}intro{b}Intro\n\n| A |\n|---|\n| {a}b-soldier{b}**B_Soldier** |\n\n"
+              f"{a}content{b}{a}b-soldier{b}{a}lone{b}\n")
+        body, heads = self.site._ids(self.site.html(md))
+        self.assertEqual(heads, [(2, "v-x", "_x"), (2, "intro", "Intro")])  # the marks are not part of the text
+        doc = _place_anchors('<main id="content">' + body + "</main>")
+        self.assertIn('<h2 id="v-x"><span id="x"></span>_x</h2>', doc)
+        self.assertIn('<h2 id="intro">Intro</h2>', doc)
+        self.assertIn('<td><span id="b-soldier"></span><strong>B_Soldier</strong></td>', doc)
+        self.assertIn('</table></div>\n<span id="lone"></span>', doc)  # no empty paragraph
+        self.assertNotIn(a, doc)
+        self.assertEqual(doc.count('id="content"'), 1)
+        # never inside an attribute
+        self.assertEqual(_place_anchors(f'<a title="{a}t{b}x">y{a}t{b}</a>'), '<a title="x">y<span id="t"></span></a>')
+
+    def test_legacy_renderer_anchors(self):
+        r = Renderer(lambda t, a: f"{t}.html#{heading_id(a)}", anchors=True)
+        self.assertEqual(r.md('<span id="B_Soldier">x</span> [[P#.23include|i]] [[P#a_b|ab]]'),
+                         f"{ANCHOR[0]}b-soldier{ANCHOR[1]}x [i](P.html#include) [ab](P.html#a-b)")
+        self.assertEqual(Renderer(None).md('<span id="B_Soldier">x</span>'), "x")
 
 
 class TopicGroupTest(unittest.TestCase):

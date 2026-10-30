@@ -441,7 +441,7 @@ def _reference(raw, kind, md_r, make, pages: Pages, resolve_md, resolve_html, si
     if rec_md is None:
         return None, "", "", ""
     rec = parse_page(raw, kind, make(None, hard_breaks=False))  # JSON: plain newlines
-    rec_html = parse_page(raw, kind, make(resolve_html, code_links=True))
+    rec_html = parse_page(raw, kind, make(resolve_html, code_links=True, anchors=True))
     for r in (rec, rec_md, rec_html):
         _fix_references(r, pages)
     short = summary(rec["description"])
@@ -469,7 +469,7 @@ def topic_group(raw: dict) -> str:
 def _topic(raw, md_r, make, resolve_html, site: Site, s: str):
     rec_md = parse_topic(raw, md_r)
     rec = parse_topic(raw, make(None, hard_breaks=False))  # JSON: plain newlines
-    rec_html = parse_topic(raw, make(resolve_html, code_links=True))
+    rec_html = parse_topic(raw, make(resolve_html, code_links=True, anchors=True))
     group = topic_group(raw)
     for r in (rec, rec_md, rec_html):
         r["groups"] = [group]

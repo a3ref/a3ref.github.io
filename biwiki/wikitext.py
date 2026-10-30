@@ -13,6 +13,7 @@ from typing import Callable, Optional
 import mwparserfromhell as mw
 
 from .mediawiki.quotes import do_quotes
+from .site import ANCHOR, heading_id
 from mwparserfromhell.nodes import (
     Argument,
     Comment,
@@ -203,7 +204,8 @@ class Renderer:
     """Stateless-per-call converter; ``unknown`` collects templates/tags it had no rule for."""
 
     def __init__(self, resolve: Optional[LinkResolver] = None, page_title: str = "", preformat: bool = True,
-                 emphasis: bool = True, inline: bool = False, hard_breaks: bool = True, code_links: bool = False):
+                 emphasis: bool = True, inline: bool = False, hard_breaks: bool = True, code_links: bool = False,
+                 anchors: bool = False):
         self.resolve = resolve or (lambda title, anchor: None)
         self.page_title = page_title
         self.preformat = preformat  # off where the result is a single line or already code
@@ -213,6 +215,8 @@ class Renderer:
         self.hard_breaks = hard_breaks
         # links in preformatted lines kept as CODE_LINK marks for the site (Markdown code cannot hold links)
         self.code_links = code_links
+        # <span id="..."> kept as ANCHOR marks for the site, so links to them land
+        self.anchors = anchors
         self.unknown: Counter = Counter()
 
     # ---- public API -------------------------------------------------------------------------
@@ -393,7 +397,7 @@ class Renderer:
         fallback = anchor.replace("_", " ") or page.split(":")[-1] or target
         if not page:
             page = self.page_title
-        url = self.resolve(page.replace("_", " ").strip(), anchor)
+        url = self.resolve(page.replace("_", " ").strip(), wiki_anchor(anchor))
         return self._md_link(text, url, fallback, slots)
 
     def _md_link(self, text: str, url: Optional[str], fallback: str, slots: list[str]) -> str:
@@ -429,7 +433,7 @@ class Renderer:
         if target.lower().startswith("category:") and not text:
             text = target.split(":", 1)[1]
         page, _, anchor = target.partition("#")
-        url = self.resolve((page or self.page_title).replace("_", " ").strip(), anchor)  # "#Section" = this page
+        url = self.resolve((page or self.page_title).replace("_", " ").strip(), wiki_anchor(anchor))  # "#Section" = this page
         return self._md_link(text or target, url, anchor.replace("_", " ") or target, [])
 
     # ---- templates --------------------------------------------------------------------------
@@ -722,6 +726,8 @@ class Renderer:
         if name == "noinclude":
             return ""
         inner = self._nodes(tag.contents.nodes, slots) if tag.contents else ""
+        if name == "span" and self.anchors and tag.has("id"):
+            inner = anchor_mark(str(tag.get("id").value).strip()) + inner
         return BLOCK + inner + BLOCK if name in BLOCK_TAGS else inner
 
     def _table(self, table: Tag) -> str:
@@ -909,6 +915,38 @@ _MD_BLOCK = re.compile(r"[ \t]*(?:[*+-][ \t]|\d+[.)][ \t]|#{1,6}[ \t]|>|\||`{3,}
 
 # A link inside a code block, for the site only: CODE_LINK[0] text CODE_LINK[1] url CODE_LINK[2]
 CODE_LINK = ("\ue030", "\ue031", "\ue032")
+# MediaWiki's legacy anchor encoding (Sanitizer::escapeIdLegacy, still in old links and in the fallback <span>
+# before a heading): urlencode with "%" written as ".", so ".23include" is "#include". urlencode leaves letters,
+# digits and "_.-" alone, and ":" is put back, so only the other bytes are escapes.
+_LEGACY_RUN = re.compile(r"(?:\.[0-9A-F]{2})+")
+_LEGACY_BYTES = {b for b in range(0x21, 0x7F) if not chr(b).isalnum() and chr(b) not in "_.-:"} | set(range(0x80, 0x100))
+
+
+def wiki_anchor(anchor: str) -> str:
+    """A wiki #anchor (of a link, or an element's id) as the heading text it stands for, the form the link
+    resolvers take: legacy escapes decoded, "_" read as spaces. A leading "_" is part of the name ("_this")."""
+    lead = re.match(r"_*", anchor).group(0)
+    rest = anchor[len(lead):]
+
+    def decode(m: re.Match) -> str:
+        run = m.group(0)
+        raw = bytes(int(run[i + 1:i + 3], 16) for i in range(0, len(run), 3))
+        # "Arma 3 v1.22" is a version, not an escaped '"'
+        if not all(b in _LEGACY_BYTES for b in raw) or (run[1:3].isdigit() and rest[m.start() - 1:m.start()].isdigit()):
+            return run
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return run
+
+    return lead + _LEGACY_RUN.sub(decode, rest).replace("_", " ")
+
+
+def anchor_mark(ident: str) -> str:
+    """The ANCHOR mark of a wiki element's id="..." (empty for no id): the site's id for it, which links to that
+    anchor get from the resolver (site.heading_id of wiki_anchor)."""
+    ident = heading_id(wiki_anchor(ident)) if ident else ""
+    return ANCHOR[0] + ident + ANCHOR[1] if ident else ""
 
 
 def _pre_line(line: str, slots: list[str], keep_links: bool = False) -> str:

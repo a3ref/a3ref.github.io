@@ -4,6 +4,7 @@ from __future__ import annotations
 import unittest
 
 from biwiki.htmlmd import HtmlMarkdown, html_to_md, html_to_plain, link_target
+from biwiki.site import ANCHOR
 from biwiki.wikitext import CODE_LINK
 
 PAGES = {"setPos": "../commands/setPos.md", "Multiplayer Scripting": "../topics/Multiplayer_Scripting.md",
@@ -112,6 +113,13 @@ class LinkTest(unittest.TestCase):
         self.assertEqual(md('<p><a href="/wiki/setPos">setPos</a> <a class="external text" href="https://a.com">A'
                             '</a> <b>b</b></p>', plain=True), "setPos A b")
 
+    def test_legacy_anchor_is_decoded(self):
+        # old links write "#include" as ".23include" (MediaWiki's legacy anchors); the resolver gets the heading
+        self.assertEqual(md('<p><a href="/wiki/Array#.23include">i</a> <a href="/wiki/Array#Modes.5B.5D">m</a> '
+                            '<a href="/wiki/Array#Arma_3_v1.22">v</a></p>'),
+                         "[i](../topics/Array.md##include) [m](../topics/Array.md#modes[])"
+                         " [v](../topics/Array.md#arma-3-v1.22)")
+
     def test_link_target(self):
         self.assertEqual(link_target("/index.php?title=A_b&action=edit&redlink=1"), ("A b", ""))
         self.assertEqual(link_target("/wiki/Arma_3:_Event_Handlers#Killed"), ("Arma 3: Event Handlers", "Killed"))
@@ -219,6 +227,34 @@ class TableTest(unittest.TestCase):
         self.assertEqual(md('<table><tr><td>a<br />b | c<ul><li>i</li><li>j</li></ul></td>'
                             '<td><div class="sqfhighlighter-block">hint 1;</div></td></tr></table>'),
                          "|  |  |\n|---|---|\n| a<br>b \\| c<br>- i<br>- j | `hint 1;` |")
+
+    def test_heading_in_cell(self):
+        # "| ===== Campaigns =====" (topic CfgMissions): a cell cannot hold a Markdown heading, so it is bold
+        self.assertEqual(md('<table><tr><td>\n<h5><span class="mw-headline" id="Campaigns">Campaigns</span></h5>\n'
+                            '</td><td>x</td></tr></table>'),
+                         "|  |  |\n|---|---|\n| **Campaigns** | x |")
+        # for the site the heading keeps its anchor
+        self.assertEqual(md('<table><tr><td><h5><span class="mw-headline" id="Campaigns">Campaigns</span></h5>'
+                            '</td></tr></table>', anchors=True),
+                         f"|  |\n|---|\n| **{ANCHOR[0]}campaigns{ANCHOR[1]}Campaigns** |")
+
+    def test_anchors(self):
+        # the class tables' "<span id=B_TargetSoldier>", ids of rows and cells, a heading's own anchor: marks for
+        # the site, as heading_id makes them (as links to them get it); nothing in the Markdown flavour
+        a, b = ANCHOR
+        html = ('<table><tr id="row_1"><td><span id="B_TargetSoldier"><b>B_TargetSoldier</b></span></td>'
+                '<td id="Cell">c</td></tr></table>')
+        self.assertEqual(md(html, anchors=True),
+                         f"|  |  |\n|---|---|\n| {a}row-1{b}{a}b-targetsoldier{b}**B_TargetSoldier** | {a}cell{b}c |")
+        self.assertEqual(md(html), "|  |  |\n|---|---|\n| **B_TargetSoldier** | c |")
+        # Magic Variables: the heading "_x" has the anchor "x"; the legacy fallback <span> is decoded as links are
+        self.assertEqual(md('<h3><span class="mw-headline" id="x">_x</span></h3>', anchors=True), f"#### {a}x{b}_x")
+        self.assertEqual(md('<h3><span id=".23include"></span><span class="mw-headline" id="#include">#include'
+                            '</span></h3>', anchors=True), f"#### {a}include{b}{a}include{b}#include")
+        # the wiki's interface and reference ids are no anchors; plain text never has marks
+        self.assertEqual(md('<p><sup id="cite_ref-1" class="x">s</sup><span id="mw-x">t</span></p>', anchors=True),
+                         "st")
+        self.assertEqual(md('<p><span id="A">t</span></p>', anchors=True, plain=True), "t")
 
     def test_caption(self):
         self.assertEqual(md("<table><caption>Dates\n</caption><tr><th>A</th></tr><tr><td>1</td></tr></table>"),

@@ -20,7 +20,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 # shared with the wikitext renderer while both exist
 from .wikitext import (CODE_LINK, FEATURE_ALERT, GAME_NAMES, LinkResolver, _inline_code, _MD_BACKSLASH, _quote,
-                       _split_ws, _unspan, game_name)
+                       _split_ws, _unspan, anchor_mark, game_name, wiki_anchor)
 
 VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track",
              "wbr"}
@@ -53,6 +53,8 @@ _LINE_MARK = re.compile(r"([ \t]*)([*+-](?=[ \t])|#{1,6}(?=[ \t]|$)|>|\d{1,9}[.)
 _FRENCH_NBSP = re.compile(" (?=[?:;!%»›](?!\\w))|(?<=[«‹]) ")
 _GVI_CATEGORY = re.compile(r"Category:Introduced with (.+?) version")
 _NOTE_ID = re.compile(r"usernote(\d{12,14})")
+# ids of the wiki's interface and references, not anchors of the text
+_SKIP_IDS = re.compile(r"cite_|mw-|toc(?:togglecheckbox)?$")
 # {{Wiki|placeholder}}, {{Wiki|TODO}} ...: maintenance message boxes, told apart by the colours Template:Wiki
 # gives Template:Messagebox; they carry no reference content (Renderer drops {{Wiki}} too)
 MAINTENANCE_COLOURS = {"#f00", "burlywood", "blueviolet", "darkgray", "#96c", "dodgerblue"}
@@ -153,13 +155,15 @@ class HtmlMarkdown:
     ``inline``: the result continues a line, so a <br> is a plain newline.
     ``hard_breaks``: a <br> as a Markdown hard break; off for plain text, where it is a newline.
     ``code_links``: links in <pre> blocks kept as wikitext.CODE_LINK marks for the site.
+    ``anchors``: the wiki's anchors (id= of a <span>, a heading's headline, a table row or cell) kept as
+    site.ANCHOR marks for the site, which makes them ids, so links to them land.
     ``plain``: no Markdown links and no emphasis (plain()/plain_lines() use it).
 
     ``unknown`` counts templates the wiki would show as red links (missing from the pages given to the port)."""
 
     def __init__(self, resolve: Optional[LinkResolver] = None, page_title: str = "", preformat: bool = True,
                  emphasis: bool = True, inline: bool = False, hard_breaks: bool = True, code_links: bool = False,
-                 plain: bool = False):
+                 anchors: bool = False, plain: bool = False):
         self.resolve = resolve or (lambda title, anchor: None)
         self.page_title = page_title
         self.preformat = preformat
@@ -167,6 +171,7 @@ class HtmlMarkdown:
         self.inline = inline
         self.hard_breaks = hard_breaks
         self.code_links = code_links
+        self.anchors = anchors and not plain
         self.plain_mode = plain
         self.unknown: Counter = Counter()
         self._hard = hard_breaks and not inline
@@ -368,6 +373,8 @@ class HtmlMarkdown:
     def _heading(self, level: int, title: str) -> list[str]:
         if not title:
             return []
+        if self._in_cell:  # a Markdown table cell cannot hold a heading: "##### x" would show as text
+            return [f"**{title}**"]
         # a trailing "#" would read as the closing sequence of a Markdown heading
         title = re.sub(r"(#+)\s*$", lambda m: "\\#" * len(m.group(1)), title)
         return [f"{'#' * min(level + 1, 6)} {title}"]
@@ -471,7 +478,10 @@ class HtmlMarkdown:
         def walk(node: Element):
             for c in node.elements():
                 if c.tag == "tr":
-                    rows.append([cell(x) for x in c.elements() if x.tag in ("td", "th")])
+                    cells = [cell(x) for x in c.elements() if x.tag in ("td", "th")]
+                    if cells:  # "|- id=..." : the row's anchor goes into its first cell
+                        cells[0] = (self._anchor(c) + cells[0][0],) + cells[0][1:]
+                    rows.append(cells)
                 elif c.tag in ("thead", "tbody", "tfoot"):
                     walk(c)
 
@@ -483,7 +493,7 @@ class HtmlMarkdown:
             finally:
                 self._hard, self._in_cell = hard, in_cell
             text = text.replace("\n\n", "<br>").replace("\n", "<br>").replace("|", "\\|")
-            return text.strip(), c.tag == "th", span(c, "rowspan"), span(c, "colspan")
+            return self._anchor(c) + text.strip(), c.tag == "th", span(c, "rowspan"), span(c, "colspan")
 
         walk(el)
         captions = [b for c in el.elements("caption") for b in self._caption(c)]
@@ -617,12 +627,23 @@ class HtmlMarkdown:
         return f"\ue013{len(self._codes) - 1}\ue014"
 
     def _inline(self, el: Element) -> str:
-        tag, cls = el.tag, el.classes
         if self._skip(el):
             return ""
         if self._is_block(el):  # a block inside inline content: finished on its own, put back in a slot
             self._blocks.append(self._block(el))
             return f"\ue011{len(self._blocks) - 1}\ue012"
+        return self._anchor(el) + self._inline_content(el)
+
+    def _anchor(self, el: Element) -> str:
+        """The ANCHOR mark of an element's id with ``anchors``: {{Anchor}}'s and the class tables' <span id>, a
+        heading's headline, the fallback <span> MediaWiki puts before a heading for its legacy anchor."""
+        ident = el.attrs.get("id", "")
+        if not self.anchors or _SKIP_IDS.match(ident):
+            return ""
+        return anchor_mark(ident)
+
+    def _inline_content(self, el: Element) -> str:
+        tag, cls = el.tag, el.classes
         if tag == "br":
             return BR
         if _is_ball(el):
@@ -675,9 +696,7 @@ class HtmlMarkdown:
         title, anchor = target
         if title.lower().startswith(FILE_PREFIXES):
             return None
-        # the wiki writes a heading's spaces as "_" in its anchor; a leading "_" ("_this") is part of the name
-        lead = re.match(r"_*", anchor).group(0)
-        return self.resolve(title or self.page_title, lead + anchor[len(lead):].replace("_", " "))
+        return self.resolve(title or self.page_title, wiki_anchor(anchor))
 
     def _link(self, a: Element) -> str:
         text = self._inline_children(a)

@@ -50,6 +50,11 @@ CURRENT = ' aria-current="page"'
 _KEEP = {"<br>": "", "<kbd>": "", "</kbd>": ""}
 
 
+# An anchor of the wiki ({{Anchor}}'s <span id>, a heading's own id) in the site's Markdown: ANCHOR[0] id ANCHOR[1],
+# the id already as heading_id makes it (wikitext.anchor_mark); _place_anchors turns it into an element with that id
+ANCHOR = ("", "")
+_ANCHOR = re.compile(f"{ANCHOR[0]}([^{ANCHOR[1]}]*){ANCHOR[1]}")
+
 # a code block inside a table cell: ```lang<br>code<br>``` (see Site.html)
 _CELL_CODE = re.compile(r"(`{3,})([A-Za-z+-]*)<br>(.*?)(?:<br>)?\1(?!`)")
 _NESTED_SEPARATOR = re.compile(r"^\s*\\\|(?:\s*:?-{3,}:?\s*\\\|)+\s*$")
@@ -233,7 +238,7 @@ class Site:
             nonlocal last
             level, inner = min(int(m.group(1)), last + 1), m.group(2)
             last = level
-            text = re.sub(r"<[^>]+>", "", inner)
+            text = _ANCHOR.sub("", re.sub(r"<[^>]+>", "", inner))
             base = heading_id(html.unescape(text)) or "section"
             ident, n = base, 2
             while ident in seen:
@@ -350,7 +355,7 @@ class Site:
 </html>
 """
         # code copied from the wiki keeps trailing spaces; they are invisible, and validators flag them
-        return re.sub(r"[ \t]+\n", "\n", doc)
+        return re.sub(r"[ \t]+\n", "\n", _place_anchors(doc))
 
     # ---- pages --------------------------------------------------------------------------------
 
@@ -643,6 +648,26 @@ def heading_id(text: str) -> str:
     ident = re.sub(r"[^\w]+", "-", text.lower()).strip("-")
     # ids should start with a letter: "_this" (a magic variable) becomes "v-this"
     return ident if not ident or ident[0].isalpha() else "v-" + ident.lstrip("_-")
+
+
+def _place_anchors(doc: str) -> str:
+    """ANCHOR marks -> <span id="...">, so links to the wiki's anchors land. An id the page already has (a
+    heading's, the page shell's, an earlier mark's) is dropped: ids must be unique, and the link lands there anyway.
+    A paragraph of marks only becomes the marks, as it would otherwise add an empty line."""
+    if ANCHOR[0] not in doc:
+        return doc
+    doc = re.sub(r"<[^>]*>", lambda m: _ANCHOR.sub("", m.group(0)), doc)  # never inside a tag
+    doc = re.sub(f"<p>((?:{_ANCHOR.pattern})+)</p>", lambda m: m.group(1), doc)
+    seen = set(re.findall(r'\sid="([^"]*)"', doc))
+
+    def span(m: re.Match) -> str:
+        ident = html.escape(m.group(1))
+        if not ident or ident in seen:
+            return ""
+        seen.add(ident)
+        return f'<span id="{ident}"></span>'
+
+    return _ANCHOR.sub(span, doc)
 
 
 def _description(summary: str, name: str, what: str) -> str:

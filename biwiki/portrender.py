@@ -81,12 +81,12 @@ class PortRenderer:
 
     def __init__(self, ctx: PortContext, resolve: Optional[LinkResolver] = None, page_title: str = "",
                  preformat: bool = True, emphasis: bool = True, inline: bool = False, hard_breaks: bool = True,
-                 code_links: bool = False):
+                 code_links: bool = False, anchors: bool = False):
         self.ctx = ctx
         self.resolve = resolve
         self.page_title = page_title
         self.options = dict(preformat=preformat, emphasis=emphasis, inline=inline, hard_breaks=hard_breaks,
-                            code_links=code_links)
+                            code_links=code_links, anchors=anchors)
         self.unknown: Counter = Counter()
 
     def _html(self, wikitext) -> str:
