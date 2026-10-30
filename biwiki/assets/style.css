@@ -176,10 +176,10 @@ a:hover { text-decoration-thickness: 2px; }
 }
 .side-more { margin: .6rem 0 0 .6rem; font-size: .85rem; }
 
-/* The content column takes the room the side column leaves. Running text keeps the reading measure; tables use
-   the full column, code blocks grow to their longest line up to the full column. */
+/* The content column takes the room the side column leaves. Running text keeps the reading measure; tables and
+   code blocks use the full column, so a run of code blocks lines up instead of stepping with each one's longest
+   line. */
 .frame-one .content > :where(p, ul, ol, dl, blockquote, h2, h3, h4, h5, h6, .alert, .notes) { max-width: var(--measure); }
-.frame-one .content > :where(pre.code, .code-wrap) { width: fit-content; min-width: min(100%, var(--measure)); max-width: 100%; }
 .table-wrap > table { margin: 0; }
 
 @media (max-width: 900px) {
