@@ -14,45 +14,45 @@ $wgCite...) are fields of the parser's Config (biwiki.mediawiki.config).
 """
 from __future__ import annotations
 
-from typing import Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping, Optional
 
 
-def _register_parser_functions(parser) -> None:
+def _register_parser_functions(parser, **options) -> None:
     from . import parserfunctions
 
-    parserfunctions.register(parser)
+    parserfunctions.register(parser, **options)
 
 
-def _register_cite(parser) -> None:
+def _register_cite(parser, **options) -> None:
     from . import cite
 
-    cite.register(parser)
+    cite.register(parser, **options)
 
 
-def _register_syntax_highlight(parser) -> None:
+def _register_syntax_highlight(parser, **options) -> None:
     from . import syntaxhighlight
 
-    syntaxhighlight.register(parser)
+    syntaxhighlight.register(parser, **options)
 
 
-def _register_enforce_highlighter(parser) -> None:
+def _register_enforce_highlighter(parser, **options) -> None:
     from . import enforcehighlighter
 
-    enforcehighlighter.register(parser)
+    enforcehighlighter.register(parser, **options)
 
 
-def _register_sqf_highlighter(parser) -> None:
-    # without the command and function names no token links to a page; a3ref calls sqfhighlighter.register()
-    # itself with the names of its mirrored pages
+def _register_sqf_highlighter(parser, **options) -> None:
+    # without the command and function names (options commands=, functions=) no token links to a page;
+    # biwiki.mediawiki.biki passes the names of a3ref's mirrored pages
     from . import sqfhighlighter
 
-    sqfhighlighter.register(parser)
+    sqfhighlighter.register(parser, **options)
 
 
-def _register_spoiler(parser) -> None:
+def _register_spoiler(parser, **options) -> None:
     from . import spoiler
 
-    spoiler.register(parser)
+    spoiler.register(parser, **options)
 
 
 # extension name (as in its extension.json) -> its ParserFirstCallInit handler
@@ -67,14 +67,24 @@ EXTENSIONS: dict[str, Callable] = {
 }
 
 
-def register_all(parser, enabled: Iterable[str]) -> None:
+def register_all(parser, enabled: Iterable[str],
+                 options: Optional[Mapping[str, Mapping[str, Any]]] = None) -> None:
     """Run the ParserFirstCallInit hook of each extension in ``enabled``, in the order of EXTENSIONS (as
     wfLoadExtension() calls in LocalSettings.php fix the order of the hook handlers). Unknown names raise
-    ValueError, so a misspelt name does not silently leave an extension out."""
+    ValueError, so a misspelt name does not silently leave an extension out.
+
+    ``options``: extension name -> keyword arguments of its ``register()`` (the settings that are data rather
+    than Config fields, e.g. the SQF Highlighter's ``commands``/``functions``); default: the parser's
+    ``extension_options`` attribute if it has one, as the Parser calls this without arguments on its first parse."""
     enabled = set(enabled)
     unknown = enabled - set(EXTENSIONS)
     if unknown:
         raise ValueError("unknown parser extensions: " + ", ".join(sorted(unknown)))
+    if options is None:
+        options = getattr(parser, "extension_options", None) or {}
+    unknown = set(options) - enabled
+    if unknown:
+        raise ValueError("options for parser extensions that are not enabled: " + ", ".join(sorted(unknown)))
     for name, register in EXTENSIONS.items():
         if name in enabled:
-            register(parser)
+            register(parser, **options.get(name, {}))
