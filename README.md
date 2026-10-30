@@ -119,8 +119,7 @@ the edited templates and add the new templates of the pages they download.
 `build` then parses each page's `{{RV}}` template with `mwparserfromhell` into structured fields, renders the wikitext
 of each field and concept page with a Python port of the wiki's MediaWiki 1.39 parser (`biwiki/mediawiki/`) and those
 templates into the HTML the wiki shows, converts that to Markdown and plain text (`biwiki/htmlmd.py`), and writes the
-mirror to `out/`. Without `raw/templates.json` it falls back to the older direct wikitext renderer
-(`biwiki/wikitext.py`, also `build --renderer legacy`).
+mirror to `out/`. Without `raw/templates.json` it stops and says how to get the file (`sync --walk`).
 
 ## Deployment
 
@@ -287,8 +286,9 @@ the per-page ones during the build (`build --no-og-images` skips them).
 - `biwiki/fetch.py`: browser session, MediaWiki API, incremental cache of pages and templates
 - `biwiki/portrender.py`, `biwiki/htmlmd.py`: render wikitext with the MediaWiki parser port, then the wiki's HTML →
   Markdown and plain text (links, lists, tables, code, notes)
-- `biwiki/wikitext.py`: the legacy renderer, wikitext → Markdown directly (`build --renderer legacy`)
-- `biwiki/parse.py`: `{{RV}}` template → record (status, types, syntax forms); concept pages → topic records
+- `biwiki/markdown.py`: small Markdown writers (quotes, code spans, tables without spans)
+- `biwiki/parse.py`: `{{RV}}` template → record (status, types, syntax forms); concept pages → topic records;
+  `biwiki/wikitext.py` has its helpers for cutting a page with `mwparserfromhell`, game names and wiki anchors
 - `biwiki/docblock.py`: function header comments on placeholder pages → description, parameters, returns, examples
 - `biwiki/render.py`: writes the mirror files and indexes
 - `biwiki/report.py`: parser health report, baseline comparison and the GitHub issue

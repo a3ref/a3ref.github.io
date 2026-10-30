@@ -31,10 +31,9 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 
 | Command | Time | What it does |
 |---|---|---|
-| `python -m unittest` | ~6 s | parser and end-to-end build tests on `tests/fixtures/raw/` (no data clone needed) |
-| `python -m biwiki build` | ~2.5 min | full mirror from `data/raw/` into `out/` (gitignored), rendered through the MediaWiki parser port with the templates in `data/raw/templates.json` (`--templates <file>` for others); without that file it warns and uses the legacy renderer |
+| `python -m unittest` | ~8 s | parser and end-to-end build tests on `tests/fixtures/raw/` (no data clone needed) |
+| `python -m biwiki build` | ~2.5 min | full mirror from `data/raw/` into `out/` (gitignored), rendered through the MediaWiki parser port with the templates in `data/raw/templates.json` (`--templates <file>` for others); without that file it stops with an error (`sync --walk` downloads it) |
 | `python -m biwiki build --no-og-images` | ~2.5 min | the same without the per-page preview images (`<page>.og.png`, drawn in worker processes while the pages are parsed; images already in `out/` with unchanged inputs are kept); the pages then point at `assets/og.png`. The data repository's sync builds this way |
-| `python -m biwiki build --renderer legacy` | ~20 s | the same with the legacy renderer (`biwiki/wikitext.py`), kept for comparison |
 | `python -m biwiki report` | 1 s | new parser problems in `out/report.json` compared with `known-problems.json` |
 | `python -m biwiki --dataset data build` | ~2.5 min | also rewrite the JSON bundles in the data clone |
 | `python -m biwiki feed` | ~5 s | `changes.*` and `feed.xml` from the git history of the data clone |
@@ -56,7 +55,8 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 
 | Task | Place |
 |---|---|
-| wiki markup or template rendered wrong | the wiki's HTML → Markdown/plain text: `biwiki/htmlmd.py` (`HtmlMarkdown`); wikitext → the wiki's HTML: the parser port in `biwiki/mediawiki/` (its README; the wiki's setup in `biki.py`, extensions in `ext/`); the glue (fragment cache, revision times): `biwiki/portrender.py`. The legacy renderer (`--renderer legacy`) is `biwiki/wikitext.py` |
+| wiki markup or template rendered wrong | the wiki's HTML → Markdown/plain text: `biwiki/htmlmd.py` (`HtmlMarkdown`); wikitext → the wiki's HTML: the parser port in `biwiki/mediawiki/` (its README; the wiki's setup in `biki.py`, extensions in `ext/`); the glue (fragment cache, revision times): `biwiki/portrender.py`; small Markdown writers (quotes, code spans, table spans): `biwiki/markdown.py` |
+| cutting a page into fields with mwparserfromhell, `<sqf>` code as shown, game names, wiki anchors | `biwiki/wikitext.py` (`parse_wikitext`, `preprocess`, `clean_code`, `game_name`, `wiki_anchor`) |
 | templates the port renders with | `raw/templates.json` in the data clone, written by `fetch.sync_templates` |
 | fields of a record (syntax, params, types, status, locality) | `biwiki/parse.py` (`parse_page`, `split_param`, `syntax_form`, `_status`) |
 | placeholder function pages, header comments | `biwiki/docblock.py`, `parse._fill_from_docblock` |
@@ -75,8 +75,8 @@ Data flow: `fetch.sync` → `data/raw/{commands,functions,topics}.json` (wikitex
 `data/raw/templates.json` (the templates they transclude) → `render.build` (`parse.parse_page` / `parse_topic` cut a
 page into fragments; `portrender.PortRenderer` parses each fragment once with the MediaWiki parser port into the
 wiki's HTML and `htmlmd` converts it three times: plain text for JSON, mirror-only links for Markdown, wiki links
-for HTML) → `out/` and, with `--dataset`, `data/*.json`. With `--renderer legacy`, or before the first template
-sync, `wikitext.Renderer` renders the wikitext directly instead.
+for HTML) → `out/` and, with `--dataset`, `data/*.json`. The tests build `tests/fixtures/raw/` the same way, with
+the templates those pages use in its `templates.json` (written by `tests/fixtures/refresh.py`).
 
 ## Rules
 
@@ -106,7 +106,7 @@ sync, `wikitext.Renderer` renders the wikitext directly instead.
 
 ## MediaWiki parser port (`biwiki/mediawiki/`)
 
-A Python port of the MediaWiki 1.39 parser renders the pages as the wiki renders them (the default renderer); see
+A Python port of the MediaWiki 1.39 parser renders the pages as the wiki renders them (the build's only renderer); see
 `biwiki/mediawiki/README.md`. Its rules:
 
 - **License: GPL-2.0-or-later**, as MediaWiki; the rest of the repository is MIT (see `LICENSE`). Code translated

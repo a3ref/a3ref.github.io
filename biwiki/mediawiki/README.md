@@ -60,8 +60,11 @@ Still to do: finalizeHeadings/formatHeadings (TOC, edit-section links, ParserOut
 functions), RegexFunctions, LabeledSectionTransclusion, Cite, SyntaxHighlight, TemplateData, CharInsert, YouTube,
 FontAwesome, Math, CategoryTree, DynamicPageList; and Bohemia Interactive's own, which are not public and follow
 the HTML the wiki produces (`action=parse`): SQF Highlighter (`<sqf>`, `<sqs>`), Enforce Script Highlighter
-(`<enforce>`), BIKI Spoiler (`<spoiler>`), BIKI Helper (`#biki-date`). Last: switching a3ref's renderer to the port
-(wikitext -> HTML -> Markdown/JSON/site), compared page by page with the current output.
+(`<enforce>`), BIKI Spoiler (`<spoiler>`), BIKI Helper (`#biki-date`).
+
+a3ref's build renders every page through the port (wikitext -> HTML -> Markdown/JSON/site, see
+`biwiki/portrender.py` and `biwiki/htmlmd.py`); it replaced a direct wikitext -> Markdown renderer, which was
+removed once the output had been compared page by page.
 
 ## Tests
 

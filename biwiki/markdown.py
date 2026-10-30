@@ -1,4 +1,4 @@
-"""Small Markdown writers shared by the HTML -> Markdown converter (``htmlmd``) and the site.
+"""Small Markdown writers of the HTML -> Markdown converter (``htmlmd``); ``site`` reads its CODE_LINK marks.
 
 Original a3ref code (MIT).
 """
