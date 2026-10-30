@@ -111,14 +111,22 @@ requests, a few seconds. `sync --walk` lists every member page instead and downl
 also catches pages that join or leave a category through a template, and it is used automatically when the cache is
 empty or older than the wiki's 90 days of recent changes.
 
-`build` then parses each page's `{{RV}}` template with `mwparserfromhell` into structured fields
-and writes the mirror to `out/`.
+`sync` also keeps the wiki templates the mirrored pages transclude, recursively, in `raw/templates.json`: the walk
+asks the wiki for the templates of every page (50 pages per request, about 220 requests) and downloads those whose
+`revid` changed; later runs read the template namespace's recent changes in the same request as the pages', refetch
+the edited templates and add the new templates of the pages they download.
+
+`build` then parses each page's `{{RV}}` template with `mwparserfromhell` into structured fields, renders the wikitext
+of each field and concept page with a Python port of the wiki's MediaWiki 1.39 parser (`biwiki/mediawiki/`) and those
+templates into the HTML the wiki shows, converts that to Markdown and plain text (`biwiki/htmlmd.py`), and writes the
+mirror to `out/`. Without `raw/templates.json` it falls back to the older direct wikitext renderer
+(`biwiki/wikitext.py`, also `build --renderer legacy`).
 
 ## Deployment
 
 Three repositories, no secrets:
 
-- **[a3ref/data](https://github.com/a3ref/data)** holds the data: raw wikitext (`raw/*.json`) and the parsed
+- **[a3ref/data](https://github.com/a3ref/data)** holds the data: raw wikitext of the pages and their templates (`raw/*.json`) and the parsed
   `commands.json`, `functions.json`, `topics.json`, `index.json`, `syntax.json`. Its workflow runs **twice a day, at 04:17 and 16:17 UTC**: it checks out this
   repository for the code, runs `sync` (real Chrome inside `xvfb`) and `build --dataset`, and commits only if
   something changed. A third run, on Sundays at 10:17 UTC, uses `sync --walk`.
@@ -273,15 +281,17 @@ accessibility, best practices, SEO and agentic browsing on the main page types).
 
 ## Code layout
 
-- `biwiki/fetch.py`: browser session, MediaWiki API, incremental cache
-- `biwiki/wikitext.py`: wikitext → Markdown (links, lists, tables, `<sqf>`, `{{Feature}}`, `{{GVI}}`, `{{hl}}`, …)
+- `biwiki/fetch.py`: browser session, MediaWiki API, incremental cache of pages and templates
+- `biwiki/portrender.py`, `biwiki/htmlmd.py`: render wikitext with the MediaWiki parser port, then the wiki's HTML →
+  Markdown and plain text (links, lists, tables, code, notes)
+- `biwiki/wikitext.py`: the legacy renderer, wikitext → Markdown directly (`build --renderer legacy`)
 - `biwiki/parse.py`: `{{RV}}` template → record (status, types, syntax forms); concept pages → topic records
 - `biwiki/docblock.py`: function header comments on placeholder pages → description, parameters, returns, examples
 - `biwiki/render.py`: writes the mirror files and indexes
 - `biwiki/report.py`: parser health report, baseline comparison and the GitHub issue
 - `biwiki/feed.py`: change feed from the data repository's history
 - `biwiki/site.py`, `biwiki/assets/`: HTML version (markdown-it-py, SQF highlighting, page templates)
-- `biwiki/mediawiki/`: a Python port of the MediaWiki 1.39 parser, in progress (see its README);
+- `biwiki/mediawiki/`: a Python port of the MediaWiki 1.39 parser, set up as the BI wiki (see its README);
   `python -m biwiki.mediawiki.parsertests` runs MediaWiki's own parser tests against it
 - `tests/`: unit and end-to-end build tests on a few real pages in `tests/fixtures/raw/`; `tests/mediawiki/`:
   MediaWiki's parser test cases

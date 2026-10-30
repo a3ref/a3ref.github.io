@@ -31,14 +31,14 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 
 | Command | Time | What it does |
 |---|---|---|
-| `python -m unittest` | <1 s | parser and end-to-end build tests on `tests/fixtures/raw/` (no data clone needed) |
-| `python -m biwiki build` | ~20 s | full mirror from `data/raw/` into `out/` (gitignored) |
-| `python -m biwiki --out <dir> build --renderer port [--templates <file>]` | ~3 min | the same through the MediaWiki parser port and `htmlmd` (`biwiki/portrender.py`; templates default `../wiki-fetch/templates.json`); not yet the default |
+| `python -m unittest` | ~6 s | parser and end-to-end build tests on `tests/fixtures/raw/` (no data clone needed) |
+| `python -m biwiki build` | ~2.5 min | full mirror from `data/raw/` into `out/` (gitignored), rendered through the MediaWiki parser port with the templates in `data/raw/templates.json` (`--templates <file>` for others); without that file it warns and uses the legacy renderer |
+| `python -m biwiki build --renderer legacy` | ~20 s | the same with the legacy renderer (`biwiki/wikitext.py`), kept for comparison |
 | `python -m biwiki report` | 1 s | new parser problems in `out/report.json` compared with `known-problems.json` |
-| `python -m biwiki --dataset data build` | ~25 s | also rewrite the JSON bundles in the data clone |
+| `python -m biwiki --dataset data build` | ~2.5 min | also rewrite the JSON bundles in the data clone |
 | `python -m biwiki feed` | ~5 s | `changes.*` and `feed.xml` from the git history of the data clone |
 | `python -m biwiki serve --port 8000` | — | serve `out/` |
-| `python -m biwiki sync` | ~10 s | download changed wiki pages: opens a real Chrome window and contacts the wiki. Reads the wiki's recent changes since the newest edit in the cache; `--walk` lists every member page instead (~1 min, also the fallback when the cache is empty or older than ~90 days). Do not run it unless the task needs fresh pages; `build` works from the cache |
+| `python -m biwiki sync` | ~10 s | download changed wiki pages: opens a real Chrome window and contacts the wiki. Reads the wiki's recent changes since the newest edit in the cache; `--walk` lists every member page instead (~2 min, also the fallback when the cache is empty or older than ~90 days). Either also updates `raw/templates.json`, the templates the pages transclude. Do not run it unless the task needs fresh pages; `build` works from the cache |
 
 ## Verify a change
 
@@ -55,7 +55,8 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 
 | Task | Place |
 |---|---|
-| wiki markup or template rendered wrong | `biwiki/wikitext.py` (`Renderer._template`, `_tag`, `_wikilink`, `_table`) |
+| wiki markup or template rendered wrong | the wiki's HTML → Markdown/plain text: `biwiki/htmlmd.py` (`HtmlMarkdown`); wikitext → the wiki's HTML: the parser port in `biwiki/mediawiki/` (its README; the wiki's setup in `biki.py`, extensions in `ext/`); the glue (fragment cache, revision times): `biwiki/portrender.py`. The legacy renderer (`--renderer legacy`) is `biwiki/wikitext.py` |
+| templates the port renders with | `raw/templates.json` in the data clone, written by `fetch.sync_templates` |
 | fields of a record (syntax, params, types, status, locality) | `biwiki/parse.py` (`parse_page`, `split_param`, `syntax_form`, `_status`) |
 | placeholder function pages, header comments | `biwiki/docblock.py`, `parse._fill_from_docblock` |
 | file layout, `index.json`, `syntax.json`, `llms.txt`, `names.txt`, sitemap | `biwiki/render.py` (`build` and the `_*` writers) |
@@ -68,9 +69,12 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 | deployment, schedule, watchdog | `.github/workflows/site.yml`; the data sync is `.github/workflows/sync.yml` in a3ref/data |
 | icons, preview image | `scripts/make_brand_assets.py` |
 
-Data flow: `fetch.sync` → `data/raw/{commands,functions,topics}.json` (wikitext by page id) → `render.build`
-(`parse.parse_page` / `parse_topic` with `wikitext.Renderer`, three times per page: plain text for JSON,
-mirror-only links for Markdown, wiki links for HTML) → `out/` and, with `--dataset`, `data/*.json`.
+Data flow: `fetch.sync` → `data/raw/{commands,functions,topics}.json` (wikitext by page id) and
+`data/raw/templates.json` (the templates they transclude) → `render.build` (`parse.parse_page` / `parse_topic` cut a
+page into fragments; `portrender.PortRenderer` parses each fragment once with the MediaWiki parser port into the
+wiki's HTML and `htmlmd` converts it three times: plain text for JSON, mirror-only links for Markdown, wiki links
+for HTML) → `out/` and, with `--dataset`, `data/*.json`. With `--renderer legacy`, or before the first template
+sync, `wikitext.Renderer` renders the wikitext directly instead.
 
 ## Rules
 
@@ -98,7 +102,7 @@ mirror-only links for Markdown, wiki links for HTML) → `out/` and, with `--dat
 
 ## MediaWiki parser port (`biwiki/mediawiki/`)
 
-A Python port of the MediaWiki 1.39 parser is being written, so pages render as the wiki renders them; see
+A Python port of the MediaWiki 1.39 parser renders the pages as the wiki renders them (the default renderer); see
 `biwiki/mediawiki/README.md`. Its rules:
 
 - **License: GPL-2.0-or-later**, as MediaWiki; the rest of the repository is MIT (see `LICENSE`). Code translated
