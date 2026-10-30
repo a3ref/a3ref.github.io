@@ -9,7 +9,7 @@
     "types": {
       "type": "array",
       "items": {"type": "string"},
-      "description": "Data types linked in the wiki text, e.g. [\"Array\", \"String\"] for \"Array of Strings\". Each has a topic page (topics/<type>.md) when mirrored. Empty when the wiki describes the type in free text.",
+      "description": "Data types in the type position of the wiki text (not links in notes or prose after it), e.g. [\"Array\", \"String\"] for \"Array of Strings\". Each has a topic page (topics/<type>.md) when mirrored. Empty when the wiki describes the type in free text.",
       "examples": [["Object"], ["Array", "Position"]]
     },
     "typeExpr": {
