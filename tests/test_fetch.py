@@ -247,5 +247,26 @@ class FallbackTest(unittest.TestCase):
         self.assertEqual(json.loads(before["topics"])["3"]["redirects"], ["Mission Editing"])
 
 
+class ContinuedCategoriesWiki(WikiSession):
+    """The API splits a page's categories across continued blocks; the later ones carry no revisions."""
+
+    async def api(self, **params) -> dict:
+        rev = {"revid": 7, "timestamp": "2026-10-30T10:00:00Z", "slots": {"main": {"content": "x"}}}
+        if "clcontinue" not in params:
+            return {"continue": {"clcontinue": "1|B", "continue": "||"},
+                    "query": {"pages": [{"pageid": 1, "ns": 0, "title": "a * b", "revisions": [rev],
+                                         "categories": [{"ns": 14, "title": "Category:A"}]}]}}
+        return {"query": {"pages": [{"pageid": 1, "ns": 0, "title": "a * b",
+                                     "categories": [{"ns": 14, "title": "Category:Arma 3: Scripting Commands"}]}]}}
+
+
+class FetchContentTest(unittest.TestCase):
+    def test_categories_of_continued_blocks_are_kept(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            out = asyncio.run(ContinuedCategoriesWiki(Path(".")).fetch_content([1]))
+        self.assertEqual(out[1]["categories"], ["A", "Arma 3: Scripting Commands"])
+        self.assertEqual(out[1]["wikitext"], "x")
+
+
 if __name__ == "__main__":
     unittest.main()

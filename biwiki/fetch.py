@@ -231,9 +231,10 @@ class WikiSession:
                 clshow="!hidden",
             ):
                 for p in q.get("pages", []):
-                    if p.get("missing") or not p.get("revisions"):
+                    if p.get("missing"):
                         continue
-                    rev = p["revisions"][0]
+                    # a continued block carries the rest of the categories of pages without their revisions
+                    rev = (p.get("revisions") or [{}])[0]
                     entry = out.setdefault(p["pageid"], {"title": p["title"], "categories": []})
                     if "slots" in rev:
                         entry.update(
@@ -243,7 +244,7 @@ class WikiSession:
                         )
                     entry["categories"] += [c["title"].removeprefix("Category:") for c in p.get("categories", [])]
             print(f"  fetched {min(i + 50, len(pageids))}/{len(pageids)}", flush=True)
-        return out
+        return {pid: entry for pid, entry in out.items() if "wikitext" in entry}
 
 
 def load_cache(path: Path) -> dict[int, dict]:
