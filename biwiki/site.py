@@ -312,8 +312,8 @@ class Site:
         if len(crumbs) > 1:
             jsonld.append(_breadcrumb_ld(self.base, crumbs))
         crumb_html = _crumbs(root, crumbs)
-        toc_html = (f'<nav class="toc" aria-labelledby="toc-title"><h2 class="toc-title" id="toc-title">On this page</h2>'
-                    f'{toc}</nav>') if toc else ""
+        toc_html = (f'<nav class="toc" aria-labelledby="toc-title"><h2 class="toc-title" id="toc-title">'
+                    f'{_fold("toc-list", "On this page")}</h2><ol id="toc-list">{toc}</ol></nav>') if toc else ""
         topbar = f"""<header class="topbar">
   <a class="brand" href="{root}index.html"><span class="brand-mark" aria-hidden="true"></span>Arma 3 Scripting</a>
   <nav class="topnav" aria-label="Sections">
@@ -333,15 +333,16 @@ class Site:
 <li><a href="https://github.com/a3ref/a3ref.github.io">Source</a></li>
 </ul></nav>
 </div></footer>"""
-        side_html = f'<nav class="sidenav" aria-label="Related pages">{side}</nav>' if side else ""
+        # One side column holds both navigations, contents first, as folding sections; without either the
+        # content column stands alone. On narrow screens the column becomes folded blocks above the page.
+        side_html = f'<nav class="sidenav" aria-labelledby="side-title">{side}</nav>' if side else ""
+        column = f'<div class="side">\n{toc_html}\n{side_html}\n</div>\n'.replace("\n\n", "\n") if toc or side else ""
         body = f"""{topbar}
-<div class="frame{' frame-side' if side else ''}{' frame-toc' if toc else ''}">
-{side_html}
-<main id="content" class="content">
+<div class="frame{' frame-one' if column else ''}">
+{column}<main id="content" class="content">
 <div class="page-head">{crumb_html}{header}</div>
 {main}
 </main>
-{toc_html}
 </div>"""
         doc = f"""<!DOCTYPE html>
 <html lang="en">
@@ -374,9 +375,9 @@ class Site:
             notes = '<section class="notes"><h2 id="community-notes">Community notes</h2>' + "".join(items) + "</section>"
             heads.append((2, "community-notes", "Community notes"))
 
-        toc = "<ol>" + "".join(
+        toc = "".join(
             f'<li class="toc-{lvl}"><a href="#{i}">{t}</a></li>' for lvl, i, t in heads if lvl == 2 or t.startswith("Syntax")
-        ) + "</ol>"
+        )
 
         label = "Command" if rec["type"] == "command" else "Function"
         facts = []
@@ -425,7 +426,7 @@ class Site:
 
     def topic(self, s: str, rec: dict, summary: str, siblings: list | None = None) -> str:
         body, heads = self._ids(self.html(rec["markdown"]))
-        toc = "<ol>" + "".join(f'<li class="toc-{lvl}"><a href="#{i}">{t}</a></li>' for lvl, i, t in heads if lvl <= 3) + "</ol>"
+        toc = "".join(f'<li class="toc-{lvl}"><a href="#{i}">{t}</a></li>' for lvl, i, t in heads if lvl <= 3)
         facts = ""
         if rec["aliases"]:
             facts = ('<ul class="facts"><li class="fact fact-muted">Also known as '
@@ -458,10 +459,10 @@ class Site:
             for n, href in shown
         )
         href = f"index.html#{_anchor(group)}" if kind == "topics" else f"../{group_path(kind, group)}"
-        more = (f'<p class="side-more"><a href="{href}">All {len(siblings)} in {html.escape(group)}</a></p>'
-                if len(siblings) > len(shown) else "")
-        return (f'<h2 class="side-title"><a href="{href}">{html.escape(group)}</a></h2>'
-                f'<ul class="side-list">{items}</ul>{more}')
+        # the heading is the section's disclosure button, so the group page is linked below the list
+        return (f'<h2 class="side-title" id="side-title">{_fold("side-body", html.escape(group))}</h2>'
+                f'<div class="side-body" id="side-body"><ul class="side-list">{items}</ul>'
+                f'<p class="side-more"><a href="{href}">All {len(siblings)} in {html.escape(group)}</a></p></div>')
 
     def not_found(self, base_url: str) -> None:
         """GitHub Pages serves 404.html for any missing path. People are redirected to the page they most likely
@@ -719,6 +720,12 @@ def _crumbs(root: str, crumbs: list) -> str:
     items = [f'<li><a href="{root}{href}">{html.escape(name)}</a></li>' for name, href in crumbs[:-1]]
     items.append(f'<li aria-current="page">{html.escape(crumbs[-1][0])}</li>')
     return f'<nav class="crumbs" aria-label="Breadcrumb"><ol>{"".join(items)}</ol></nav>'
+
+
+def _fold(controls: str, label: str) -> str:
+    """A side column heading's disclosure button. Open in the HTML: site.js folds the sections on narrow screens,
+    and without scripts everything stays visible."""
+    return f'<button type="button" class="fold" aria-expanded="true" aria-controls="{controls}">{label}</button>'
 
 
 def _anchor(heading: str) -> str:

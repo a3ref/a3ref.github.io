@@ -115,10 +115,50 @@
   }
 })();
 
-/* keep the current page visible in the side navigation (scrolls the list only, not the page) */
+/* ---- side column: folding sections, current page, section being read ---------------------------- */
 (function () {
   "use strict";
-  var side = document.querySelector(".sidenav"), cur = side && side.querySelector("[aria-current]");
-  // next frame: reading layout right after the code-block wrappers were added would force a reflow
-  if (cur) requestAnimationFrame(function () { side.scrollTop = cur.offsetTop - side.offsetTop - side.clientHeight / 2; });
+  // Open on wide screens, folded on narrow ones, where the column sits above the page. The HTML ships them
+  // open, so without scripts nothing is hidden.
+  var mq = window.matchMedia("(max-width: 900px)");
+  var btns = document.querySelectorAll("button.fold[aria-controls]");
+  function set(b, open) {
+    b.setAttribute("aria-expanded", open ? "true" : "false");
+    document.getElementById(b.getAttribute("aria-controls")).hidden = !open;
+  }
+  function reset() { for (var i = 0; i < btns.length; i++) set(btns[i], !mq.matches); }
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].addEventListener("click", function () { set(this, this.getAttribute("aria-expanded") !== "true"); });
+  }
+  if (mq.matches) reset();
+  if (mq.addEventListener) mq.addEventListener("change", reset);
+
+  // The page list scrolls on its own: bring the current page into view, once. Next frame: reading layout right
+  // after the code-block wrappers were added would force a reflow.
+  var body = document.getElementById("side-body"), cur = body && body.querySelector("[aria-current]");
+  if (cur && !mq.matches) requestAnimationFrame(function () {
+    body.scrollTop += cur.getBoundingClientRect().top - body.getBoundingClientRect().top - body.clientHeight / 2;
+  });
+
+  // Mark the contents entry of the section being read. The scroll handler only reads positions, once per
+  // frame, and touches the DOM only when the section changes; it never scrolls anything.
+  var links = document.querySelectorAll('.toc a[href^="#"]'), heads = [], byId = {}, current = null, pending = false;
+  for (i = 0; i < links.length; i++) {
+    var h = document.getElementById(decodeURIComponent(links[i].getAttribute("href").slice(1)));
+    if (h) { heads.push(h); byId[h.id] = links[i]; }
+  }
+  if (!heads.length) return;
+  var line = (parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 72) + 24;
+  function update() {
+    pending = false;
+    var pick = null;
+    for (var j = 0; j < heads.length; j++) { if (heads[j].getBoundingClientRect().top <= line) pick = heads[j]; else break; }
+    var a = pick ? byId[pick.id] : null;
+    if (a === current) return;
+    if (current) current.removeAttribute("aria-current");
+    current = a;
+    if (a) a.setAttribute("aria-current", "location");
+  }
+  window.addEventListener("scroll", function () { if (!pending) { pending = true; requestAnimationFrame(update); } }, { passive: true });
+  requestAnimationFrame(update);
 })();
