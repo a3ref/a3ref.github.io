@@ -668,7 +668,7 @@ def _llms_txt(base: str, index: list[dict], groups, records) -> str:
         f"- What changed on the wiki recently: {base}changes.md (also changes.json, Atom feed {base}feed.xml)",
         "- The same data with daily git history: https://github.com/a3ref/data",
         f"- MCP server and Claude Code plugin (search, read pages, lint SQF), with install steps for Claude Code, "
-        f"Codex, Antigravity, Cursor and other clients: {base}mcp.md",
+        f"Codex, Antigravity, OpenCode, Cursor and other clients: {base}mcp.md",
         "",
         "## Core topics",
         "",

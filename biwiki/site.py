@@ -658,7 +658,7 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
             f'<li><a href="{href}">{name}</a> {desc}</li>'
             for href, name, desc in [
                 ("llms.txt", "llms.txt", "explains the mirror to a language model."),
-                ("mcp.html", "MCP server", "gives Claude Code, Codex, Antigravity, Cursor and other agents search, "
+                ("mcp.html", "MCP server", "gives Claude Code, Codex, Antigravity, OpenCode and other agents search, "
                                            "pages and an SQF linter."),
                 ("index.json", "index.json", "lists every entry with its syntax, summary, groups and paths."),
                 ("names.txt", "names.txt", "lists every name, one per line."),
@@ -722,7 +722,7 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
         header = f"""<h1 class="name">{html.escape(title)}</h1>
 <p class="lede">{lede}</p>
 <p class="formats">MCP server · <a href="mcp.md">Markdown</a> · <a href="https://github.com/a3ref/mcp">source on GitHub</a></p>"""
-        description = ("Give Claude Code, Codex, Antigravity, Cursor and other AI agents every Arma 3 SQF command and "
+        description = ("Give Claude Code, Codex, Antigravity, OpenCode and other AI agents every Arma 3 SQF command and "
                        "function, plus an SQF linter. Install steps for each client.")
         app = {
             "@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "a3ref MCP server",

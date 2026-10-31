@@ -1,6 +1,6 @@
 # Arma 3 MCP server: SQF reference and linter for AI agents
 
-The a3ref MCP server gives Claude Code, Codex, Antigravity, Cursor, VS Code and any other
+The a3ref MCP server gives Claude Code, Codex, Antigravity, OpenCode, Cursor, VS Code and any other
 [MCP](https://modelcontextprotocol.io) client the complete Arma 3 scripting reference, mirrored daily from the
 Bohemia Interactive Community Wiki, and checks SQF for the mistakes language models make most: made-up commands,
 missing operands, unknown functions and deprecated commands.
@@ -112,6 +112,28 @@ Servers, View raw config opens it.
 
 In the CLI, `/mcp` opens the MCP manager: it shows whether the server is connected and reloads the settings.
 Antigravity CLI replaced Gemini CLI in 2026; set the server up there as shown here.
+
+### OpenCode
+
+Add the server to `~/.config/opencode/opencode.json` for every project, or to `opencode.json` in one project:
+
+```json title="~/.config/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "a3ref": {
+      "type": "local",
+      "command": ["npx", "-y", "github:a3ref/mcp"],
+      "enabled": true
+    }
+  }
+}
+```
+
+Check with `opencode mcp list`. For the `sqf` skill as well, save
+[its SKILL.md](https://github.com/a3ref/mcp/blob/main/skills/sqf/SKILL.md) as
+`~/.config/opencode/skills/sqf/SKILL.md`. OpenCode plugins are code modules rather than packages of servers and
+skills, so there is no plugin to install.
 
 ### Claude Desktop
 
