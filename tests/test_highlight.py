@@ -28,9 +28,9 @@ class HighlightTest(unittest.TestCase):
         self.assertIn('<span class="t-literal">true</span>', out)
 
     def test_shell(self):
-        out = self.link("codex mcp add a3ref -- npx -y github:a3ref/mcp\n", "sh", "")
+        out = self.link("codex mcp add a3ref -- npx -y a3ref-mcp\n", "sh", "")
         self.assertTrue(out.startswith('<pre class="code" tabindex="0"><code class="language-sh"><span class="t-prog">codex</span>'))
-        self.assertIn('<span class="t-flag">-y</span> github:a3ref/mcp', out)
+        self.assertIn('<span class="t-flag">-y</span> a3ref-mcp', out)
 
     def test_title(self):
         out = self.link("{}", "json", 'title="~/.cursor/mcp.json"')

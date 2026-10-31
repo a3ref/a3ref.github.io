@@ -37,7 +37,7 @@ examples on the wiki, it reports 23 errors, nearly all of them config or prose p
 All you need is [Node.js](https://nodejs.org/) 18 or newer. Where a client has plugins, the plugin is the
 easiest way: it adds the MCP server and the `sqf` skill, which tells the agent to look commands up and lint SQF
 before showing it. Otherwise add the server to the client's MCP settings; every client starts the same command,
-`npx -y github:a3ref/mcp`.
+`npx -y a3ref-mcp`.
 
 AI agents asked to install the server: use the terminal command of the client you run in, then tell the user
 to restart the client or reload its MCP servers.
@@ -54,7 +54,7 @@ to restart the client or reload its MCP servers.
 **Server only**, for every project (leave out `--scope user` for the current project only):
 
 ```sh title="Terminal"
-claude mcp add --scope user a3ref -- npx -y github:a3ref/mcp
+claude mcp add --scope user a3ref -- npx -y a3ref-mcp
 ```
 
 Check with `/mcp` in Claude Code: `a3ref` should be listed as connected.
@@ -74,7 +74,7 @@ Or, after adding the marketplace, install `a3ref` from the Plugins directory of 
 **Server only:**
 
 ```sh title="Terminal"
-codex mcp add a3ref -- npx -y github:a3ref/mcp
+codex mcp add a3ref -- npx -y a3ref-mcp
 ```
 
 Or add it yourself to `~/.codex/config.toml` (or to `.codex/config.toml` in a trusted project):
@@ -82,7 +82,7 @@ Or add it yourself to `~/.codex/config.toml` (or to `.codex/config.toml` in a tr
 ```toml title="~/.codex/config.toml"
 [mcp_servers.a3ref]
 command = "npx"
-args = ["-y", "github:a3ref/mcp"]
+args = ["-y", "a3ref-mcp"]
 ```
 
 Check with `codex mcp list` in a terminal or `/mcp` in the Codex CLI.
@@ -104,7 +104,7 @@ Servers, View raw config opens it.
   "mcpServers": {
     "a3ref": {
       "command": "npx",
-      "args": ["-y", "github:a3ref/mcp"]
+      "args": ["-y", "a3ref-mcp"]
     }
   }
 }
@@ -123,7 +123,7 @@ Add the server to `~/.config/opencode/opencode.json` for every project, or to `o
   "mcp": {
     "a3ref": {
       "type": "local",
-      "command": ["npx", "-y", "github:a3ref/mcp"],
+      "command": ["npx", "-y", "a3ref-mcp"],
       "enabled": true
     }
   }
@@ -145,7 +145,7 @@ Settings, Developer, Edit Config opens `claude_desktop_config.json` (in `%APPDAT
   "mcpServers": {
     "a3ref": {
       "command": "npx",
-      "args": ["-y", "github:a3ref/mcp"]
+      "args": ["-y", "a3ref-mcp"]
     }
   }
 }
@@ -160,7 +160,7 @@ In `~/.cursor/mcp.json` for every project, or `.cursor/mcp.json` in one project:
   "mcpServers": {
     "a3ref": {
       "command": "npx",
-      "args": ["-y", "github:a3ref/mcp"]
+      "args": ["-y", "a3ref-mcp"]
     }
   }
 }
@@ -173,7 +173,7 @@ In `~/.cursor/mcp.json` for every project, or `.cursor/mcp.json` in one project:
   "mcpServers": {
     "a3ref": {
       "command": "npx",
-      "args": ["-y", "github:a3ref/mcp"]
+      "args": ["-y", "a3ref-mcp"]
     }
   }
 }
@@ -189,7 +189,7 @@ For Copilot agent mode, in the workspace:
     "a3ref": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "github:a3ref/mcp"]
+      "args": ["-y", "a3ref-mcp"]
     }
   }
 }
@@ -198,7 +198,7 @@ For Copilot agent mode, in the workspace:
 ### Other clients
 
 Any client that runs local (stdio) MCP servers works: give it the command `npx` with the arguments
-`-y github:a3ref/mcp`. Most take the `mcpServers` JSON shown for Cursor.
+`-y a3ref-mcp`. Most take the `mcpServers` JSON shown for Cursor.
 
 ## Try it
 
@@ -213,10 +213,12 @@ The agent should call `search`, `get` or `lint_sqf` instead of answering from me
 ## Troubleshooting
 
 - **The server does not start.** Run `node --version` (18 or newer is needed), then
-  `npx -y github:a3ref/mcp` in a terminal: it should start and wait for input without printing anything
+  `npx -y a3ref-mcp` in a terminal: it should start and wait for input without printing anything
   (Ctrl+C ends it).
+- **`npm error code EALLOWGIT`.** An older setup runs `npx -y github:a3ref/mcp`, which npm 12 refuses (it no longer
+  installs packages straight from git). Replace `github:a3ref/mcp` with `a3ref-mcp`.
 - **Windows: the client cannot find `npx`.** Some clients do not run `.cmd` files directly. Use the command `cmd`
-  with the arguments `/c npx -y github:a3ref/mcp`, e.g. `"command": "cmd", "args": ["/c", "npx", "-y", "github:a3ref/mcp"]`.
+  with the arguments `/c npx -y a3ref-mcp`, e.g. `"command": "cmd", "args": ["/c", "npx", "-y", "a3ref-mcp"]`.
 - **Your own copy of the site.** The server reads https://a3ref.github.io/; set the environment variable
   `A3REF_BASE_URL` to read a mirror instead.
 
