@@ -47,6 +47,16 @@ class BuildTest(unittest.TestCase):
         for f in ("llms.txt", "llms-full.txt", "names.txt", "sitemap.xml", "robots.txt", "404.html", "report.json"):
             self.assertTrue((self.out / f).is_file(), f)
 
+    def test_mcp_page(self):
+        page = (self.out / "mcp.html").read_text(encoding="utf-8")
+        self.assertEqual(page.count("<h1"), 1, "the Markdown's title is the header's h1, not a second one")
+        self.assertIn('<h3 id="codex">Codex</h3>', page)
+        self.assertIn("SoftwareSourceCode", page)
+        self.assertTrue((self.out / "mcp.md").is_file())
+        self.assertIn("https://a3ref.github.io/mcp.html", (self.out / "sitemap.xml").read_text(encoding="utf-8"))
+        self.assertIn("https://a3ref.github.io/mcp.md", (self.out / "llms.txt").read_text(encoding="utf-8"))
+        self.assertIn('href="../mcp.html"', (self.out / "commands" / "setPos.html").read_text(encoding="utf-8"))
+
     def test_dataset_bundles(self):
         for f in ("commands.json", "functions.json", "topics.json", "index.json", "syntax.json", "schema.json"):
             self.assertTrue((self.dataset / f).is_file(), f)

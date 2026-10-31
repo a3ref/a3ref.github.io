@@ -357,7 +357,7 @@ class Site:
 <p>{footer or _site_footer()}</p>
 <nav aria-label="Project"><ul class="footer-links">
 <li><a href="{root}llms.txt">For AI agents</a></li>
-<li><a href="https://github.com/a3ref/mcp">MCP server</a></li>
+<li><a href="{root}mcp.html">MCP server</a></li>
 <li><a href="https://github.com/a3ref/data">Data</a></li>
 <li><a href="{root}feed.xml">Changes feed</a></li>
 <li><a href="https://github.com/a3ref/a3ref.github.io">Source</a></li>
@@ -604,7 +604,8 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
             f'<li><a href="{href}">{name}</a> {desc}</li>'
             for href, name, desc in [
                 ("llms.txt", "llms.txt", "explains the mirror to a language model."),
-                ("https://github.com/a3ref/mcp", "a3ref/mcp", "is an MCP server and Claude Code plugin: search, pages and an SQF linter."),
+                ("mcp.html", "MCP server", "gives Claude Code, Codex, Antigravity, Cursor and other agents search, "
+                                           "pages and an SQF linter."),
                 ("index.json", "index.json", "lists every entry with its syntax, summary, groups and paths."),
                 ("names.txt", "names.txt", "lists every name, one per line."),
                 *[(f"{k}.json", f"{k}.json", f"holds every {k[:-1]} with full details.") for k in kinds],
@@ -646,6 +647,29 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
                                     '<link rel="alternate" type="application/atom+xml" title="Wiki edits" href="feed.xml">\n',
                          footer=_site_footer(generated), page_class="page-home", og_type="website")
         (self.out / "index.html").write_text(doc, encoding="utf-8")
+
+    def mcp(self, md: str) -> None:
+        """The MCP server's install guide, written here rather than mirrored: the one page of the site that is not
+        on the wiki. ``md`` is pages/mcp.md, also published as mcp.md; its "# " line is the page's h1."""
+        title, _, body_md = md.partition("\n")
+        title = title.removeprefix("# ")
+        body, heads = self._ids(self.html(body_md))
+        header = f"""<h1 class="name">{html.escape(title)}</h1>
+<p class="formats">MCP server · <a href="mcp.md">Markdown</a> · <a href="https://github.com/a3ref/mcp">source on GitHub</a></p>"""
+        description = ("Give Claude Code, Codex, Antigravity, Cursor and other AI agents every Arma 3 SQF command and "
+                       "function, plus an SQF linter. Install steps for each client.")
+        app = {
+            "@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "a3ref MCP server",
+            "description": description, "url": f"{self.base}mcp.html", "codeRepository": "https://github.com/a3ref/mcp",
+            "programmingLanguage": "JavaScript", "runtimePlatform": "Node.js",
+            "license": "https://opensource.org/license/mit", "about": {"@type": "Thing", "name": "Arma 3 scripting (SQF)"},
+            "publisher": {"@type": "Organization", "name": SITE_NAME, "url": self.base},
+        }
+        doc = self.shell(path="mcp.html", title=title, description=description, header=header, main=body,
+                         crumbs=[("Home", "index.html"), ("MCP server", "mcp.html")], toc=_toc(heads), jsonld=[app],
+                         extra_head='<link rel="alternate" type="text/markdown" href="mcp.md">\n',
+                         page_class="page-topic")
+        (self.out / "mcp.html").write_text(doc, encoding="utf-8")
 
     def assets(self, search_entries: list[list]) -> None:
         target = self.out / "assets"

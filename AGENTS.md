@@ -62,6 +62,7 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 | placeholder function pages, header comments | `biwiki/docblock.py`, `parse._fill_from_docblock` |
 | file layout, `index.json`, `syntax.json`, `llms.txt`, `names.txt`, sitemap | `biwiki/render.py` (`build` and the `_*` writers) |
 | HTML pages, CSP, SEO metadata, structured data | `biwiki/site.py`; styles and scripts in `biwiki/assets/` |
+| the site's own pages (`mcp.html`, the MCP server's install guide, also published as `mcp.md`) | Markdown in `biwiki/pages/`, rendered by `Site.mcp`; keep it in step with a3ref/mcp's README |
 | which pages are mirrored | `biwiki/fetch.py`: `CATEGORIES`, `TOPIC_TITLES`, `TOPIC_CATEGORIES`, `TOPIC_ROOT` with `TOPIC_SKIP_CATEGORY` / `TOPIC_SKIP_TITLE` (takes effect for existing pages only after a walk, which runs weekly: once pushed, start one with `gh workflow run sync.yml -R a3ref/data -f walk=true`; the site follows within the hour); the incremental sync is `fetch.sync_recent` |
 | topic groups | `biwiki/render.py`: `TOPIC_GROUPS`, `topic_group` |
 | what a command or function record leaves out in JSON (empty values, derivable fields, `games` map, `branch` list) | `biwiki/jsonrecord.py` (`compact`) |

@@ -19,6 +19,7 @@ from .site import PLACEHOLDER, Site, _anchor, heading_id, plain_text, redirect_p
 
 SITE_URL = "https://a3ref.github.io/"
 SCHEMA = Path(__file__).parent / "schema.json"
+PAGES_DIR = Path(__file__).parent / "pages"  # the site's own pages, written by hand (Markdown)
 KINDS = ["commands", "functions", "topics"]
 KIND_LABEL = {"commands": "Scripting Commands", "functions": "Functions", "topics": "Topics"}
 TYPE_OF = {"commands": "command", "functions": "function", "topics": "topic"}
@@ -489,6 +490,9 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     (out_dir / "sitemap.xml").write_text(_sitemap(base_url, records, slugs, groups, set(redirects)), encoding="utf-8")
     (out_dir / "index.md").write_text(_root_index(kinds, index, now), encoding="utf-8")
     site.home(kinds, records, slugs, now)
+    mcp_md = (PAGES_DIR / "mcp.md").read_text(encoding="utf-8")
+    (out_dir / "mcp.md").write_text(mcp_md, encoding="utf-8")
+    site.mcp(mcp_md)
     site.not_found(base_url)
     site.assets(search)
     health = report.to_json(updated)
@@ -661,7 +665,8 @@ def _llms_txt(base: str, index: list[dict], groups, records) -> str:
         f"- Full list of every page with a summary (large): {base}llms-full.txt",
         f"- What changed on the wiki recently: {base}changes.md (also changes.json, Atom feed {base}feed.xml)",
         "- The same data with daily git history: https://github.com/a3ref/data",
-        "- MCP server and Claude Code plugin (search, read pages, lint SQF): https://github.com/a3ref/mcp",
+        f"- MCP server and Claude Code plugin (search, read pages, lint SQF), with install steps for Claude Code, "
+        f"Codex, Antigravity, Cursor and other clients: {base}mcp.md",
         "",
         "## Core topics",
         "",
@@ -713,7 +718,7 @@ def _names_txt(base: str, index: list[dict]) -> str:
 def _sitemap(base: str, records: dict[str, list[dict]], slugs: dict[str, str], groups,
              redirects: Collection[str] = ()) -> str:
     """Every indexable page; ``redirects`` (titles) are stubs whose target is listed, or that are noindex."""
-    urls = [f"<url><loc>{base}</loc></url>"]
+    urls = [f"<url><loc>{base}</loc></url>", f"<url><loc>{base}mcp.html</loc></url>"]
     for kind, recs in records.items():
         urls.append(f"<url><loc>{base}{kind}/index.html</loc></url>")
         if kind != "topics":  # topics have no group pages
