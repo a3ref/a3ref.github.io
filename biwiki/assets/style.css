@@ -251,6 +251,29 @@ pre.code code { background: none; padding: 0; border: 0; font-size: inherit; lin
 .t-comment { color: var(--muted); font-style: italic; }
 .t-local { color: var(--indfor); }
 .t-pp { color: var(--opfor); }
+/* JSON, TOML and shell */
+.t-key, .t-prog { color: var(--accent); }
+.t-prog { font-weight: 600; }
+.t-flag, .t-literal { color: var(--civ); }
+.t-section { color: var(--opfor); }
+
+/* a code block with a caption saying where it goes: a file name, "Terminal" */
+.code-file { margin: 1rem 0; }
+.code-file figcaption { padding: .4rem 1.05rem; font: 500 .8rem/1.4 var(--f-code); color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--rule); border-bottom: 0; border-radius: 8px 8px 0 0; }
+.code-file pre.code { margin: 0; border-radius: 0 0 8px 8px; }
+
+/* the MCP page: its clients as a grid of links above their install steps; more room between the clients */
+.clients ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: .6rem;
+  max-width: var(--measure); margin: 1.1rem 0 1.6rem; padding: 0; list-style: none; }
+.clients li { margin: 0; }
+.clients a { display: block; height: 100%; padding: .6rem .85rem; font-weight: 600; color: var(--ink); text-decoration: none;
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; }
+.clients a:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.page-mcp .content h3 { margin-top: 2.4rem; padding-top: 1rem; border-top: 1px solid var(--rule); }
+.page-mcp .content h3 + p { margin-top: .4rem; }
+.page-mcp .content .clients + h3 { margin-top: 1.6rem; }
+.page-mcp .content > :where(.code-file, pre.code, .code-wrap) { max-width: var(--measure); }
 
 kbd { font: 500 .82em/1 var(--f-code); padding: .12em .4em; border: 1px solid var(--rule-strong); border-bottom-width: 2px; border-radius: 4px; background: var(--bg); }
 
@@ -335,6 +358,8 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
   .entries li { grid-template-columns: 1fr; gap: .1rem; }
   .home-grid { grid-template-columns: 1fr; gap: 2rem; }
   pre.code { margin-left: -1rem; margin-right: -1rem; border-radius: 0; border-left: 0; border-right: 0; }
+  .code-file figcaption { margin: 0 -1rem; border-radius: 0; border-left: 0; border-right: 0; }
+  .code-file pre.code { margin: 0 -1rem; border-radius: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

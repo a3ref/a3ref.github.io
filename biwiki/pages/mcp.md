@@ -1,12 +1,13 @@
 # Arma 3 MCP server: SQF reference and linter for AI agents
 
 The a3ref MCP server gives Claude Code, Codex, Antigravity, Cursor, VS Code and any other
-[MCP](https://modelcontextprotocol.io) client the complete Arma 3 scripting reference: every scripting command,
-every `BIS_fnc_*` function and the core concept pages (data types, locality, scheduler, event handlers), mirrored
-daily from the Bohemia Interactive Community Wiki. It also checks SQF for the mistakes language models make most:
-made-up commands, missing operands, unknown functions and deprecated commands.
+[MCP](https://modelcontextprotocol.io) client the complete Arma 3 scripting reference, mirrored daily from the
+Bohemia Interactive Community Wiki, and checks SQF for the mistakes language models make most: made-up commands,
+missing operands, unknown functions and deprecated commands.
 
-It is free and open source (MIT), needs no account or API key, and runs on Windows, macOS and Linux.
+It is free and open source (MIT), needs no account or API key, and runs on Windows, macOS and Linux. It covers
+every scripting command, every `BIS_fnc_*` function and the core concept pages: data types, locality, the
+scheduler, event handlers.
 
 ## What the agent gets
 
@@ -20,7 +21,7 @@ It is free and open source (MIT), needs no account or API key, and runs on Windo
 
 What `lint_sqf` reports:
 
-```text
+```text title="lint_sqf"
 Checked 3 lines: 2 errors, 1 warnings, 0 notes.
 
 1:8 error: Unknown command setUnitHealth (used as a binary command).
@@ -33,67 +34,52 @@ examples on the wiki, it reports 23 errors, nearly all of them config or prose p
 
 ## Install
 
-Every client starts the same command, `npx -y github:a3ref/mcp`, which needs
-[Node.js](https://nodejs.org/) 18 or newer. The server is a single file with no dependencies: the first start
-downloads it, later starts reuse the copy npm keeps.
+All you need is [Node.js](https://nodejs.org/) 18 or newer. Where a client has plugins, the plugin is the
+easiest way: it adds the MCP server and the `sqf` skill, which tells the agent to look commands up and lint SQF
+before showing it. Otherwise add the server to the client's MCP settings; every client starts the same command,
+`npx -y github:a3ref/mcp`.
+
+AI agents asked to install the server: use the terminal command of the client you run in, then tell the user
+to restart the client or reload its MCP servers.
 
 ### Claude Code
 
-As a plugin, which adds the MCP server and the `sqf` skill (it tells Claude to check commands and lint SQF before
-showing it). Type in Claude Code:
+**Plugin.** Type in Claude Code:
 
-```text
+```text title="Claude Code"
 /plugin marketplace add a3ref/mcp
 /plugin install a3ref@a3ref
 ```
 
-The server only, for every project (leave out `--scope user` for the current project only):
+**Server only**, for every project (leave out `--scope user` for the current project only):
 
-```sh
+```sh title="Terminal"
 claude mcp add --scope user a3ref -- npx -y github:a3ref/mcp
 ```
 
 Check with `/mcp` in Claude Code: `a3ref` should be listed as connected.
 
-### Claude Desktop
-
-Settings, Developer, Edit Config opens `claude_desktop_config.json`
-(`%APPDATA%\Claude\` on Windows, `~/Library/Application Support/Claude/` on macOS). Add the server and restart
-Claude Desktop:
-
-```json
-{
-  "mcpServers": {
-    "a3ref": {
-      "command": "npx",
-      "args": ["-y", "github:a3ref/mcp"]
-    }
-  }
-}
-```
-
 ### Codex
 
-As a plugin, with the MCP server and the `sqf` skill:
+**Plugin.** The Codex CLI, the Codex IDE extension and the ChatGPT desktop app share plugins and settings, so one
+install covers all three:
 
-```sh
+```sh title="Terminal"
 codex plugin marketplace add a3ref/mcp
 codex plugin add a3ref@a3ref
 ```
 
-Or, after adding the marketplace, install `a3ref` from the Plugins directory of the ChatGPT desktop app. The Codex
-CLI, the Codex IDE extension and the ChatGPT desktop app share plugins and configuration, so one install covers
-all three.
+Or, after adding the marketplace, install `a3ref` from the Plugins directory of the ChatGPT desktop app.
 
-The server only:
+**Server only:**
 
-```sh
+```sh title="Terminal"
 codex mcp add a3ref -- npx -y github:a3ref/mcp
 ```
 
-Or add it to `~/.codex/config.toml` yourself (or to `.codex/config.toml` in a trusted project):
+Or add it yourself to `~/.codex/config.toml` (or to `.codex/config.toml` in a trusted project):
 
-```toml
+```toml title="~/.codex/config.toml"
 [mcp_servers.a3ref]
 command = "npx"
 args = ["-y", "github:a3ref/mcp"]
@@ -103,19 +89,17 @@ Check with `codex mcp list` in a terminal or `/mcp` in the Codex CLI.
 
 ### Antigravity
 
-As a plugin, with the MCP server and the `sqf` skill:
+**Plugin.** Plugins installed with the CLI or the Antigravity app are available in the app, the IDE and the CLI:
 
-```sh
+```sh title="Terminal"
 agy plugin install https://github.com/a3ref/mcp
 ```
 
-Plugins installed with the CLI or the Antigravity app are available in the app, the IDE and the CLI.
+**Server only.** The Antigravity app, the IDE and the CLI (`agy`) read the same file, `~/.gemini/config/mcp_config.json`
+(or `.agents/mcp_config.json` for one workspace). In the IDE, the agent panel's menu (…), MCP Servers, Manage MCP
+Servers, View raw config opens it.
 
-The server only: the Antigravity app, the Antigravity IDE and the Antigravity CLI (`agy`) read the same file:
-`~/.gemini/config/mcp_config.json` for every project, or `.agents/mcp_config.json` in a workspace for that
-workspace only. In the IDE, the agent panel's menu (…), MCP Servers, Manage MCP Servers, View raw config opens it.
-
-```json
+```json title="~/.gemini/config/mcp_config.json"
 {
   "mcpServers": {
     "a3ref": {
@@ -126,14 +110,30 @@ workspace only. In the IDE, the agent panel's menu (…), MCP Servers, Manage MC
 }
 ```
 
-In the CLI, `/mcp` opens the MCP manager, which shows whether the server is connected and reloads the
-configuration. Antigravity CLI replaced Gemini CLI in 2026; set the server up there as shown here.
+In the CLI, `/mcp` opens the MCP manager: it shows whether the server is connected and reloads the settings.
+Antigravity CLI replaced Gemini CLI in 2026; set the server up there as shown here.
+
+### Claude Desktop
+
+Settings, Developer, Edit Config opens `claude_desktop_config.json` (in `%APPDATA%\Claude\` on Windows,
+`~/Library/Application Support/Claude/` on macOS). Add the server and restart Claude Desktop:
+
+```json title="claude_desktop_config.json"
+{
+  "mcpServers": {
+    "a3ref": {
+      "command": "npx",
+      "args": ["-y", "github:a3ref/mcp"]
+    }
+  }
+}
+```
 
 ### Cursor
 
-`.cursor/mcp.json` in a project, or `~/.cursor/mcp.json` for every project:
+In `~/.cursor/mcp.json` for every project, or `.cursor/mcp.json` in one project:
 
-```json
+```json title="~/.cursor/mcp.json"
 {
   "mcpServers": {
     "a3ref": {
@@ -146,13 +146,22 @@ configuration. Antigravity CLI replaced Gemini CLI in 2026; set the server up th
 
 ### Windsurf
 
-`~/.codeium/windsurf/mcp_config.json`, with the same `mcpServers` entry as for Cursor.
+```json title="~/.codeium/windsurf/mcp_config.json"
+{
+  "mcpServers": {
+    "a3ref": {
+      "command": "npx",
+      "args": ["-y", "github:a3ref/mcp"]
+    }
+  }
+}
+```
 
-### VS Code (Copilot agent mode)
+### VS Code
 
-`.vscode/mcp.json` in the workspace:
+For Copilot agent mode, in the workspace:
 
-```json
+```json title=".vscode/mcp.json"
 {
   "servers": {
     "a3ref": {

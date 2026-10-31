@@ -133,6 +133,37 @@ class CodeLinker:
         re.S | re.M | re.X,
     )
 
+    # JSON, TOML and shell, for the site's own pages (mcp.md) and the few such blocks on the wiki
+    JSON_TOKEN = re.compile(
+        r"""
+        (?P<key>"(?:[^"\\\n]|\\.)*"(?=\s*:))
+        |(?P<string>"(?:[^"\\\n]|\\.)*")
+        |(?P<literal>\b(?:true|false|null)\b)
+        |(?P<number>(?<![\w.-])-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?![\w.-]))
+        """,
+        re.X,
+    )
+    TOML_TOKEN = re.compile(
+        r"""
+        (?P<comment>(?:^|(?<=\s))\#[^\n]*)
+        |(?P<section>^[ \t]*\[[^\]\n]+\][ \t]*$)
+        |(?P<key>^[ \t]*[A-Za-z0-9_.-]+(?=[ \t]*=))
+        |(?P<string>"(?:[^"\\\n]|\\.)*"|'[^'\n]*')
+        |(?P<literal>\b(?:true|false)\b)
+        |(?P<number>(?<![\w.-])-?\d+(?:\.\d+)?(?![\w.-]))
+        """,
+        re.M | re.X,
+    )
+    SHELL_TOKEN = re.compile(
+        r"""
+        (?P<comment>(?:^|(?<=\s))\#[^\n]*)
+        |(?P<string>"(?:[^"\\\n]|\\.)*"|'[^'\n]*')
+        |(?P<prog>^[ \t]*[A-Za-z][\w.-]*)
+        |(?P<flag>(?<=\s)--?[A-Za-z][\w-]*)
+        """,
+        re.M | re.X,
+    )
+
     def __init__(self, pages: dict[str, tuple[str, str]]):
         # lower-case script name -> (kind, slug); SQF is case-insensitive
         self.pages = pages
@@ -144,13 +175,32 @@ class CodeLinker:
             body = self.sqf(code)
         elif lang in ("cpp", "hpp", "ext", "c", "enforce"):
             body = self.config(code)
+        elif lang == "json":
+            body = self.tokens(code, self.JSON_TOKEN)
+        elif lang == "toml":
+            body = self.tokens(code, self.TOML_TOKEN)
+        elif lang in ("sh", "bash", "shell", "console"):
+            body = self.tokens(code, self.SHELL_TOKEN)
         else:
             body = html.escape(code)
         # links the wiki shows inside preformatted lines (see markdown.CODE_LINK); text and URL are escaped above
         body = re.sub("(.*?)(.*?)", r'<a href="\2">\1</a>', body)
         cls = f' class="language-{lang}"' if lang else ""
+        # ```json title="~/.cursor/mcp.json": where the block goes; Site.html puts it above the block as a caption
+        title = re.search(r'\btitle="([^"]+)"', attrs or "")
+        data = f' data-title="{html.escape(title.group(1))}"' if title else ""
         # tabindex: long lines scroll sideways, and keyboard users need to be able to focus the block to scroll it
-        return f'<pre class="code" tabindex="0"><code{cls}>{body}</code></pre>\n'
+        return f'<pre class="code" tabindex="0"{data}><code{cls}>{body}</code></pre>\n'
+
+    @staticmethod
+    def tokens(code: str, pattern: re.Pattern) -> str:
+        out, pos = [], 0
+        for m in pattern.finditer(code):
+            out.append(html.escape(code[pos : m.start()]))
+            out.append(f'<span class="t-{m.lastgroup}">{html.escape(m.group(0))}</span>')
+            pos = m.end()
+        out.append(html.escape(code[pos:]))
+        return "".join(out)
 
     def sqf(self, code: str) -> str:
         out, pos = [], 0
@@ -239,6 +289,10 @@ class Site:
         out = out.replace("<table>", '<div class="table-wrap"><table>').replace("</table>", "</table></div>")
         # Markdown table headers are column headers; say so, as tables nested in a cell need it (WCAG H63)
         out = re.sub(r"<th(?=[\s>])(?![^>]*\bscope=)", '<th scope="col"', out)
+        # a block's title (CodeLinker) becomes its caption; the <figure> ties the two together for screen readers
+        out = re.sub(r'<pre class="code" tabindex="0" data-title="([^"]*)">(.*?)</pre>',
+                     r'<figure class="code-file"><figcaption>\1</figcaption>'
+                     r'<pre class="code" tabindex="0">\2</pre></figure>', out, flags=re.S)
         return out
 
     @staticmethod
@@ -654,7 +708,19 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
         title, _, body_md = md.partition("\n")
         title = title.removeprefix("# ")
         body, heads = self._ids(self.html(body_md))
+        # the first paragraph says what the page is about: the lede under the title
+        lede, body = re.fullmatch(r"\s*<p>(.*?)</p>\s*(.*)", body, re.S).groups()
+        # the clients (the h3 of "Install") as a grid of links above their sections, so people find theirs at once
+        clients, section = [], ""
+        for level, ident, text in heads:
+            section = ident if level == 2 else section
+            if level == 3 and section == "install":
+                clients.append((ident, text))
+        items = "".join(f'<li><a href="#{ident}">{text}</a></li>' for ident, text in clients)
+        first = f'<h3 id="{clients[0][0]}">'
+        body = body.replace(first, f'<nav class="clients" aria-label="Clients"><ul>{items}</ul></nav>\n{first}', 1)
         header = f"""<h1 class="name">{html.escape(title)}</h1>
+<p class="lede">{lede}</p>
 <p class="formats">MCP server · <a href="mcp.md">Markdown</a> · <a href="https://github.com/a3ref/mcp">source on GitHub</a></p>"""
         description = ("Give Claude Code, Codex, Antigravity, Cursor and other AI agents every Arma 3 SQF command and "
                        "function, plus an SQF linter. Install steps for each client.")
@@ -668,7 +734,7 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
         doc = self.shell(path="mcp.html", title=title, description=description, header=header, main=body,
                          crumbs=[("Home", "index.html"), ("MCP server", "mcp.html")], toc=_toc(heads), jsonld=[app],
                          extra_head='<link rel="alternate" type="text/markdown" href="mcp.md">\n',
-                         page_class="page-topic")
+                         page_class="page-topic page-mcp")
         (self.out / "mcp.html").write_text(doc, encoding="utf-8")
 
     def assets(self, search_entries: list[list]) -> None:
