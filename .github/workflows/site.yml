@@ -74,6 +74,8 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
+      # the live sitemap, before this deploy replaces it: IndexNow gets the pages that differ from it
+      - run: curl -fsSL https://a3ref.github.io/sitemap.xml -o previous-sitemap.xml || true
       - run: python -m unittest  # parser and build tests on tests/fixtures, a few seconds
       - id: build
         run: python -m biwiki build
@@ -84,6 +86,12 @@ jobs:
           path: out
       - id: deployment
         uses: actions/deploy-pages@v5
+      # After deploying, so the engines find the pages and the key file live. A refused list does not fail the
+      # deploy; the step shows as failed in the run.
+      - name: IndexNow
+        if: always() && steps.deployment.outcome == 'success'
+        continue-on-error: true
+        run: python -m biwiki indexnow --previous previous-sitemap.xml
       # After deploying, so one broken page never blocks the rest of the site.
       # New problems (not in known-problems.json) open/update the "parser-report" issue;
       # a page the parser crashed on also fails this run, which sends an email.

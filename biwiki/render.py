@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .fetch import CATEGORIES, TEMPLATES, TOPIC_TITLES, load_cache
+from .indexnow import KEY as INDEXNOW_KEY
 from .jsonrecord import branches, compact
 from .ogimage import SUFFIX as OG_SUFFIX
 from .ogimage import OgImages
@@ -488,6 +489,7 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     # .md pages indexed in place of the HTML.
     (out_dir / "robots.txt").write_text(f"User-agent: *\nAllow: /\n\nSitemap: {base_url}sitemap.xml\n", encoding="utf-8")
     (out_dir / "sitemap.xml").write_text(_sitemap(base_url, records, slugs, groups, set(redirects)), encoding="utf-8")
+    (out_dir / f"{INDEXNOW_KEY}.txt").write_text(INDEXNOW_KEY, encoding="utf-8")
     (out_dir / "index.md").write_text(_root_index(kinds, index, now), encoding="utf-8")
     site.home(kinds, records, slugs, now)
     mcp_md = (PAGES_DIR / "mcp.md").read_text(encoding="utf-8")
@@ -726,7 +728,8 @@ def _sitemap(base: str, records: dict[str, list[dict]], slugs: dict[str, str], g
         for r in recs:
             if r["title"] in redirects:
                 continue
-            lastmod = f"<lastmod>{r['updated'][:10]}</lastmod>" if r["updated"] else ""
+            # the full time, not the day: IndexNow (indexnow.py) sends a page again when its lastmod changes
+            lastmod = f"<lastmod>{r['updated']}</lastmod>" if r["updated"] else ""
             urls.append(f"<url><loc>{base}{kind}/{slugs[r['title']]}.html</loc>{lastmod}</url>")
     return ('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
             + "\n".join(urls) + "\n</urlset>\n")

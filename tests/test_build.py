@@ -9,6 +9,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
 
+from biwiki.indexnow import KEY
 from biwiki.render import build
 
 RAW = Path(__file__).parent / "fixtures" / "raw"
@@ -53,6 +54,7 @@ class BuildTest(unittest.TestCase):
         self.assertIn('<h3 id="codex">Codex</h3>', page)
         self.assertIn("SoftwareSourceCode", page)
         self.assertTrue((self.out / "mcp.md").is_file())
+        self.assertEqual((self.out / f"{KEY}.txt").read_text(encoding="utf-8"), KEY, "IndexNow's key file")
         self.assertIn("https://a3ref.github.io/mcp.html", (self.out / "sitemap.xml").read_text(encoding="utf-8"))
         self.assertIn("https://a3ref.github.io/mcp.md", (self.out / "llms.txt").read_text(encoding="utf-8"))
         self.assertIn('href="../mcp.html"', (self.out / "commands" / "setPos.html").read_text(encoding="utf-8"))

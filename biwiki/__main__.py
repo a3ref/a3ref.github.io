@@ -1,4 +1,4 @@
-"""Command line: python -m biwiki {sync,update,build,feed,report,serve}"""
+"""Command line: python -m biwiki {sync,update,build,feed,report,indexnow,serve}"""
 from __future__ import annotations
 
 import argparse
@@ -54,6 +54,9 @@ def main(argv=None) -> None:
     p.add_argument("--accept", action="store_true", help="accept all current problems as the new baseline")
     p.add_argument("--issue", action="store_true", help="open/update/close the GitHub issue (needs gh and GH_TOKEN)")
     p.add_argument("--site", default="https://a3ref.github.io/", help="site URL used in links")
+    p = sub.add_parser("indexnow", help="send the pages a deploy changed to IndexNow (Bing, Yandex, ...)")
+    p.add_argument("--previous", type=Path, required=True, help="the live sitemap.xml, saved before the deploy")
+    p.add_argument("--dry-run", action="store_true", help="list the changed pages without sending them")
     p = sub.add_parser("serve", help="serve the generated mirror over HTTP")
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--host", default="127.0.0.1")
@@ -82,6 +85,10 @@ def main(argv=None) -> None:
         from .report import run
 
         sys.exit(run(a.out, a.known, a.accept, a.issue, a.site))
+    if a.cmd == "indexnow":
+        from . import indexnow
+
+        sys.exit(indexnow.run(a.out, a.previous, a.base_url.rstrip("/") + "/", a.dry_run))
     if a.cmd == "serve":
         serve(a.out, a.host, a.port)
 

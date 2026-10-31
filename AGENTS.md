@@ -38,6 +38,7 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 | `python -m biwiki --dataset data build` | ~2.5 min | also rewrite the JSON bundles in the data clone |
 | `python -m biwiki feed` | ~5 s | `changes.*` and `feed.xml` from the git history of the data clone |
 | `python -m biwiki serve --port 8000` | — | serve `out/` |
+| `python -m biwiki indexnow --previous <live sitemap.xml> --dry-run` | 1 s | the pages the deploy workflow would send to IndexNow (Bing, Yandex, ...): new in `out/sitemap.xml` or with another lastmod. Without `--dry-run` it sends them; only the workflow does that, after deploying |
 | `python -m biwiki sync` | ~10 s | download changed wiki pages: opens a real Chrome window and contacts the wiki. Reads the wiki's recent changes since the newest edit in the cache; `--walk` lists every member page instead (~2 min, also the fallback when the cache is empty or older than ~90 days). Either also updates `raw/templates.json`, the templates the pages transclude. Do not run it unless the task needs fresh pages; `build` works from the cache |
 
 ## Verify a change
@@ -70,6 +71,7 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 | parser health report, GitHub issue | `biwiki/report.py`, baseline `known-problems.json` |
 | change feed | `biwiki/feed.py` |
 | deployment, schedule, watchdog | `.github/workflows/site.yml`; the data sync is `.github/workflows/sync.yml` in a3ref/data |
+| IndexNow (key, key file, which pages are sent) | `biwiki/indexnow.py`; the key file is written by `render.build`, the call is in `site.yml` |
 | per-page preview images (Open Graph / Twitter) | drawing: `biwiki/ogimage.py` (`draw`; bump `VERSION` when it changes); written by `render.build` via `OgImages`; the meta tags and JSON-LD `image`: `site.py` (`Site._image`, `_head`, `_article_ld`) |
 | icons, site-wide preview image (`assets/og.png`) | `scripts/make_brand_assets.py` (run by hand, commit the output) |
 
@@ -109,7 +111,7 @@ the templates those pages use in its `templates.json` (written by `tests/fixture
 - **Local Windows, CI Linux.** Write files as UTF-8 with `\n`. Windows and macOS file systems are case-insensitive, so
   the lower-case alias pages (`commands/setpos.md`) are only produced on Linux.
 - **Outward actions need the maintainer's consent**: pushing to `main` deploys the site; `report --issue` writes
-  to GitHub; `sync` contacts the wiki.
+  to GitHub; `sync` contacts the wiki; `indexnow` without `--dry-run` contacts the search engines.
 
 ## MediaWiki parser port (`biwiki/mediawiki/`)
 
