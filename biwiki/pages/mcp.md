@@ -74,8 +74,18 @@ Claude Desktop:
 
 ### Codex
 
-The Codex CLI, the Codex IDE extension and the ChatGPT desktop app share one configuration, so one command covers
-all three:
+As a plugin, with the MCP server and the `sqf` skill:
+
+```sh
+codex plugin marketplace add a3ref/mcp
+codex plugin add a3ref@a3ref
+```
+
+Or, after adding the marketplace, install `a3ref` from the Plugins directory of the ChatGPT desktop app. The Codex
+CLI, the Codex IDE extension and the ChatGPT desktop app share plugins and configuration, so one install covers
+all three.
+
+The server only:
 
 ```sh
 codex mcp add a3ref -- npx -y github:a3ref/mcp
@@ -93,7 +103,15 @@ Check with `codex mcp list` in a terminal or `/mcp` in the Codex CLI.
 
 ### Antigravity
 
-The Antigravity app, the Antigravity IDE and the Antigravity CLI (`agy`) read the same file:
+As a plugin, with the MCP server and the `sqf` skill:
+
+```sh
+agy plugin install https://github.com/a3ref/mcp
+```
+
+Plugins installed with the CLI or the Antigravity app are available in the app, the IDE and the CLI.
+
+The server only: the Antigravity app, the Antigravity IDE and the Antigravity CLI (`agy`) read the same file:
 `~/.gemini/config/mcp_config.json` for every project, or `.agents/mcp_config.json` in a workspace for that
 workspace only. In the IDE, the agent panel's menu (…), MCP Servers, Manage MCP Servers, View raw config opens it.
 
