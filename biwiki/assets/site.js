@@ -156,10 +156,34 @@
 
   // The page list scrolls on its own: bring the current page into view, once. Next frame: reading layout right
   // after the code-block wrappers were added would force a reflow.
+  // On narrow screens the list is folded at first: then when it is opened.
   var body = document.getElementById("side-body"), cur = body && body.querySelector("[aria-current]");
-  if (cur && !mq.matches) requestAnimationFrame(function () {
+  function centre() {
     body.scrollTop += cur.getBoundingClientRect().top - body.getBoundingClientRect().top - body.clientHeight / 2;
-  });
+  }
+  if (cur) {
+    if (!mq.matches) requestAnimationFrame(centre);
+    var sideBtn = document.querySelector('button.fold[aria-controls="side-body"]');
+    if (sideBtn) sideBtn.addEventListener("click", function () { if (!body.hidden) centre(); });
+  }
+
+  // Back to top, shown once the page has scrolled a screen and a half.
+  var toTop = document.querySelector(".to-top"), topPending = false;
+  function showTop() {
+    topPending = false;
+    toTop.classList.toggle("to-top-on", window.scrollY > window.innerHeight * 1.5);
+  }
+  if (toTop) {
+    // No "#top" in the address; focus moves to the top too, as the button hides once the page is up there.
+    toTop.addEventListener("click", function (e) {
+      e.preventDefault();
+      window.scrollTo(0, 0);
+      var brand = document.querySelector(".brand");
+      if (brand) brand.focus({ preventScroll: true });
+    });
+    window.addEventListener("scroll", function () { if (!topPending) { topPending = true; requestAnimationFrame(showTop); } }, { passive: true });
+    showTop();
+  }
 
   // The column is fixed beside the page: once the footer scrolls into view, end the column above it (--foot
   // shortens its max-height; its top never moves, so nothing shakes).

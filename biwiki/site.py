@@ -55,7 +55,6 @@ LOCALITY_HELP = {
 
 ALERT_TITLES = {"NOTE": "Note", "IMPORTANT": "Important", "WARNING": "Warning", "CAUTION": "Caution", "TIP": "Tip"}
 KIND_OF_TYPE = {"command": "commands", "function": "functions", "topic": "topics"}
-SIDE_LIMIT = 60  # entries of the current group listed in the side navigation
 CURRENT = ' aria-current="page"'
 
 # Sentinels for the few HTML tags our Markdown deliberately contains; everything else stays escaped.
@@ -385,9 +384,9 @@ class Site:
 {extra}{ld}</head>"""
 
     def shell(self, *, path: str, title: str, description: str, header: str, main: str, crumbs: list,
-              toc: str = "", side: str = "", jsonld: list | None = None, extra_head: str = "", footer: str = "",
-              page_class: str = "", og_type: str = "article", root: str | None = None, canonical: bool = True,
-              image: tuple[str, str] | None = None) -> str:
+              toc: str = "", toc_title: str = "On this page", side: str = "", jsonld: list | None = None,
+              extra_head: str = "", footer: str = "", page_class: str = "", og_type: str = "article",
+              root: str | None = None, canonical: bool = True, image: tuple[str, str] | None = None) -> str:
         """``image``: (absolute URL, alt text) of the page's preview image; default the site-wide one."""
         root = root if root is not None else "../" * path.count("/")
         title = _fit_title(title)
@@ -396,7 +395,7 @@ class Site:
             jsonld.append(_breadcrumb_ld(self.base, crumbs))
         crumb_html = _crumbs(root, crumbs)
         toc_html = (f'<nav class="toc" aria-labelledby="toc-title"><h2 class="toc-title" id="toc-title">'
-                    f'{_fold("toc-list", "On this page")}</h2><ol id="toc-list">{toc}</ol></nav>') if toc else ""
+                    f'{_fold("toc-list", toc_title)}</h2><ol id="toc-list">{toc}</ol></nav>') if toc else ""
         topbar = f"""<header class="topbar">
   <a class="brand" href="{root}index.html"><span class="brand-mark" aria-hidden="true"></span>Arma 3 Scripting</a>
   <nav class="topnav" aria-label="Sections">
@@ -416,7 +415,9 @@ class Site:
 <li><a href="{root}feed.xml">Changes feed</a></li>
 <li><a href="https://github.com/a3ref/a3ref.github.io">Source</a></li>
 </ul></nav>
-</div></footer>"""
+</div>
+<a class="to-top" href="#top">Back to top</a>
+</footer>"""
         # One side column holds both navigations, contents first, as folding sections; without either the
         # content column stands alone. On narrow screens the column becomes folded blocks above the page.
         side_html = f'<nav class="sidenav" aria-labelledby="side-title">{side}</nav>' if side else ""
@@ -541,22 +542,12 @@ class Site:
         return f"{self.base}{path}{OG_SUFFIX}", alt
 
     def _side(self, kind: str, group: str | None, siblings: list | None, current: str) -> str:
-        """The other pages of the current group, around the current one."""
+        """Every page of the current group (the largest has 260), so the list's scrollbar spans the whole group
+        rather than a cut-out of it; site.js scrolls the current page into view."""
         if not group or not siblings:
             return ""
-        names = [n for n, _ in siblings]
-        at = names.index(current) if current in names else 0
-        start = max(0, min(at - SIDE_LIMIT // 2, len(siblings) - SIDE_LIMIT))
-        shown = siblings[start : start + SIDE_LIMIT]
-        items = "".join(
-            f'<li><a href="{href}"{CURRENT if n == current else ""}>{html.escape(n)}</a></li>'
-            for n, href in shown
-        )
         href = f"index.html#{_anchor(group)}" if kind == "topics" else f"../{group_path(kind, group)}"
-        # the heading is the section's disclosure button, so the group page is linked below the list
-        return (f'<h2 class="side-title" id="side-title">{_fold("side-body", html.escape(group))}</h2>'
-                f'<div class="side-body" id="side-body"><ul class="side-list">{items}</ul>'
-                f'<p class="side-more"><a href="{href}">All {len(siblings)} in {html.escape(group)}</a></p></div>')
+        return _side_list(html.escape(group), siblings, current, href, f"All {len(siblings)}, with summaries")
 
     def not_found(self, base_url: str) -> None:
         """GitHub Pages serves 404.html for any missing path. People are redirected to the page they most likely
@@ -592,10 +583,12 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
                 for r in sorted(members, key=lambda r: r["name"].lower())
             )
 
+        # The groups in the side column, as the contents of the page: they stay in view while the long list
+        # scrolls, and site.js marks the group being read.
+        toc = "".join(f'<li class="toc-2"><a href="#{_anchor(g)}">{html.escape(g)} <span class="count">{len(groups[g])}</span></a></li>'
+                      for g in ordered)
         if kind == "topics":
-            jump = "".join(f'<li><a href="#{_anchor(g)}">{html.escape(g)}</a> <span class="count">{len(groups[g])}</span></li>'
-                           for g in ordered)
-            main = f'<nav class="group-jump" aria-label="Groups"><ul>{jump}</ul></nav>' + "".join(
+            main = "".join(
                 f'<section class="group"><h2 id="{_anchor(g)}">{html.escape(g)}</h2><ul class="entries">{rows(groups[g], "")}</ul></section>'
                 for g in ordered)
             lede = (f"{len(records)} pages: data types, locality and multiplayer, event handlers, mission editing, "
@@ -607,16 +600,17 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
                 return "".join(f'<li><a href="{slugs[r["title"]]}.html">{html.escape(r["name"])}</a></li>'
                                for r in sorted(members, key=lambda r: r["name"].lower()))
 
-            jump = "".join(f'<li><a href="#{_anchor(g)}">{html.escape(g)}</a> <span class="count">{len(groups[g])}</span></li>'
-                           for g in ordered)
-            main = f'<nav class="group-jump" aria-label="Groups"><ul>{jump}</ul></nav>' + "".join(
+            main = "".join(
                 f'<section class="group group-names"><h2 id="{_anchor(g)}"><a href="../{group_path(kind, g)}">{html.escape(g)}</a></h2>'
                 f'<ul class="name-list{" name-list-wide" if kind == "functions" else ""}">{names(groups[g])}</ul></section>'
                 for g in ordered)
             lede = (f"{len(records)} {label.lower()} in {len(groups)} groups; a page can belong to several. "
                     "A group's heading leads to its page, with a one-line summary of each.")
+            # a group page lists every group of its kind beside it, for switching from one to another
+            group_links = [(g, f"{_slug(g)}.html") for g in ordered]
             for g in ordered:
                 path = group_path(kind, g)
+                side = _side_list("Groups", group_links, g, f"../../{kind}/index.html", f"All {label.lower()}, by group", names=False)
                 header = f"""<h1 class="name">{html.escape(g)}</h1>
 <p class="lede">{len(groups[g])} {label.lower()}. Also as <a href="{_slug(g)}.md">Markdown</a> for agents.</p>"""
                 doc = self.shell(path=path, title=f"{g} – Arma 3 {label.lower()}",
@@ -624,7 +618,7 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
                                                     + ", ".join(r["name"] for r in groups[g][:8]) + ".", 159),
                                  header=header, main=f'<ul class="entries">{rows(groups[g], f"../../{kind}/")}</ul>',
                                  crumbs=[("Home", "index.html"), (label, f"{kind}/index.html"), (g, path)],
-                                 page_class="page-index", og_type="website")
+                                 side=side, page_class="page-index", og_type="website")
                 (self.out / path).parent.mkdir(parents=True, exist_ok=True)
                 (self.out / path).write_text(doc, encoding="utf-8")
         header = f"""<h1 class="name">{html.escape(label)}</h1>
@@ -633,7 +627,7 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
                          description=f"All {len(records)} Arma 3 {label.lower()} from the BI Community Wiki, by group, "
                                      "with one-line summaries.",
                          header=header, main=main, crumbs=[("Home", "index.html"), (label, f"{kind}/index.html")],
-                         page_class="page-index", og_type="website")
+                         toc=toc, toc_title="Groups", page_class="page-index", og_type="website")
         (self.out / kind / "index.html").write_text(doc, encoding="utf-8")
 
     def home(self, kinds: list[str], all_records: dict[str, list[dict]], slugs: dict[str, str], generated: str) -> None:
@@ -987,6 +981,16 @@ def _fold(controls: str, label: str) -> str:
     """A side column heading's disclosure button. Open in the HTML: site.js folds the sections on narrow screens,
     and without scripts everything stays visible."""
     return f'<button type="button" class="fold" aria-expanded="true" aria-controls="{controls}">{label}</button>'
+
+
+def _side_list(title: str, items: list, current: str, more_href: str, more_text: str, names: bool = True) -> str:
+    """A side column section: a list of (name, href) links with the current one marked, and a link below it.
+    The heading is the section's disclosure button, so the further link goes below the list. ``names``: the
+    entries are command, function or topic names, set in the code font; otherwise group names, in the text font."""
+    links = "".join(f'<li><a href="{href}"{CURRENT if n == current else ""}>{html.escape(n)}</a></li>' for n, href in items)
+    return (f'<h2 class="side-title" id="side-title">{_fold("side-body", title)}</h2>'
+            f'<div class="side-body" id="side-body"><ul class="side-list{"" if names else " side-groups"}">{links}</ul>'
+            f'<p class="side-more"><a href="{more_href}">{more_text}</a></p></div>')
 
 
 def _toc(heads: list[tuple[int, str, str]]) -> str:

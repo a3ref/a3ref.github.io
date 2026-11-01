@@ -126,8 +126,13 @@ a:hover { text-decoration-thickness: 2px; }
   .frame-one > .side { position: fixed; top: 4.5rem; left: max(1.5rem, calc(50% - 54.5rem)); width: 15rem;
     max-height: calc(100vh - 5.5rem - var(--foot, 0px)); }
   .frame-one > :not(.side) { grid-column: 2; }
+  /* index pages with a side column (the groups): the column, then the list at the width it has alone */
+  .page-index .frame-one { grid-template-columns: 15rem minmax(0, 1fr); }
+  .page-index .frame-one > .content { max-width: 72rem; }
 }
 .side > .toc { flex: none; display: flex; flex-direction: column; max-height: 42vh; }
+/* alone in the column (the groups of an index page), the contents take all of its height */
+.side > .toc:only-child { flex: 0 1 auto; min-height: 0; max-height: none; }
 .side > .sidenav { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .side .toc > ol, .side-body { min-height: 0; overflow-y: auto; padding-bottom: .25rem; }
 .side > nav + nav { margin-top: 1rem; padding-top: .8rem; border-top: 1px solid var(--rule); }
@@ -145,6 +150,7 @@ a:hover { text-decoration-thickness: 2px; }
 .side-list, .toc ol { list-style: none; margin: 0; padding: 0; }
 .side-list a, .toc a { display: block; padding: .18rem .6rem; border-left: 2px solid var(--rule); color: var(--muted); text-decoration: none; }
 .side-list a { font: 400 .84rem/1.45 var(--f-code); overflow-wrap: anywhere; }
+.side-groups a { font: 400 .875rem/1.4 var(--f-text); padding-top: .22rem; padding-bottom: .22rem; }
 .toc a { line-height: 1.4; padding-top: .22rem; padding-bottom: .22rem; }
 .side-list a:hover, .toc a:hover { color: var(--ink); border-left-color: var(--rule-strong); }
 /* the current page, and the section being read (aria-current="location", set by site.js while scrolling) */
@@ -186,7 +192,9 @@ a:hover { text-decoration-thickness: 2px; }
   .frame-one { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
   .side { position: static; max-height: none; padding: .35rem .9rem; border: 1px solid var(--rule); border-radius: 8px; }
   .side > .toc { max-height: none; }
-  .side .toc > ol, .side-body { overflow: visible; }
+  .side .toc > ol { overflow: visible; }
+  /* a whole group (up to 260 pages) would push the page far down once opened: it scrolls in its box */
+  .side-body { max-height: 60vh; }
   .side > nav + nav { margin-top: .35rem; padding-top: .35rem; }
   .side-title, .toc-title { margin: 0; }
   .fold { min-height: 2.5rem; font-size: .9rem; }
@@ -308,9 +316,9 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
    scrollbar matches the page before the groups below the fold are drawn */
 .group.group-names { contain-intrinsic-size: auto 360px; }
 .count { color: var(--muted); font-size: .85rem; }
-.group-jump ul { columns: 15rem; column-gap: 2rem; list-style: none; margin: 0 0 1rem; padding: 0; }
-.group-jump li { break-inside: avoid; padding: .15rem 0; }
+.toc a .count { font-size: .8rem; font-weight: 400; }
 .group { content-visibility: auto; contain-intrinsic-size: auto 700px; }
+.page-head + .group h2 { margin-top: 0; }
 .group h2 { margin: 2.2rem 0 .7rem; }
 .entries { list-style: none; margin: 0; padding: 0; }
 .entries li { display: grid; grid-template-columns: minmax(10rem, 17rem) 1fr; gap: 1.5rem; padding: .45rem 0; border-bottom: 1px solid var(--rule); }
@@ -345,6 +353,16 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
 .footer-inner { max-width: 88rem; margin: 0 auto; padding: 1.4rem 1.5rem 2rem; display: flex; flex-wrap: wrap; gap: .6rem 2rem; justify-content: space-between; }
 .footer-inner p { margin: 0; }
 .footer-links { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; margin: 0; padding: 0; list-style: none; }
+/* Back to top: fixed in the corner once the page has scrolled a screen and a half (site.js sets .to-top-on);
+   before that, and without scripts, it is not shown. "#top" scrolls to the top of the page with no such id. */
+.to-top { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 20; display: flex; align-items: center; gap: .4rem;
+  padding: .45rem .8rem; font-size: .85rem; color: var(--ink); text-decoration: none; background: var(--surface);
+  border: 1px solid var(--rule-strong); border-radius: 999px; box-shadow: 0 2px 8px rgb(0 0 0 / .18);
+  visibility: hidden; opacity: 0; transition: opacity .15s, visibility .15s; }
+.to-top::before { content: ""; width: .45rem; height: .45rem; margin-top: .25rem;
+  border-left: 1.5px solid currentColor; border-top: 1.5px solid currentColor; transform: rotate(45deg); }
+.to-top:hover { background: var(--surface-2); }
+.to-top-on { visibility: visible; opacity: 1; }
 
 /* ---- smaller screens -------------------------------------------------------------------------------- */
 
