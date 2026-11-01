@@ -327,7 +327,7 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
 .home-strip { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 3rem; margin: 0 0 2.5rem;
   padding-bottom: 2rem; border-bottom: 1px solid var(--rule); }
 .home-col h2, .home-side h2, .home-strip h2 { margin: 0 0 .7rem; font-size: 1.15rem; }
-.home-col h2 a, .home-side h2 a { color: var(--ink); }
+.home-col h2 a, .home-side h2 a, .group-names h2 a { color: var(--ink); }
 .home-strip p { font-size: .92rem; color: var(--muted); }
 .home-side section + section { margin-top: 2.2rem; }
 .group-list, .recent, .data-list { list-style: none; margin: 0; padding: 0; }
