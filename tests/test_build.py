@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -158,6 +159,17 @@ class BuildTest(unittest.TestCase):
             self.assertEqual((self.out / f"{path}.og.png").read_bytes()[:8], b"\x89PNG\r\n\x1a\n", path)
         home = (self.out / "index.html").read_text(encoding="utf-8")
         self.assertIn('<meta property="og:image" content="https://a3ref.github.io/assets/og.png">', home)
+
+    def test_kind_index_lists_every_name(self):
+        index = json.loads((self.out / "index.json").read_text(encoding="utf-8"))["items"]
+        for kind, type_ in (("commands", "command"), ("functions", "function")):
+            page = (self.out / kind / "index.html").read_text(encoding="utf-8")
+            listed = set(re.findall(r'<ul class="name-list[^"]*">(.*?)</ul>', page))
+            links = {m for block in listed for m in re.findall(r'<a href="([^"]+)\.html">', block)}
+            expected = {Path(r["md"]).stem for r in index if r["type"] == type_}
+            self.assertEqual(links, expected, kind)
+            # the group's heading leads to its own page
+            self.assertRegex(page, r'<section class="group group-names"><h2 id="[^"]+"><a href="\.\./groups/' + kind + r'/[^"]+\.html">')
 
     def test_no_crashes(self):
         report = json.loads((self.out / "report.json").read_text(encoding="utf-8"))

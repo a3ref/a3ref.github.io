@@ -601,14 +601,20 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
             lede = (f"{len(records)} pages: data types, locality and multiplayer, event handlers, mission editing, "
                     "configs, GUI, tools and more.")
         else:
-            cards = "".join(
-                f'<li class="group-card"><h2><a href="../{group_path(kind, g)}">{html.escape(g)}</a></h2>'
-                f'<p class="count">{len(groups[g])} {label.lower() if len(groups[g]) != 1 else label.lower().rstrip("s")}</p>'
-                f'<p class="group-sample">{", ".join(html.escape(r["name"]) for r in sorted(groups[g], key=lambda r: r["name"].lower())[:4])}'
-                f'{", …" if len(groups[g]) > 4 else ""}</p></li>'
+            # Every name, by group, so a reader can scan or Ctrl+F the whole list; names only, as the summaries of
+            # ~3000 entries would triple the page. The group's heading leads to its own page, which has them.
+            def names(members: list[dict]) -> str:
+                return "".join(f'<li><a href="{slugs[r["title"]]}.html">{html.escape(r["name"])}</a></li>'
+                               for r in sorted(members, key=lambda r: r["name"].lower()))
+
+            jump = "".join(f'<li><a href="#{_anchor(g)}">{html.escape(g)}</a> <span class="count">{len(groups[g])}</span></li>'
+                           for g in ordered)
+            main = f'<nav class="group-jump" aria-label="Groups"><ul>{jump}</ul></nav>' + "".join(
+                f'<section class="group group-names"><h2 id="{_anchor(g)}"><a href="../{group_path(kind, g)}">{html.escape(g)}</a></h2>'
+                f'<ul class="name-list{" name-list-wide" if kind == "functions" else ""}">{names(groups[g])}</ul></section>'
                 for g in ordered)
-            main = f'<ul class="group-cards">{cards}</ul>'
-            lede = f"{len(records)} {label.lower()} in {len(groups)} groups. A page can belong to several groups."
+            lede = (f"{len(records)} {label.lower()} in {len(groups)} groups; a page can belong to several. "
+                    "A group's heading leads to its page, with a one-line summary of each.")
             for g in ordered:
                 path = group_path(kind, g)
                 header = f"""<h1 class="name">{html.escape(g)}</h1>

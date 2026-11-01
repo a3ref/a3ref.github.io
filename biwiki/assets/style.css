@@ -297,12 +297,16 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
 
 /* ---- index pages ----------------------------------------------------------------------------------- */
 
-.group-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: .9rem; margin: 0; padding: 0; list-style: none; }
-.group-card { padding: .9rem 1rem 1rem; border: 1px solid var(--rule); border-radius: 8px; }
-.group-card:hover { border-color: var(--rule-strong); }
-.group-card h2 { margin: 0 0 .15rem; font-size: 1.05rem; }
-.group-card .count { margin: 0 0 .4rem; }
-.group-sample { margin: 0; color: var(--muted); font: 400 .8rem/1.5 var(--f-code); overflow-wrap: anywhere; }
+/* every name of a group in columns; each link at least 24px square, the WCAG 2.2 target size (names such as + are
+   one character wide) */
+.name-list { columns: 15rem; column-gap: 2rem; list-style: none; margin: 0; padding: 0; font: 400 .86rem/1.5 var(--f-code); }
+/* function names run to ~40 characters (BIS_fnc_...): three columns, so few of them wrap */
+.name-list-wide { columns: 19rem; }
+.name-list li { break-inside: avoid; overflow-wrap: anywhere; }
+.name-list a { display: inline-block; min-width: 24px; min-height: 24px; padding: 3px 0; }
+/* the height an unrendered group is assumed to have: ~35 names in four columns (one column on phones), so the
+   scrollbar matches the page before the groups below the fold are drawn */
+.group.group-names { contain-intrinsic-size: auto 360px; }
 .count { color: var(--muted); font-size: .85rem; }
 .group-jump ul { columns: 15rem; column-gap: 2rem; list-style: none; margin: 0 0 1rem; padding: 0; }
 .group-jump li { break-inside: avoid; padding: .15rem 0; }
@@ -356,6 +360,7 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
   .theme-switch { order: 2; margin-left: auto; }
   .frame, .footer-inner { padding-left: 1rem; padding-right: 1rem; }
   .entries li { grid-template-columns: 1fr; gap: .1rem; }
+  .group.group-names { contain-intrinsic-size: auto 900px; }
   .home-grid { grid-template-columns: 1fr; gap: 2rem; }
   pre.code { margin-left: -1rem; margin-right: -1rem; border-radius: 0; border-left: 0; border-right: 0; }
   .code-file figcaption { margin: 0 -1rem; border-radius: 0; border-left: 0; border-right: 0; }
@@ -370,6 +375,6 @@ hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
 
 /* Code shows the characters as typed: JetBrains Mono and Cascadia Code would draw >= as ≥ and != as ≠.
    Last in the file because each `font:` shorthand above resets the ligature setting. */
-code, kbd, .name, .search-key, .results .r-name, .side-list a, .group-sample, .entry-name, .recent a, .data-list a {
+code, kbd, .name, .search-key, .results .r-name, .side-list a, .name-list a, .entry-name, .recent a, .data-list a {
   font-variant-ligatures: none;
 }
