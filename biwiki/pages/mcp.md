@@ -219,7 +219,7 @@ The agent should call `search`, `get` or `lint_sqf` instead of answering from me
   installs packages straight from git). Replace `github:a3ref/mcp` with `a3ref-mcp`.
 - **Windows: the client cannot find `npx`.** Some clients do not run `.cmd` files directly. Use the command `cmd`
   with the arguments `/c npx -y a3ref-mcp`, e.g. `"command": "cmd", "args": ["/c", "npx", "-y", "a3ref-mcp"]`.
-- **Your own copy of the site.** The server reads https://a3ref.github.io/; set the environment variable
+- **Your own copy of the site.** The server reads https://wiki.arma3.io/; set the environment variable
   `A3REF_BASE_URL` to read a mirror instead.
 
 ## How it works
@@ -228,5 +228,5 @@ The server downloads what it needs from this site (`index.json`, `syntax.json` a
 and keeps it in memory for an hour. Nothing is bundled, so answers follow the wiki without updating the server.
 
 No MCP client? Every page of this site is also plain Markdown and JSON at a stable URL; an agent that can fetch
-web pages can start from [llms.txt](https://a3ref.github.io/llms.txt). The source code, issues and release notes
+web pages can start from [llms.txt](https://wiki.arma3.io/llms.txt). The source code, issues and release notes
 are on [GitHub](https://github.com/a3ref/mcp).

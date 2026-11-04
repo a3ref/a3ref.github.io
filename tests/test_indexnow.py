@@ -11,7 +11,7 @@ from unittest import mock
 
 from biwiki import indexnow
 
-BASE = "https://a3ref.github.io/"
+BASE = "https://wiki.arma3.io/"
 OLD = (f"<url><loc>{BASE}</loc></url>\n<url><loc>{BASE}commands/setPos.html</loc><lastmod>2026-10-01T10:00:00Z</lastmod></url>\n"
        f"<url><loc>{BASE}commands/getPos.html</loc><lastmod>2026-09-01T10:00:00Z</lastmod></url>\n")
 NEW = (f"<url><loc>{BASE}</loc></url>\n<url><loc>{BASE}commands/setPos.html</loc><lastmod>2026-10-01T18:30:00Z</lastmod></url>\n"
@@ -58,7 +58,7 @@ class IndexNowTest(unittest.TestCase):
             indexnow.submit([f"{BASE}mcp.html"], BASE)
         body = json.loads(requests[0].data)
         self.assertEqual(requests[0].full_url, "https://api.indexnow.org/indexnow")
-        self.assertEqual(body["host"], "a3ref.github.io")
+        self.assertEqual(body["host"], "wiki.arma3.io")
         self.assertEqual(body["keyLocation"], f"{BASE}{indexnow.KEY}.txt")
         self.assertEqual(body["urlList"], [f"{BASE}mcp.html"])
 

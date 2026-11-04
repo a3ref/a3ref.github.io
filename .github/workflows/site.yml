@@ -42,7 +42,7 @@ jobs:
       - id: compare
         run: |
           latest=$(git ls-remote https://github.com/a3ref/data.git refs/heads/main | cut -f1)
-          live=$(curl -fsSL https://a3ref.github.io/data-version.txt || true)
+          live=$(curl -fsSL https://wiki.arma3.io/data-version.txt || true)
           echo "data: $latest, live site: ${live:-none}"
           if [ "$GITHUB_EVENT_NAME" != "schedule" ] || [ "$latest" != "$live" ]; then
             echo "deploy=true" >> "$GITHUB_OUTPUT"
@@ -75,7 +75,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       # the live sitemap, before this deploy replaces it: IndexNow gets the pages that differ from it
-      - run: curl -fsSL https://a3ref.github.io/sitemap.xml -o previous-sitemap.xml || true
+      - run: curl -fsSL https://wiki.arma3.io/sitemap.xml -o previous-sitemap.xml || true
       - run: python -m unittest  # parser and build tests on tests/fixtures, a few seconds
       - id: build
         run: python -m biwiki build

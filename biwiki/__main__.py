@@ -19,7 +19,7 @@ def main(argv=None) -> None:
     ap = argparse.ArgumentParser(prog="biwiki", description=__doc__)
     ap.add_argument("--raw", type=Path, default=DATA / "raw", help="raw wikitext cache directory (default: ./data/raw, from the a3ref/data clone)")
     ap.add_argument("--dataset", type=Path, help="also write parsed commands.json/functions.json/index.json here")
-    ap.add_argument("--base-url", default="https://a3ref.github.io/", help="public site URL, for llms.txt and sitemap.xml")
+    ap.add_argument("--base-url", default="https://wiki.arma3.io/", help="public site URL, for llms.txt and sitemap.xml")
     ap.add_argument("--out", type=Path, default=ROOT / "out", help="generated mirror directory")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -53,7 +53,7 @@ def main(argv=None) -> None:
     p.add_argument("--known", type=Path, default=ROOT / "known-problems.json", help="accepted problems baseline")
     p.add_argument("--accept", action="store_true", help="accept all current problems as the new baseline")
     p.add_argument("--issue", action="store_true", help="open/update/close the GitHub issue (needs gh and GH_TOKEN)")
-    p.add_argument("--site", default="https://a3ref.github.io/", help="site URL used in links")
+    p.add_argument("--site", default="https://wiki.arma3.io/", help="site URL used in links")
     p = sub.add_parser("indexnow", help="send the pages a deploy changed to IndexNow (Bing, Yandex, ...)")
     p.add_argument("--previous", type=Path, required=True, help="the live sitemap.xml, saved before the deploy")
     p.add_argument("--dry-run", action="store_true", help="list the changed pages without sending them")

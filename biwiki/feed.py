@@ -104,6 +104,11 @@ def _markdown(entries: list[dict], base: str) -> str:
     return "\n".join(out)
 
 
+# Atom ids are permanent names, not links: they keep the site's first address, so moving the site to
+# wiki.arma3.io does not show feed readers every recent entry again as new.
+ATOM_ID_BASE = "https://a3ref.github.io/"
+
+
 def _atom(entries: list[dict], base: str) -> str:
     items = []
     for e in entries:
@@ -115,12 +120,12 @@ def _atom(entries: list[dict], base: str) -> str:
     xml = ['<?xml version="1.0" encoding="utf-8"?>', '<feed xmlns="http://www.w3.org/2005/Atom">',
            "<title>a3ref: Arma 3 scripting changes</title>",
            f'<link href="{base}"/>', f'<link rel="self" href="{base}feed.xml"/>',
-           f"<id>{base}feed.xml</id>", f"<updated>{now}</updated>",
+           f"<id>{ATOM_ID_BASE}feed.xml</id>", f"<updated>{now}</updated>",
            "<author><name>BI Community Wiki contributors</name></author>"]
     for when, label, i in items[:MAX_FEED_ENTRIES]:
         url = f"{base}{i['path']}.html"
         xml += ["<entry>", f"<title>{escape(i['name'])} ({i['type']}) {label}</title>", f'<link href="{url}"/>',
-                f"<id>{url}#rev{i['revid']}</id>", f"<updated>{when}</updated>",
+                f"<id>{ATOM_ID_BASE}{i['path']}.html#rev{i['revid']}</id>", f"<updated>{when}</updated>",
                 f'<summary>{escape(i["name"])} was {label} on the wiki (revision {i["revid"]}). Source: {escape(i["url"])}</summary>',
                 "</entry>"]
     xml.append("</feed>")

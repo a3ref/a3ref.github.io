@@ -233,7 +233,7 @@ class CodeLinker:
 
 class Site:
     def __init__(self, out_dir: Path, pages: dict[str, tuple[str, str]], kind_labels: dict[str, str],
-                 base_url: str = "https://a3ref.github.io/", og_images: bool = False):
+                 base_url: str = "https://wiki.arma3.io/", og_images: bool = False):
         self.out = out_dir
         self.og_images = og_images  # pages point at their own preview image (ogimage.py), else at assets/og.png
         self.linker = CodeLinker(pages)

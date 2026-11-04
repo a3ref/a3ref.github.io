@@ -5,7 +5,7 @@ is in [README.md](README.md); read it only when the task touches the public outp
 the code.
 
 **a3ref** mirrors the Arma 3 scripting pages of the BI Community Wiki (commands, functions, concept topics) and
-publishes them as Markdown, JSON and HTML at https://a3ref.github.io/. This repository holds the Python code
+publishes them as Markdown, JSON and HTML at https://wiki.arma3.io/. This repository holds the Python code
 (package `biwiki`) and deploys the site; it holds no data.
 
 ## Repositories
@@ -47,7 +47,7 @@ git clone https://github.com/a3ref/data data  # needed by build and feed
 2. `python -m biwiki build` then `python -m biwiki report`: no new problems. If a change fixes problems or
    knowingly accepts new ones, run `python -m biwiki report --accept` and commit `known-problems.json`.
 3. Check the real output of what you changed, e.g. `out/commands/setPos.md`, `out/commands/setPos.json`,
-   `out/index.json`. To compare with the published version: `curl -s https://a3ref.github.io/commands/setPos.md`.
+   `out/index.json`. To compare with the published version: `curl -s https://wiki.arma3.io/commands/setPos.md`.
 4. HTML, CSS or JS changes: open the page via `python -m biwiki serve`. Pages must stay valid for html-validate,
    the W3C HTML/CSS validators, axe (WCAG 2.2 AA, light and dark) and Lighthouse; see the constraints below.
 5. A new parser case: add the page title to `PAGES` in `tests/fixtures/refresh.py`, run it, add a test.

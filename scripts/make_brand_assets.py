@@ -46,7 +46,7 @@ def og_image() -> Image.Image:
     d.rounded_rectangle([60, top, 1140, 590], radius=14, fill="#0f1115", outline=p["rule"], width=2)
     f, fb = font(MONO, 28), font(MONO_B, 28)
     lines = [
-        [("$ ", p["indfor"]), ("curl ", p["ink"]), ("a3ref.github.io/commands/setPos.md", p["accent"])],
+        [("$ ", p["indfor"]), ("curl ", p["ink"]), ("wiki.arma3.io/commands/setPos.md", p["accent"])],
         [("# setPos", p["ink"])],
         [("Sets object position to format PositionAGLS", p["muted"])],
         [("object ", p["ink"]), ("setPos", p["accent"]), (" pos", p["ink"])],

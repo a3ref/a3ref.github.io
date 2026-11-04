@@ -63,8 +63,8 @@ class BuildTest(unittest.TestCase):
         self.assertIn("SoftwareSourceCode", page)
         self.assertTrue((self.out / "mcp.md").is_file())
         self.assertEqual((self.out / f"{KEY}.txt").read_text(encoding="utf-8"), KEY, "IndexNow's key file")
-        self.assertIn("https://a3ref.github.io/mcp.html", (self.out / "sitemap.xml").read_text(encoding="utf-8"))
-        self.assertIn("https://a3ref.github.io/mcp.md", (self.out / "llms.txt").read_text(encoding="utf-8"))
+        self.assertIn("https://wiki.arma3.io/mcp.html", (self.out / "sitemap.xml").read_text(encoding="utf-8"))
+        self.assertIn("https://wiki.arma3.io/mcp.md", (self.out / "llms.txt").read_text(encoding="utf-8"))
         self.assertIn('href="../mcp.html"', (self.out / "commands" / "setPos.html").read_text(encoding="utf-8"))
 
     def test_dataset_bundles(self):
@@ -141,14 +141,14 @@ class BuildTest(unittest.TestCase):
 
     def test_seo_metadata(self):
         page = (self.out / "commands" / "setPos.html").read_text(encoding="utf-8")
-        self.assertIn('<link rel="canonical" href="https://a3ref.github.io/commands/setPos.html">\n'
+        self.assertIn('<link rel="canonical" href="https://wiki.arma3.io/commands/setPos.html">\n'
                       '<meta name="color-scheme" content="light dark">', page)
-        self.assertIn('"mainEntityOfPage": {"@type": "WebPage", "@id": "https://a3ref.github.io/commands/setPos.html"}', page)
+        self.assertIn('"mainEntityOfPage": {"@type": "WebPage", "@id": "https://wiki.arma3.io/commands/setPos.html"}', page)
         # served at every missing address, so it names none as its own
         self.assertNotIn('rel="canonical"', (self.out / "404.html").read_text(encoding="utf-8"))
 
     def test_preview_images(self):
-        url = "https://a3ref.github.io/commands/setPos.og.png"
+        url = "https://wiki.arma3.io/commands/setPos.og.png"
         page = (self.out / "commands" / "setPos.html").read_text(encoding="utf-8")
         self.assertIn(f'<meta property="og:image" content="{url}">', page)
         self.assertIn(f'<meta name="twitter:image" content="{url}">', page)
@@ -158,7 +158,7 @@ class BuildTest(unittest.TestCase):
         for path in ("commands/setPos", "functions/BIS_fnc_spawnGroup", "topics/Position"):
             self.assertEqual((self.out / f"{path}.og.png").read_bytes()[:8], b"\x89PNG\r\n\x1a\n", path)
         home = (self.out / "index.html").read_text(encoding="utf-8")
-        self.assertIn('<meta property="og:image" content="https://a3ref.github.io/assets/og.png">', home)
+        self.assertIn('<meta property="og:image" content="https://wiki.arma3.io/assets/og.png">', home)
 
     def test_kind_index_lists_every_name(self):
         index = json.loads((self.out / "index.json").read_text(encoding="utf-8"))["items"]

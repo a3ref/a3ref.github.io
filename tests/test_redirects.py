@@ -9,7 +9,7 @@ from pathlib import Path
 
 from biwiki.render import Pages, Writer, _redirect_stub, _sitemap, redirect_target
 
-BASE = "https://a3ref.github.io/"
+BASE = "https://wiki.arma3.io/"
 
 
 class RedirectTargetTest(unittest.TestCase):

@@ -13,9 +13,12 @@ from the Bohemia Interactive Community Wiki. The original wiki sits behind a bot
 agents; this mirror serves the same content as **Markdown** and **JSON** at stable, predictable URLs, with no API key,
 no rate limit and open CORS. A readable **HTML** version is there for people too.
 
-Site: **https://a3ref.github.io/** · Data: **[a3ref/data](https://github.com/a3ref/data)** ·
-MCP server: **[a3ref/mcp](https://github.com/a3ref/mcp)** · Agent guide: **https://a3ref.github.io/llms.txt** ·
+Site: **https://wiki.arma3.io/** · Data: **[a3ref/data](https://github.com/a3ref/data)** ·
+MCP server: **[a3ref/mcp](https://github.com/a3ref/mcp)** · Agent guide: **https://wiki.arma3.io/llms.txt** ·
 Working on the code: **[AGENTS.md](AGENTS.md)**
+
+The site moved from https://a3ref.github.io/ in November 2026; the old address redirects every path to the same path
+here.
 
 ## For AI agents and programs
 
@@ -27,18 +30,18 @@ Without MCP, everything is a plain GET:
 
 | You need | Fetch |
 |---|---|
-| where to start | [`llms.txt`](https://a3ref.github.io/llms.txt): how to use the mirror, topics, groups (a few thousand tokens) |
-| one command | `https://a3ref.github.io/commands/<name>.md` or `.json`, e.g. [`commands/setPos.md`](https://a3ref.github.io/commands/setPos.md) |
-| one function | `https://a3ref.github.io/functions/<name>.md` or `.json`, e.g. [`functions/BIS_fnc_spawnGroup.json`](https://a3ref.github.io/functions/BIS_fnc_spawnGroup.json) |
-| a concept | `https://a3ref.github.io/topics/<name>.md`, e.g. [`topics/Multiplayer_Scripting.md`](https://a3ref.github.io/topics/Multiplayer_Scripting.md), [`topics/Event_Handlers.md`](https://a3ref.github.io/topics/Event_Handlers.md) |
-| every name | [`names.txt`](https://a3ref.github.io/names.txt), one per line |
+| where to start | [`llms.txt`](https://wiki.arma3.io/llms.txt): how to use the mirror, topics, groups (a few thousand tokens) |
+| one command | `https://wiki.arma3.io/commands/<name>.md` or `.json`, e.g. [`commands/setPos.md`](https://wiki.arma3.io/commands/setPos.md) |
+| one function | `https://wiki.arma3.io/functions/<name>.md` or `.json`, e.g. [`functions/BIS_fnc_spawnGroup.json`](https://wiki.arma3.io/functions/BIS_fnc_spawnGroup.json) |
+| a concept | `https://wiki.arma3.io/topics/<name>.md`, e.g. [`topics/Multiplayer_Scripting.md`](https://wiki.arma3.io/topics/Multiplayer_Scripting.md), [`topics/Event_Handlers.md`](https://wiki.arma3.io/topics/Event_Handlers.md) |
+| every name | [`names.txt`](https://wiki.arma3.io/names.txt), one per line |
 | one group | `groups/commands/<group>.md`, `groups/functions/<group>.md`, listed in `llms.txt` |
-| to search | [`index.json`](https://a3ref.github.io/index.json) (2 MB): every entry with syntax, summary, groups, locality, status, operator symbol, paths |
-| one event handler | [`events.json`](https://a3ref.github.io/events.json): every event of the object, mission, UI and Eden Editor event handler pages with its kind, summary, section heading and `#anchor`, e.g. `AnimStateChanged` → `topics/Event_Handlers.html#animstatechanged` |
-| everything | [`commands.json`](https://a3ref.github.io/commands.json) (7 MB), [`functions.json`](https://a3ref.github.io/functions.json) (4 MB), [`topics.json`](https://a3ref.github.io/topics.json) (27 MB): for programs; a model should read single pages instead |
-| a linter's data | [`syntax.json`](https://a3ref.github.io/syntax.json) (0.5 MB): forms (nullary/unary/binary), status, replacements and syntax of every name |
-| the record format | [`schema.json`](https://a3ref.github.io/schema.json) (JSON Schema 2020-12) |
-| what changed | [`changes.md`](https://a3ref.github.io/changes.md), [`changes.json`](https://a3ref.github.io/changes.json), Atom [`feed.xml`](https://a3ref.github.io/feed.xml) |
+| to search | [`index.json`](https://wiki.arma3.io/index.json) (2 MB): every entry with syntax, summary, groups, locality, status, operator symbol, paths |
+| one event handler | [`events.json`](https://wiki.arma3.io/events.json): every event of the object, mission, UI and Eden Editor event handler pages with its kind, summary, section heading and `#anchor`, e.g. `AnimStateChanged` → `topics/Event_Handlers.html#animstatechanged` |
+| everything | [`commands.json`](https://wiki.arma3.io/commands.json) (7 MB), [`functions.json`](https://wiki.arma3.io/functions.json) (4 MB), [`topics.json`](https://wiki.arma3.io/topics.json) (27 MB): for programs; a model should read single pages instead |
+| a linter's data | [`syntax.json`](https://wiki.arma3.io/syntax.json) (0.5 MB): forms (nullary/unary/binary), status, replacements and syntax of every name |
+| the record format | [`schema.json`](https://wiki.arma3.io/schema.json) (JSON Schema 2020-12) |
+| what changed | [`changes.md`](https://wiki.arma3.io/changes.md), [`changes.json`](https://wiki.arma3.io/changes.json), Atom [`feed.xml`](https://wiki.arma3.io/feed.xml) |
 | version history | the [a3ref/data](https://github.com/a3ref/data) repository, one commit per day with changes |
 
 Paths use the name as written in scripts (`setPos`, `diag_fps`, `BIS_fnc_spawnGroup`), and **lower-case paths work
@@ -67,11 +70,11 @@ Paste this into `AGENTS.md`, `CLAUDE.md`, `.cursorrules` or your system prompt:
 ```markdown
 ## Arma 3 / SQF reference
 When writing or reviewing SQF for Arma 3, check commands and BIS_fnc_* functions against
-https://a3ref.github.io/ instead of relying on memory:
-- https://a3ref.github.io/commands/<command>.md (e.g. commands/setPos.md)
-- https://a3ref.github.io/functions/<BIS_fnc_name>.md (e.g. functions/BIS_fnc_spawnGroup.md)
-- https://a3ref.github.io/topics/<topic>.md (e.g. topics/Multiplayer_Scripting.md)
-- https://a3ref.github.io/names.txt lists every name; https://a3ref.github.io/llms.txt explains the rest
+https://wiki.arma3.io/ instead of relying on memory:
+- https://wiki.arma3.io/commands/<command>.md (e.g. commands/setPos.md)
+- https://wiki.arma3.io/functions/<BIS_fnc_name>.md (e.g. functions/BIS_fnc_spawnGroup.md)
+- https://wiki.arma3.io/topics/<topic>.md (e.g. topics/Multiplayer_Scripting.md)
+- https://wiki.arma3.io/names.txt lists every name; https://wiki.arma3.io/llms.txt explains the rest
 Check syntax, parameter types, return value, locality (local/global argument and effect),
 status (deprecated commands name a replacement) and the Arma 3 version that introduced the command.
 ```
@@ -79,22 +82,22 @@ status (deprecated commands name a replacement) and the Arma 3 version that intr
 ### From code
 
 ```sh
-curl -s https://a3ref.github.io/commands/setPos.md
-curl -s https://a3ref.github.io/index.json | jq -r '.items[] | select(.name | test("^setPos")) | .syntax[]'
+curl -s https://wiki.arma3.io/commands/setPos.md
+curl -s https://wiki.arma3.io/index.json | jq -r '.items[] | select(.name | test("^setPos")) | .syntax[]'
 ```
 
 ```python
 import json, urllib.request
 
-index = json.load(urllib.request.urlopen("https://a3ref.github.io/index.json"))
+index = json.load(urllib.request.urlopen("https://wiki.arma3.io/index.json"))
 entry = next(e for e in index["items"] if e["name"].lower() == "createvehicle")
-page = json.load(urllib.request.urlopen("https://a3ref.github.io/" + entry["json"]))
+page = json.load(urllib.request.urlopen("https://wiki.arma3.io/" + entry["json"]))
 for s in page["syntaxes"]:
     print(s["syntax"], "->", s["returns"]["type"] if s["returns"] else None)
 ```
 
 ```js
-const index = await (await fetch("https://a3ref.github.io/index.json")).json();
+const index = await (await fetch("https://wiki.arma3.io/index.json")).json();
 const fns = index.items.filter((e) => e.type === "function" && e.groups.includes("Multiplayer"));
 ```
 
@@ -148,7 +151,7 @@ If Cloudflare ever blocks the GitHub runner, sync locally
 
 ## Parser problems
 
-Every build writes `report.json` (also published at https://a3ref.github.io/report.json) and never stops on a single
+Every build writes `report.json` (also published at https://wiki.arma3.io/report.json) and never stops on a single
 broken page: the page is left out, reported, and the rest of the site is built.
 
 After each deploy, `python -m biwiki report --issue` compares the report with `known-problems.json`, the accepted baseline.
@@ -213,7 +216,7 @@ Cloudflare rejects real headless Chrome; if a checkbox appears, run without `--h
 
 ### JSON record
 
-A command or function record (format 2, `"version": 2` in [`schema.json`](https://a3ref.github.io/schema.json)),
+A command or function record (format 2, `"version": 2` in [`schema.json`](https://wiki.arma3.io/schema.json)),
 shortened:
 
 ```jsonc

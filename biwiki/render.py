@@ -18,7 +18,7 @@ from .parse import parse_page, parse_topic, script_name, wiki_url
 from .report import Report
 from .site import PLACEHOLDER, Site, _anchor, heading_id, plain_text, redirect_page
 
-SITE_URL = "https://a3ref.github.io/"
+SITE_URL = "https://wiki.arma3.io/"
 SCHEMA = Path(__file__).parent / "schema.json"
 PAGES_DIR = Path(__file__).parent / "pages"  # the site's own pages, written by hand (Markdown)
 KINDS = ["commands", "functions", "topics"]
