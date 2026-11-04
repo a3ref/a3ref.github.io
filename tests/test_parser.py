@@ -734,6 +734,10 @@ class EventEntriesTest(unittest.TestCase):
             self.sec("OnCopy", 5, "Fires when entities are copied."),
         ]}
         self.assertEqual([(e["name"], e["kind"]) for e in event_entries(eden, "Eden")], [("OnCopy", "Eden Editor")])
+        mission = {"title": "Arma 3: Mission Event Handlers", "sections": [
+            self.sec("Events", 3), self.sec("PlayerDisconnected (Arma 3 v1.58 Server execution)", 5, "Executes ...")]}
+        self.assertEqual([(e["name"], e["anchor"], e["arma3_since"]) for e in event_entries(mission, "M")],
+                         [("PlayerDisconnected", "playerdisconnected", "1.58")])
         self.assertEqual(event_entries({"title": "Position", "sections": [self.sec("Format", 4)]}, "Position"), [])
 
     def test_unlisted_events(self):

@@ -601,7 +601,7 @@ EVENT_KIND_OF_SECTION = {"basic": "object", "multiplayer": "multiplayer", "curat
 NOT_EVENTS = {"Config"}  # Eden: how to define handlers in config, a leaf section with a one-word heading
 # "AnimDone", "Deleted (Entity) (Arma 3 v1.68)", "onVideoStopped (Arma 2: Operation Arrowhead v1.56)"
 _EVENT_HEADING = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)((?: \([^()]*\))*)")
-_GAME_VERSION = re.compile(r" \([^()]* v\d[\d.]*\)")
+_GAME_VERSION = re.compile(r" \([^()]* v\d[^()]*\)")  # also "(Arma 3 v1.58 Server execution)"
 _ICON_LINE = re.compile(r"^(?:(?:Global|Local) (?:argument|effect)|Server execution)+(?:\n|$)")
 
 
@@ -623,7 +623,7 @@ def event_entries(rec: dict, s: str) -> list[dict]:
         m = _EVENT_HEADING.fullmatch(heading)
         if not leaf or not m or m.group(1) in NOT_EVENTS:
             continue
-        since = re.search(r" \(Arma 3 v(\d[\d.]*)\)", heading)
+        since = re.search(r" \(Arma 3 v(\d[\d.]*\d)\b", heading)
         out.append({
             "name": m.group(1), "kind": kind, "page": rec["title"], "section": heading,
             "html": f"topics/{s}.html", "anchor": heading_id(_GAME_VERSION.sub("", heading)),
