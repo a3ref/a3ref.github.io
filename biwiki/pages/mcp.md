@@ -13,8 +13,8 @@ scheduler, event handlers.
 
 | Tool | What it does |
 |---|---|
-| `search` | Find commands, functions and topics by name, partial name, operator symbol (`>>`, `!=`) or by what they do ("delete vehicle") |
-| `get` | Read a page: syntax, typed parameters, return value, locality, examples, community notes. Any spelling works (`SETPOS`, `spawnGroup`, `bis fnc spawngroup`); `section` returns one part of a long topic, e.g. one event handler |
+| `search` | Find commands, functions, event handlers and topics by name, partial name, operator symbol (`>>`, `!=`) or by what they do ("delete vehicle") |
+| `get` | Read a page: syntax, typed parameters, return value, locality, examples, community notes. Any spelling works (`SETPOS`, `spawnGroup`, `bis fnc spawngroup`); an event handler's name (`AnimStateChanged`, `Draw3D`, `onLoad`) returns its section; `section` returns one part of a long topic |
 | `list_group` | Everything in a command or function group ("Multiplayer", "Object Manipulation", ...) |
 | `lint_sqf` | Check SQF: made-up commands, commands used without their left operand or argument, unknown `BIS_fnc_*` functions, deprecated or broken commands, diagnostic-build-only commands, `format` strings missing values, unknown event handler names |
 | `recent_changes` | What changed on the wiki recently |
