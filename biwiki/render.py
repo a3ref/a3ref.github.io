@@ -394,6 +394,7 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
     summaries: dict[str, str] = {}
     search: list[list] = []
     index: list[dict] = []
+    events: dict[str, list[dict]] = {}  # topic title -> its event handlers (EVENT_PAGES)
 
     for kind in kinds:
         target = out_dir / kind
@@ -440,6 +441,8 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
             search.append([rec["name"], rec["type"][0], f"{kind}/{s}", _short(short, 110), rec.get("operator") or ""])
             records[kind].append(rec)
             index.append(_index_entry(rec, kind, s, short))
+            if kind == "topics" and rec["title"] in EVENT_PAGES:
+                events[rec["title"]] = event_entries(rec, s)
 
         (target / "index.md").write_text(_kind_index(kind, records[kind], slugs), encoding="utf-8")
         site.kind_index(kind, records[kind], slugs, summaries)
@@ -457,7 +460,21 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
             stub = _redirect_stub(rec, redirects[rec["title"]], pages, base_url)
             writer.write(target, s, "html", stub, rec["name"], alias=stub)
             continue
-        writer.write(target, s, "html", render_html(members.get((kind, group))), rec["name"])
+        doc = render_html(members.get((kind, group)))
+        writer.write(target, s, "html", doc, rec["name"])
+        if rec["title"] in events:
+            # a short anchor the page lacks (a duplicate dropped by _place_anchors): the heading's own id
+            ids = set(re.findall(r'\sid="([^"]*)"', doc))
+            for e in events[rec["title"]]:
+                if e["anchor"] not in ids:
+                    e["anchor"] = heading_id(e["section"])
+    event_list = sorted((e for found in events.values() for e in found),
+                        key=lambda e: (e["name"].lower(), e["page"], e["section"]))
+    for title, name in unlisted_events(event_list, [r for r in records.get("topics", []) if r["title"] in events]):
+        report.add("unlisted-event", title, "topics", name)
+    for e in event_list:
+        search.append([e["name"], "e", e["html"].removesuffix(".html"), _short(e["summary"], 110), "",
+                       e["anchor"], e["kind"]])
 
     # Stamp the data with its newest wiki edit, not the build time, so unchanged data stays byte-identical.
     updated = max((r["updated"] for recs in records.values() for r in recs if r["updated"]), default=None)
@@ -472,6 +489,10 @@ def build(raw_dir: Path, out_dir: Path, kinds: list[str] | None = None, dataset:
         if dataset:
             # one record per line keeps git diffs in the data repository readable
             _write_lines(dataset / name, payload)
+    # site only: every event comes from a topic record the data repository already has
+    (out_dir / "events.json").write_text(
+        json.dumps({"updated": updated, "count": len(event_list), "items": event_list}, ensure_ascii=False,
+                   separators=(",", ":")), encoding="utf-8")
     lint = _syntax_index(records, updated)
     (out_dir / "syntax.json").write_text(json.dumps(lint, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     shutil.copyfile(SCHEMA, out_dir / "schema.json")
@@ -563,6 +584,78 @@ def _topic(raw, md_r, make, resolve_html, site: Site, s: str):
         r["groups"] = [group]
     short = summary(rec["markdown"])
     return rec, topic_markdown(rec_md), (lambda siblings: site.topic(s, rec_html, short, siblings)), short
+
+
+# Topic pages whose leaf sections are event handlers, one per heading ("=== AnimDone ===" or
+# "{{ArgTitle|3|Assembled|{{GVI|arma3|2.18}}}}"), and the kind of event; None: the level-3 section names it.
+EVENT_PAGES = {
+    "Arma 3: Event Handlers": None,
+    "Arma 3: Mission Event Handlers": "mission",
+    "User Interface Event Handlers": "UI",
+    "Arma 3: Eden Editor Event Handlers": None,
+}
+# level-3 sections of the object and Eden pages, by their first word
+EVENT_KIND_OF_SECTION = {"basic": "object", "multiplayer": "multiplayer", "curator": "curator",
+                         "useraction": "user action", "projectile": "projectile", "group": "group", "music": "music",
+                         "editor": "Eden Editor", "object": "Eden object"}
+NOT_EVENTS = {"Config"}  # Eden: how to define handlers in config, a leaf section with a one-word heading
+# "AnimDone", "Deleted (Entity) (Arma 3 v1.68)", "onVideoStopped (Arma 2: Operation Arrowhead v1.56)"
+_EVENT_HEADING = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)((?: \([^()]*\))*)")
+_GAME_VERSION = re.compile(r" \([^()]* v\d[\d.]*\)")
+_ICON_LINE = re.compile(r"^(?:(?:Global|Local) (?:argument|effect)|Server execution)+(?:\n|$)")
+
+
+def event_entries(rec: dict, s: str) -> list[dict]:
+    """The event handlers of an event handler page (EVENT_PAGES), for search: name, kind, section and anchor.
+
+    ``anchor`` is the short id the wiki gives an ArgTitle heading ("assembled" for "Assembled (Arma 3 v2.18)"),
+    which equals a plain heading's id; ``build`` checks it against the page's HTML."""
+    if rec["title"] not in EVENT_PAGES:
+        return []
+    page_kind, kind, out = EVENT_PAGES[rec["title"]], "event", []
+    titled = [x for x in rec["sections"] if x["heading"]]
+    for i, sec in enumerate(titled):
+        heading, level = sec["heading"], sec["level"]
+        if level <= 3:
+            kind = page_kind or EVENT_KIND_OF_SECTION.get(heading.split()[0].lower(), "event")
+            continue
+        leaf = i + 1 == len(titled) or titled[i + 1]["level"] <= level
+        m = _EVENT_HEADING.fullmatch(heading)
+        if not leaf or not m or m.group(1) in NOT_EVENTS:
+            continue
+        since = re.search(r" \(Arma 3 v(\d[\d.]*)\)", heading)
+        out.append({
+            "name": m.group(1), "kind": kind, "page": rec["title"], "section": heading,
+            "html": f"topics/{s}.html", "anchor": heading_id(_GAME_VERSION.sub("", heading)),
+            "md": f"topics/{s}.md", "json": f"topics/{s}.json",
+            "summary": event_summary(sec["markdown"]), "arma3_since": since.group(1) if since else None,
+        })
+    return out
+
+
+_EVENT_IN_CODE = re.compile(r'\b(?:add(?:Mission|3DEN|MP)?|ctrlAdd|displayAdd)EventHandler\s*\[\s*"(\w+)"', re.I)
+
+
+def unlisted_events(events: list[dict], pages: list[dict]) -> list[tuple[str, str]]:
+    """(page title, name) of events the code on an event handler page adds but no section names: one added to the
+    wiki under a heading event_entries does not read ("Fired - new", bold text, a table row) would otherwise be
+    missing from search unnoticed. Checked against the events of every page: the mission page's notes add object
+    events ("Local"); UI scripts add events without the "on" of their config attribute."""
+    known = {n.lower() for e in events for n in (e["name"], re.sub(r"^on(?=[A-Z])", "", e["name"]))}
+    return sorted({(p["title"], name) for p in pages for name in _EVENT_IN_CODE.findall(p["markdown"])
+                   if name.lower() not in known})
+
+
+def event_summary(md: str) -> str:
+    """First sentence(s) of an event's section: after the locality icons ("Global argument"); for a UI event
+    what fires it ("- **Fired on:** ..."), not which controls take it."""
+    fired = re.search(r"^- \*\*Fired on:\*\*\s*(.+)$", md, flags=re.M)
+    if fired:
+        return summary(fired.group(1))
+    # an event without prose has only its params list ("- projectile: Object"): no summary rather than that
+    md = re.sub(r"(?ms)^[ \t]*(`{3,})[^\n]*\n.*?^[ \t]*\1`*[ \t]*$", "", _ICON_LINE.sub("", md.lstrip()))  # as summary
+    prose = [b for b in md.split("\n\n") if not b.lstrip().startswith(("-", "|"))]
+    return summary("\n\n".join(prose))
 
 
 def _fix_references(rec: dict, pages: Pages) -> None:
@@ -661,6 +754,8 @@ def _llms_txt(base: str, index: list[dict], groups, records) -> str:
         f"- Every name on one line each: {base}names.txt",
         f"- Search by meaning: {base}index.json (name, syntax, one-line summary, groups, locality, status, paths), "
         "or the per-group lists below.",
+        f"- Event handlers by name (AnimStateChanged, Draw3D, onLoad, OnCopy): {base}events.json gives each one's kind, "
+        "summary, topic page and section heading.",
         "- Check `status` before using a command: `deprecated` and `broken` pages say what to use instead.",
         f"- Everything at once: {base}commands.json, {base}functions.json, {base}topics.json; "
         f"record format {base}schema.json; forms and status of every name for linters: {base}syntax.json",

@@ -24,6 +24,7 @@ KIND_TITLES = {
     "markup": "Raw wiki markup left in the output",
     "unnamed-param": "Parameters without a name",
     "untyped-param": "Parameters without a type",
+    "unlisted-event": "Events in the code of an event handler page without a section of their own (left out of search)",
 }
 # Order of severity; "error" also fails the workflow run.
 KIND_ORDER = list(KIND_TITLES)

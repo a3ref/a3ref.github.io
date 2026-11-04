@@ -34,6 +34,7 @@ Without MCP, everything is a plain GET:
 | every name | [`names.txt`](https://a3ref.github.io/names.txt), one per line |
 | one group | `groups/commands/<group>.md`, `groups/functions/<group>.md`, listed in `llms.txt` |
 | to search | [`index.json`](https://a3ref.github.io/index.json) (2 MB): every entry with syntax, summary, groups, locality, status, operator symbol, paths |
+| one event handler | [`events.json`](https://a3ref.github.io/events.json): every event of the object, mission, UI and Eden Editor event handler pages with its kind, summary, section heading and `#anchor`, e.g. `AnimStateChanged` → `topics/Event_Handlers.html#animstatechanged` |
 | everything | [`commands.json`](https://a3ref.github.io/commands.json) (7 MB), [`functions.json`](https://a3ref.github.io/functions.json) (4 MB), [`topics.json`](https://a3ref.github.io/topics.json) (27 MB): for programs; a model should read single pages instead |
 | a linter's data | [`syntax.json`](https://a3ref.github.io/syntax.json) (0.5 MB): forms (nullary/unary/binary), status, replacements and syntax of every name |
 | the record format | [`schema.json`](https://a3ref.github.io/schema.json) (JSON Schema 2020-12) |
@@ -199,6 +200,7 @@ Cloudflare rejects real headless Chrome; if a checkbox appears, run without `--h
 | `commands/`, `functions/`, `topics/` | one page per entry as `<name>.md` (YAML front matter + Markdown), `.json` and `.html`, plus lower-case aliases and an `index.md`/`index.html` by group; `<name>.og.png` is the page's 1200×630 preview image for link previews |
 | `commands.json`, `functions.json`, `topics.json` | every record of one kind in a single file |
 | `index.json` | lightweight index: name, type, syntaxes, summary, groups, locality, status, operator, aliases, paths |
+| `events.json` | every event handler on the event handler topic pages: name, kind, page, section, anchor, summary (site search and the MCP server) |
 | `names.txt` | every name, one per line, with paths where they do not follow the simple rule |
 | `groups/<kind>/<group>.md` | per-group lists with summaries |
 | `syntax.json` | forms, status, replacements and syntax lines of every name, for linters (used by the MCP server) |

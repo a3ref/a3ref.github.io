@@ -15,7 +15,8 @@
     s.onload = function () {
       index = (window.BIWIKI_INDEX || []).map(function (e) {
         var n = e[0].toLowerCase();
-        return { name: e[0], kind: e[1], path: e[2], sum: e[3], op: e[4] || "", n: n, short: n.replace(/^[a-z0-9]+_fnc_/, ""), s: e[3].toLowerCase() };
+        return { name: e[0], kind: e[1], path: e[2], sum: e[3], op: e[4] || "", hash: e[5] || "", group: e[6] || "",
+          n: n, short: n.replace(/^[a-z0-9]+_fnc_/, ""), s: e[3].toLowerCase() };
       });
       loading.splice(0).forEach(function (f) { f(); });
     };
@@ -31,11 +32,16 @@
       else if (e.short.indexOf(q) === 0) sc = 1.5 + e.n.length / 1000;
       else if ((at = e.n.indexOf(q)) > -1) sc = 2 + at / 100;
       else if (words.length && words.every(function (w) { return e.n.indexOf(w) > -1 || e.s.indexOf(w) > -1; })) sc = e.s.indexOf(q) > -1 ? 4 : 5;
+      // an event handler (a section of a topic page) follows the command or function of the same rank
+      if (sc > 0 && e.kind === "e") sc += 0.4;
       if (sc >= 0) out.push([sc, e]);
     }
     out.sort(function (a, b) { return a[0] - b[0] || a[1].n.length - b[1].n.length; });
     return out.slice(0, 15).map(function (x) { return x[1]; });
   }
+
+  function href(e) { return root + e.path + ".html" + (e.hash ? "#" + e.hash : ""); }
+  var KIND = { f: "function", t: "topic" };
 
   function esc(s) { return s.replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
 
@@ -51,8 +57,8 @@
       items = rank(q);
       list.innerHTML = items.length ? items.map(function (e) {
         return '<li class="' + (e.kind === "f" ? "r-fn" : "r-cmd") + '">' +
-          '<a href="' + root + e.path + '.html"><span class="r-name">' + esc(e.name) + '</span>' +
-          '<span class="r-kind">' + ({ f: "function", t: "topic" }[e.kind] || "command") + "</span>" +
+          '<a href="' + href(e) + '"><span class="r-name">' + esc(e.name) + '</span>' +
+          '<span class="r-kind">' + (e.kind === "e" ? esc(e.group) + " event" : KIND[e.kind] || "command") + "</span>" +
           (e.sum ? '<span class="r-sum">' + esc(e.sum) + "</span>" : "") + "</a></li>";
       }).join("") : '<li class="r-empty">Nothing matches “' + esc(input.value.trim()) + '”. Try part of the name, e.g. “vehicle”.</li>';
       list.hidden = false;
@@ -68,7 +74,7 @@
     input.addEventListener("input", function () { loadIndex(render); });
     input.addEventListener("keydown", function (ev) {
       if (ev.key === "ArrowDown") { ev.preventDefault(); focusAt(0); }
-      else if (ev.key === "Enter" && items.length) { location.href = root + items[0].path + ".html"; }
+      else if (ev.key === "Enter" && items.length) { location.href = href(items[0]); }
       else if (ev.key === "Escape") { list.hidden = true; }
     });
     list.addEventListener("keydown", function (ev) {

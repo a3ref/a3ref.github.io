@@ -171,6 +171,12 @@ class BuildTest(unittest.TestCase):
             # the group's heading leads to its own page
             self.assertRegex(page, r'<section class="group group-names"><h2 id="[^"]+"><a href="\.\./groups/' + kind + r'/[^"]+\.html">')
 
+    def test_events_json(self):
+        # the fixtures have no event handler page: the file is there, empty, and the data clone gets none
+        events = json.loads((self.out / "events.json").read_text(encoding="utf-8"))
+        self.assertEqual((events["count"], events["items"]), (0, []))
+        self.assertFalse((self.dataset / "events.json").exists())
+
     def test_no_crashes(self):
         report = json.loads((self.out / "report.json").read_text(encoding="utf-8"))
         self.assertEqual((report["counts"]["error"], report["counts"]["skipped"]), (0, 0), report["problems"])

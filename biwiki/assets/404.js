@@ -9,7 +9,8 @@
   s.onload = function () {
     var want = decodeURIComponent(m[2]).toLowerCase(), kind = m[1].toLowerCase(), ext = (m[4] || "html").toLowerCase();
     var hit = (window.BIWIKI_INDEX || []).find(function (e) {
-      return e[2].toLowerCase() === kind + "/" + want || e[0].toLowerCase() === want;
+      // event handlers are sections of a topic page, never a page of their own
+      return e[1] !== "e" && (e[2].toLowerCase() === kind + "/" + want || e[0].toLowerCase() === want);
     });
     if (hit) location.replace("/" + hit[2] + "." + ext);
   };

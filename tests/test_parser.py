@@ -10,7 +10,7 @@ from biwiki.fetch import TEMPLATES, load_cache
 from biwiki.markdown import LinkResolver
 from biwiki.parse import parse_page, split_param, syntax_form
 from biwiki.portrender import PortContext, PortRenderer
-from biwiki.render import page_markdown, page_slug, slug, summary, topic_group
+from biwiki.render import event_entries, unlisted_events, page_markdown, page_slug, slug, summary, topic_group
 from biwiki.report import leftover_markup, load_known, position, save_known
 from biwiki.site import ANCHOR, Site, _description, _place_anchors, _toc, heading_id
 from biwiki.wikitext import wiki_anchor
@@ -685,6 +685,63 @@ class SlugTest(unittest.TestCase):
         self.assertEqual(summary("**Description:** : n/a\n\nIntroduced with Arma 2."), "Introduced with Arma 2.")
         self.assertEqual(summary("Arma 3 v1.68\n\nJets DLC adds catapults."), "Jets DLC adds catapults.")
         self.assertEqual(summary("Arma 3 v1.66 The class disables commands."), "The class disables commands.")
+
+
+class EventEntriesTest(unittest.TestCase):
+    """Event handlers of the event handler pages, found by search: one per leaf section."""
+
+    @staticmethod
+    def sec(heading, level, md=""):
+        return {"heading": heading, "level": level, "markdown": md}
+
+    def test_object_page(self):
+        code = '```sqf\nthis addEventHandler ["AnimDone", {\n\n}];\n```'
+        rec = {"title": "Arma 3: Event Handlers", "sections": [
+            self.sec(None, 1, "An Event Handler ..."),
+            self.sec("Basic Event Handlers", 3, "Commands:\n- addEventHandler"),
+            self.sec("AnimStateChanged", 4, "Global argument\nTriggered every time an animation state changes. "
+                                            "Triggered for all animation states in a sequence.\n\n" + code),
+            self.sec("Deleted (Entity) (Arma 3 v1.68)", 4, "Global argumentLocal effect\nTriggered before deletion."),
+            self.sec("Multiplayer Event Handlers", 3),
+            self.sec("MPKilled", 4, "Triggered when the unit is killed."),
+            self.sec("Group Event Handlers (Arma 3 v2.10)", 3),
+            self.sec("Deleted (Group)", 4, code + "\n\n- group: Group"),  # params only: no summary
+        ]}
+        got = event_entries(rec, "Event_Handlers")
+        self.assertEqual([(e["name"], e["kind"], e["anchor"], e["arma3_since"]) for e in got], [
+            ("AnimStateChanged", "object", "animstatechanged", None),
+            ("Deleted", "object", "deleted-entity", "1.68"),
+            ("MPKilled", "multiplayer", "mpkilled", None),
+            ("Deleted", "group", "deleted-group", None),
+        ])
+        self.assertEqual(got[0]["summary"], "Triggered every time an animation state changes. "
+                                            "Triggered for all animation states in a sequence.")
+        self.assertEqual(got[0]["html"], "topics/Event_Handlers.html")
+        self.assertEqual(got[0]["section"], "AnimStateChanged")
+        self.assertEqual(got[1]["summary"], "Triggered before deletion.")
+        self.assertEqual(got[3]["summary"], "")
+
+    def test_ui_and_eden_pages(self):
+        ui = {"title": "User Interface Event Handlers", "sections": [
+            self.sec("Reference List", 3), self.sec("Generic Events", 4),
+            self.sec("onLoad", 5, "- **Use on:** Display, Control\n- **Fired on:** Fires when UI container is created."),
+        ]}
+        self.assertEqual([(e["name"], e["kind"], e["summary"]) for e in event_entries(ui, "UI")],
+                         [("onLoad", "UI", "Fires when UI container is created.")])
+        eden = {"title": "Arma 3: Eden Editor Event Handlers", "sections": [
+            self.sec("Editor Event Handlers", 3), self.sec("Related commands", 4, "- add3DENEventHandler"),
+            self.sec("Config", 4, "Define them in config."), self.sec("Events", 4),
+            self.sec("OnCopy", 5, "Fires when entities are copied."),
+        ]}
+        self.assertEqual([(e["name"], e["kind"]) for e in event_entries(eden, "Eden")], [("OnCopy", "Eden Editor")])
+        self.assertEqual(event_entries({"title": "Position", "sections": [self.sec("Format", 4)]}, "Position"), [])
+
+    def test_unlisted_events(self):
+        events = [{"name": "Local"}, {"name": "onButtonClick"}, {"name": "Draw3D"}]
+        pages = [{"title": "Arma 3: Mission Event Handlers", "markdown":
+                  '_unit addEventHandler ["Local", {}];\naddMissionEventHandler ["draw3d", {}];\n'
+                  'addMissionEventHandler ["NewEvent", {}];\n_ctrl ctrlAddEventHandler ["ButtonClick", {}];'}]
+        self.assertEqual(unlisted_events(events, pages), [("Arma 3: Mission Event Handlers", "NewEvent")])
 
 
 class DescriptionTest(unittest.TestCase):
