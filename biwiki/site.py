@@ -44,7 +44,9 @@ THEME_BUTTON = ('<button type="button" class="theme-switch" id="theme-switch" ar
                 '<g class="ti-light"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4'
                 'M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></g>'
                 '<g class="ti-dark"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></g></svg></button>')
-GOOGLE_SITE_VERIFICATION = "HHNWP8LwEWplPR4MXkhdQW79itoiuehWhhxliCgXj5Y"  # Search Console ownership; checked on the home page only
+# Search Console ownership, checked on the home page only: the a3ref.github.io property (kept, so its Change of
+# address stays verified) and the wiki.arma3.io property
+GOOGLE_SITE_VERIFICATION = ("HHNWP8LwEWplPR4MXkhdQW79itoiuehWhhxliCgXj5Y", "Jg-oNvZ0EsH92770W6IvdTChYA6yeghynwmYPZ62lqo")
 
 LOCALITY_HELP = {
     ("argument", "local"): ("Local argument", "Arguments must be local to the machine running the command."),
@@ -697,7 +699,8 @@ lower-case paths such as <code>commands/setpos.md</code> also work.</p>
                          description="Every Arma 3 scripting command, BIS_fnc function and concept page from the Bohemia "
                                      "Interactive Community Wiki, updated daily, as HTML, Markdown and JSON.",
                          header=header, main=main, crumbs=[("Home", "index.html")], jsonld=[website],
-                         extra_head=f'<meta name="google-site-verification" content="{GOOGLE_SITE_VERIFICATION}">\n'
+                         extra_head="".join(f'<meta name="google-site-verification" content="{t}">\n'
+                                            for t in GOOGLE_SITE_VERIFICATION) +
                                     '<link rel="alternate" type="application/atom+xml" title="Wiki edits" href="feed.xml">\n',
                          footer=_site_footer(generated), page_class="page-home", og_type="website")
         (self.out / "index.html").write_text(doc, encoding="utf-8")
